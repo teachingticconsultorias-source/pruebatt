@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import * as THREE from "three";
 import { supabase } from "./supabaseClient.js";
 import AuthGate from "./AuthGate.jsx";
+import AnimalCellLab from "./AnimalCellLab.jsx";
 import {
   FlaskConical,
   Atom,
@@ -1937,7 +1938,7 @@ function SciVerseApp({ profile, onLogout }) {
         <p className="text-sm mb-6" style={{ color: C.muted }}>
           Modelo 3D construido con Three.js, directamente en el navegador. Cambia de célula, arrastra para girarla y toca cada organelo para ver su función — ideal para proyectar en clase o dejar que tus estudiantes lo exploren en parejas.
         </p>
-        <Cell3DViewer />
+        <AnimalCellLab />
       </section>
 
       {/* RETOS GRUPALES */}
