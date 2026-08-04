@@ -663,11 +663,64 @@ const CELL_TYPES = {
 /* ---------------------------------------------------------------------- */
 
 function downloadText(filename, content) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const escapeHtml = (value) =>
+    String(value)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+
+  const lines = String(content).split(/\r?\n/);
+  const body = lines
+    .map((line) => {
+      const clean = line.trim();
+      if (!clean) return "<p class='space'>&nbsp;</p>";
+      if (/^[A-ZÁÉÍÓÚÑ0-9][A-ZÁÉÍÓÚÑ0-9 —–:¿?()/'.,]+$/.test(clean) && clean.length < 95) {
+        return `<h2>${escapeHtml(clean)}</h2>`;
+      }
+      if (/^\d+[.)]\s+/.test(clean)) {
+        return `<p class='step'>${escapeHtml(clean)}</p>`;
+      }
+      if (/^[-•✓]\s+/.test(clean)) {
+        return `<p class='bullet'>• ${escapeHtml(clean.replace(/^[-•✓]\s+/, ""))}</p>`;
+      }
+      if (/^[^:]{2,45}:/.test(clean)) {
+        const separator = clean.indexOf(":");
+        return `<p><strong>${escapeHtml(clean.slice(0, separator + 1))}</strong>${escapeHtml(clean.slice(separator + 1))}</p>`;
+      }
+      return `<p>${escapeHtml(clean)}</p>`;
+    })
+    .join("");
+
+  const wordDocument = `<!DOCTYPE html>
+    <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word" lang="es">
+      <head><meta charset="utf-8"><title>SciVerse para Docentes</title>
+        <style>
+          @page { size: A4; margin: 2cm; }
+          body { font-family: Aptos, Calibri, Arial, sans-serif; color: #173b38; font-size: 11pt; line-height: 1.5; }
+          .brand { color: #1f9e98; font-size: 10pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #3ec6c0; padding-bottom: 8px; margin-bottom: 24px; }
+          h1 { font-size: 22pt; color: #0f2e2c; margin: 0 0 6px; }
+          h2 { font-size: 14pt; color: #167d78; margin: 18px 0 7px; }
+          p { margin: 5px 0; }
+          .space { font-size: 4pt; margin: 0; }
+          .step { margin: 7px 0 7px 14px; }
+          .bullet { margin: 5px 0 5px 18px; }
+          .footer { margin-top: 28px; padding-top: 9px; border-top: 1px solid #cfe7e4; color: #66827f; font-size: 9pt; }
+        </style>
+      </head>
+      <body>
+        <div class="brand">SciVerse · una iniciativa de Teaching TIC</div>
+        ${body}
+        <div class="footer">Recurso educativo generado desde SciVerse para Docentes · Teaching TIC 2026</div>
+      </body>
+    </html>`;
+
+  const wordFilename = filename.replace(/\.[^.]+$/, "") + ".doc";
+  const blob = new Blob(["\ufeff", wordDocument], { type: "application/msword;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = wordFilename;
   document.body.appendChild(a);
   a.click();
   a.remove();
@@ -1080,6 +1133,8 @@ function SteamGenerator() {
 function ImprovedLanding({ onRegister }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoGrade, setDemoGrade] = useState("primaria");
+  const [selectedPlan, setSelectedPlan] = useState(null);
+  const [copiedPlin, setCopiedPlin] = useState(false);
   const demoActivity = ACTIVITIES[0];
   const demoVersion = demoActivity.versions[demoGrade];
   const features = [
@@ -1096,6 +1151,20 @@ function ImprovedLanding({ onRegister }) {
     { name: "Anual", price: "50", period: "12 meses de acceso", saving: "Ahorras S/70", featured: true },
   ];
   const planBenefits = ["Actividades y retos STEAM", "Laboratorio y simuladores", "Generador de sesiones con IA", "Plantillas y rúbricas CNEB", "Primaria y secundaria", "Nuevos recursos durante tu plan"];
+  const plinNumber = "921090875";
+  const whatsappNumber = "51921090875";
+  const copyPlinNumber = async () => {
+    try {
+      await navigator.clipboard.writeText(plinNumber);
+      setCopiedPlin(true);
+      window.setTimeout(() => setCopiedPlin(false), 2200);
+    } catch {
+      setCopiedPlin(false);
+    }
+  };
+  const whatsappUrl = selectedPlan
+    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(`Hola, realicé el pago de S/${selectedPlan.price} por el Plan ${selectedPlan.name} de SciVerse. Mi nombre es ______ y mi correo registrado es ______. Adjunto mi comprobante para solicitar la activación.`)}`
+    : "#";
 
   return (
     <div className="landing-shell" style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
@@ -1173,7 +1242,7 @@ function ImprovedLanding({ onRegister }) {
             <div className="plan-head"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
             <div className="saving-pill">{plan.saving}</div>
             <ul>{planBenefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
-            <button onClick={onRegister} className={plan.featured ? "primary-btn plan-button" : "secondary-btn plan-button"}>Elegir plan {plan.name.toLowerCase()} <ArrowRight size={15} /></button>
+            <button onClick={() => setSelectedPlan(plan)} className={plan.featured ? "primary-btn plan-button" : "secondary-btn plan-button"}>Elegir plan {plan.name.toLowerCase()} <ArrowRight size={15} /></button>
           </article>)}
         </div>
         <p className="pricing-note"><span>🔒</span> El registro es gratuito. Podrás elegir tu plan al activar el acceso completo.</p>
@@ -1187,6 +1256,24 @@ function ImprovedLanding({ onRegister }) {
       <section className="final-cta"><div><span className="eyebrow light"><Sparkles size={13} /> Tu próxima experiencia empieza aquí</span><h2>Explora, adapta y crea con SciVerse.</h2><p>Regístrate una vez y accede gratuitamente a todas las herramientas disponibles.</p></div><button onClick={onRegister} className="light-btn">Crear mi acceso gratuito <ArrowRight size={17} /></button></section>
 
       <footer className="landing-footer"><div className="brand-lockup"><span className="brand-mark"><Microscope size={20} /></span><span><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></span></div><p>Tecnología educativa para experiencias STEAM accesibles, creativas y contextualizadas.</p><span>© 2026 Teaching TIC</span></footer>
+
+      {selectedPlan && <div className="payment-overlay" role="dialog" aria-modal="true" aria-labelledby="payment-title" onClick={() => setSelectedPlan(null)}>
+        <div className="payment-modal" onClick={(event) => event.stopPropagation()}>
+          <button className="payment-close" onClick={() => setSelectedPlan(null)} aria-label="Cerrar instrucciones de pago"><X size={20} /></button>
+          <span className="payment-brand">PLIN</span>
+          <h2 id="payment-title">Activa tu Plan {selectedPlan.name}</h2>
+          <p className="payment-intro">Realiza el pago por Plin y envía tu comprobante para activar el acceso.</p>
+          <div className="payment-amount"><small>Total a pagar</small><strong><span>S/</span>{selectedPlan.price}</strong><p>{selectedPlan.period}</p></div>
+          <div className="plin-box">
+            <div><small>Número afiliado a Plin</small><strong>921 090 875</strong><span>Titular: Teaching TIC</span></div>
+            <button onClick={copyPlinNumber} className="copy-plin">{copiedPlin ? "¡Copiado!" : "Copiar número"}</button>
+          </div>
+          <ol className="payment-steps"><li><b>1</b><span>Abre Plin y paga <strong>S/{selectedPlan.price}</strong> al número mostrado.</span></li><li><b>2</b><span>Guarda una captura del comprobante.</span></li><li><b>3</b><span>Envíala por WhatsApp para solicitar la activación.</span></li></ol>
+          <a className="whatsapp-button" href={whatsappUrl} target="_blank" rel="noreferrer"><Phone size={18} /> Ya pagué, enviar comprobante</a>
+          <button className="register-link" onClick={() => { setSelectedPlan(null); onRegister(); }}>¿Aún no te registraste? Crear mi acceso</button>
+          <p className="payment-note">La activación se realiza después de verificar el comprobante.</p>
+        </div>
+      </div>}
     </div>
   );
 }
