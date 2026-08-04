@@ -898,31 +898,88 @@ function Cell3DViewer() {
 /* STEAM SESSION GENERATOR                                                  */
 /* ---------------------------------------------------------------------- */
 
+const GENERATOR_AREAS = ["Ciencia y Tecnología", "Comunicación", "Matemática", "Personal Social", "Arte y Cultura", "Educación para el Trabajo"];
+const GENERATOR_COMPETENCIES = {
+  "Ciencia y Tecnología": [CNEB.indaga, CNEB.explica, CNEB.disena],
+  Comunicación: ["Se comunica oralmente en su lengua materna", "Lee diversos tipos de textos escritos en su lengua materna", "Escribe diversos tipos de textos en su lengua materna"],
+  Matemática: ["Resuelve problemas de cantidad", CNEB.cambio, "Resuelve problemas de forma, movimiento y localización", CNEB.datos],
+  "Personal Social": ["Construye su identidad", "Convive y participa democráticamente en la búsqueda del bien común", "Gestiona responsablemente el espacio y el ambiente"],
+  "Arte y Cultura": ["Aprecia de manera crítica manifestaciones artístico-culturales", CNEB.crea],
+  "Educación para el Trabajo": ["Gestiona proyectos de emprendimiento económico o social"],
+};
+const GENERATOR_CAPACITIES = {
+  [CNEB.indaga]: ["Problematiza situaciones para hacer indagación", "Diseña estrategias para hacer indagación", "Genera y registra datos e información", "Analiza datos e información", "Evalúa y comunica el proceso y resultados de su indagación"],
+  [CNEB.explica]: ["Comprende y usa conocimientos sobre los seres vivos, materia y energía, biodiversidad, Tierra y universo", "Evalúa las implicancias del saber y del quehacer científico y tecnológico"],
+  [CNEB.disena]: ["Determina una alternativa de solución tecnológica", "Diseña la alternativa de solución tecnológica", "Implementa y valida la alternativa de solución tecnológica", "Evalúa y comunica el funcionamiento y los impactos de su alternativa de solución tecnológica"],
+  "Se comunica oralmente en su lengua materna": ["Obtiene información del texto oral", "Infiere e interpreta información del texto oral", "Adecúa, organiza y desarrolla las ideas de forma coherente y cohesionada", "Utiliza recursos no verbales y paraverbales de forma estratégica", "Interactúa estratégicamente con distintos interlocutores", "Reflexiona y evalúa la forma, el contenido y contexto del texto oral"],
+  "Lee diversos tipos de textos escritos en su lengua materna": ["Obtiene información del texto escrito", "Infiere e interpreta información del texto", "Reflexiona y evalúa la forma, el contenido y contexto del texto"],
+  "Escribe diversos tipos de textos en su lengua materna": ["Adecúa el texto a la situación comunicativa", "Organiza y desarrolla las ideas de forma coherente y cohesionada", "Utiliza convenciones del lenguaje escrito de forma pertinente", "Reflexiona y evalúa la forma, el contenido y contexto del texto escrito"],
+  "Resuelve problemas de cantidad": ["Traduce cantidades a expresiones numéricas", "Comunica su comprensión sobre los números y las operaciones", "Usa estrategias y procedimientos de estimación y cálculo", "Argumenta afirmaciones sobre las relaciones numéricas y las operaciones"],
+  [CNEB.cambio]: ["Traduce datos y condiciones a expresiones algebraicas y gráficas", "Comunica su comprensión sobre las relaciones algebraicas", "Usa estrategias y procedimientos para encontrar equivalencias y reglas generales", "Argumenta afirmaciones sobre relaciones de cambio y equivalencia"],
+  "Resuelve problemas de forma, movimiento y localización": ["Modela objetos con formas geométricas y sus transformaciones", "Comunica su comprensión sobre las formas y relaciones geométricas", "Usa estrategias y procedimientos para orientarse en el espacio", "Argumenta afirmaciones sobre relaciones geométricas"],
+  [CNEB.datos]: ["Representa datos con gráficos y medidas estadísticas o probabilísticas", "Comunica su comprensión de los conceptos estadísticos y probabilísticos", "Usa estrategias y procedimientos para recopilar y procesar datos", "Sustenta conclusiones o decisiones con base en la información obtenida"],
+  "Construye su identidad": ["Se valora a sí mismo", "Autorregula sus emociones", "Reflexiona y argumenta éticamente", "Vive su sexualidad de manera integral y responsable de acuerdo a su etapa de desarrollo y madurez"],
+  "Convive y participa democráticamente en la búsqueda del bien común": ["Interactúa con todas las personas", "Construye normas y asume acuerdos y leyes", "Maneja conflictos de manera constructiva", "Delibera sobre asuntos públicos", "Participa en acciones que promueven el bienestar común"],
+  "Gestiona responsablemente el espacio y el ambiente": ["Comprende las relaciones entre los elementos naturales y sociales", "Maneja fuentes de información para comprender el espacio geográfico y el ambiente", "Genera acciones para conservar el ambiente local y global"],
+  "Aprecia de manera crítica manifestaciones artístico-culturales": ["Percibe manifestaciones artístico-culturales", "Contextualiza manifestaciones artístico-culturales", "Reflexiona creativa y críticamente sobre manifestaciones artístico-culturales"],
+  [CNEB.crea]: ["Explora y experimenta los lenguajes del arte", "Aplica procesos creativos", "Evalúa y comunica sus procesos y proyectos"],
+  "Gestiona proyectos de emprendimiento económico o social": ["Crea propuestas de valor", "Aplica habilidades técnicas", "Trabaja cooperativamente para lograr objetivos y metas", "Evalúa los resultados del proyecto de emprendimiento"],
+};
+const PERU_REGIONS = ["Amazonas","Áncash","Apurímac","Arequipa","Ayacucho","Cajamarca","Callao","Cusco","Huancavelica","Huánuco","Ica","Junín","La Libertad","Lambayeque","Lima","Loreto","Madre de Dios","Moquegua","Pasco","Piura","Puno","San Martín","Tacna","Tumbes","Ucayali"];
+
 function SteamGenerator({ initialGrade = "primaria" }) {
-  const [tema, setTema] = useState("");
-  const [grado, setGrado] = useState(initialGrade);
-  const [area, setArea] = useState("Combinado STEAM");
-  const [duracion, setDuracion] = useState("45");
+  const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
+  const today = new Date().toISOString().slice(0, 10);
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ nivel: initialLevel, grado: initialLevel === "Primaria" ? "3.º" : "1.º", area: "Ciencia y Tecnología", region: "", seccion: "", fecha: today, duracion: "90", tema: "", competencia: CNEB.indaga, capacidades: GENERATOR_CAPACITIES[CNEB.indaga], proposito: "", contexto: "", evidencia: "", recursos: "", steam: true, inclusivo: true });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const [suggesting, setSuggesting] = useState(null);
 
-  const areaOptions = ["Combinado STEAM", "Ciencia", "Tecnología", "Ingeniería", "Arte", "Matemática"];
+  const grades = form.nivel === "Primaria" ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"] : ["1.º", "2.º", "3.º", "4.º", "5.º"];
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  function changeLevel(level) { setForm((current) => ({ ...current, nivel: level, grado: "1.º" })); }
+  function changeArea(area) { const competence=GENERATOR_COMPETENCIES[area][0]; setForm((current) => ({ ...current, area, competencia: competence, capacidades: GENERATOR_CAPACITIES[competence] || [] })); }
+  function changeCompetence(competencia) { setForm((current)=>({...current,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]})); }
+  function toggleCapacity(capacity) { setForm((current)=>({...current,capacidades:current.capacidades.includes(capacity)?current.capacidades.filter(c=>c!==capacity):[...current.capacidades,capacity]})); }
+  function nextStep() {
+    setError(null);
+    if (step === 1 && (!form.nivel || !form.grado || !form.area || !form.region || !form.fecha || !form.duracion)) return setError("Completa los datos curriculares y selecciona la región.");
+    if (step === 2 && (!form.tema.trim() || !form.competencia || !form.capacidades.length || !form.proposito.trim() || !form.contexto.trim() || !form.evidencia.trim())) return setError("Completa o solicita sugerencias para el propósito, contexto y evidencia.");
+    setStep((current) => Math.min(3, current + 1));
+  }
+
+  async function suggestField(field) {
+    if (!form.tema.trim()) return setError("Escribe primero el tema para que Kantu pueda sugerir.");
+    if (!form.region) return setError("Selecciona la región para contextualizar la sugerencia.");
+    setSuggesting(field); setError(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token=sessionData.session?.access_token; if(!token) throw new Error("Tu sesión venció. Vuelve a iniciar sesión.");
+      const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({mode:"suggestion",field,form})});
+      const data=await response.json(); if(!response.ok) throw new Error(data.error||"No se pudo generar la sugerencia");
+      update(field,data.suggestion);
+    } catch(e) { setError(e.message); } finally { setSuggesting(null); }
+  }
 
   async function handleGenerate() {
-    if (!tema.trim()) {
-      setError("Escribe primero el tema de la sesión.");
-      return;
-    }
+    if (step !== 3) return;
     setLoading(true);
     setError(null);
     setResult(null);
     try {
-      const systemInstruction = `Eres un especialista en diseño curricular STEAM alineado al Currículo Nacional de Educación Básica (CNEB) de Perú. Genera una sesión de aprendizaje STEAM breve y práctica, pensada para usarse junto al laboratorio virtual SciVerse. Responde ÚNICAMENTE con un objeto JSON válido, sin texto adicional, sin backticks ni comentarios, con esta forma exacta:
+      const systemInstruction = `Eres especialista en planificación curricular peruana y CNEB. Genera una sesión aplicable, contextualizada, inclusiva y coherente con los datos del docente. No inventes competencias oficiales. Responde ÚNICAMENTE con JSON válido con esta forma exacta:
 {
   "titulo": "string",
   "areasSTEAM": ["string", "..."],
   "competenciasCNEB": ["string", "..."],
+  "capacidadesCNEB": ["string", "..."],
+  "proposito": "string",
+  "criteriosEvaluacion": ["string", "..."],
+  "evidencia": "string",
+  "procesosPedagogicos": ["string", "..."],
+  "procesosDidacticos": ["string", "..."],
   "materiales": ["string", "..."],
   "inicio": "string",
   "desarrollo": "string",
@@ -930,7 +987,7 @@ function SteamGenerator({ initialGrade = "primaria" }) {
   "productoSTEAM": "string"
 }`;
 
-      const userMsg = `Tema: ${tema}\nGrado: ${grado}\nDuración: ${duracion} minutos\nÁrea STEAM de énfasis: ${area}`;
+      const userMsg = `Nivel: ${form.nivel}\nGrado: ${form.grado}\nRegión del Perú: ${form.region}\nSección: ${form.seccion || "No indicada"}\nFecha: ${form.fecha}\nDuración: ${form.duracion} minutos\nÁrea curricular: ${form.area}\nTema: ${form.tema}\nCompetencia oficial: ${form.competencia}\nCapacidades oficiales seleccionadas:\n- ${form.capacidades.join("\n- ")}\nPropósito propuesto por el docente: ${form.proposito}\nSituación contextualizada: ${form.contexto}\nEvidencia esperada: ${form.evidencia}\nRecursos disponibles: ${form.recursos || "Materiales accesibles del entorno"}\nIntegrar enfoque STEAM: ${form.steam ? "Sí" : "No"}\nIncluir ajustes inclusivos/DUA: ${form.inclusivo ? "Sí" : "No"}\nLos criterios deben derivarse de las capacidades y del tema, redactarse como acciones observables y verificables, e indicar qué hará el estudiante, sobre qué contenido y con qué condición de calidad. Organiza inicio, desarrollo y cierre incorporando procesos pedagógicos y los procesos didácticos pertinentes al área y competencia; no los menciones de forma decorativa: aplícalos en las actividades.`;
 
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
@@ -940,8 +997,7 @@ function SteamGenerator({ initialGrade = "primaria" }) {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
-          model: "claude-sonnet-4-6",
-          max_tokens: 1000,
+          max_tokens: 2500,
           messages: [
             { role: "user", content: `${systemInstruction}\n\n${userMsg}` },
           ],
@@ -963,72 +1019,46 @@ function SteamGenerator({ initialGrade = "primaria" }) {
   }
 
   return (
-    <div className="rounded-2xl p-6" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
-      <div className="flex items-center gap-2 mb-1">
-        <Wand2 size={18} color={C.teal} />
-        <h3 className="text-lg font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-          Generador de sesiones STEAM
-        </h3>
+    <div className="session-wizard">
+      <div className="wizard-progress">
+        {[{n:1,t:"Datos básicos"},{n:2,t:"Propósito y contexto"},{n:3,t:"Revisión"}].map((item)=><React.Fragment key={item.n}><button className={step>=item.n?"is-active":""} onClick={()=>item.n<step&&setStep(item.n)}><i>{step>item.n?<CheckCircle2 size={15}/>:item.n}</i><span>{item.t}</span></button>{item.n<3&&<b className={step>item.n?"is-complete":""}/>}</React.Fragment>)}
       </div>
-      <p className="text-sm mb-5" style={{ color: C.muted }}>
-        Escribe un tema y genera, en segundos, una sesión STEAM nueva alineada al CNEB.
-      </p>
+      <div className="wizard-caption">Paso {step} de 3</div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-        <input
-          value={tema}
-          onChange={(e) => setTema(e.target.value)}
-          placeholder="Tema, por ejemplo: el ciclo del agua"
-          className="md:col-span-2 rounded-lg px-3 py-2.5 text-sm outline-none"
-          style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, color: C.text }}
-        />
-        <select
-          value={grado}
-          onChange={(e) => setGrado(e.target.value)}
-          className="rounded-lg px-3 py-2.5 text-sm outline-none"
-          style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, color: C.text }}
-        >
-          <option value="primaria">Primaria</option>
-          <option value="secundaria">Secundaria</option>
-        </select>
-        <select
-          value={area}
-          onChange={(e) => setArea(e.target.value)}
-          className="rounded-lg px-3 py-2.5 text-sm outline-none"
-          style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, color: C.text }}
-        >
-          {areaOptions.map((a) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
-        <select
-          value={duracion}
-          onChange={(e) => setDuracion(e.target.value)}
-          className="rounded-lg px-3 py-2.5 text-sm outline-none md:col-span-2"
-          style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, color: C.text }}
-        >
-          <option value="30">30 minutos</option>
-          <option value="45">45 minutos</option>
-          <option value="60">60 minutos</option>
-          <option value="90">90 minutos (doble hora)</option>
-        </select>
-      </div>
+      {step===1&&<div className="wizard-card">
+        <div className="wizard-card__title"><span><School size={18}/></span><div><h4>Diseño curricular CNEB</h4><p>Define el nivel, grado, área y datos de la sesión.</p></div></div>
+        <div className="wizard-fields">
+          <label>Nivel educativo *<select value={form.nivel} onChange={e=>changeLevel(e.target.value)}><option>Primaria</option><option>Secundaria</option></select></label>
+          <label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
+          <label className="wide">Área curricular *<select value={form.area} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+          <label className="wide">Región del docente *<select value={form.region} onChange={e=>update("region",e.target.value)}><option value="">Selecciona una región</option>{PERU_REGIONS.map(r=><option key={r}>{r}</option>)}</select><small className="field-help">Kantu usará referentes pertinentes de la región, sin inventar datos locales específicos.</small></label>
+          <label>Sección<input value={form.seccion} onChange={e=>update("seccion",e.target.value)} placeholder="Ej.: A, B o Única"/></label>
+          <label>Fecha de la sesión *<input type="date" value={form.fecha} onChange={e=>update("fecha",e.target.value)}/></label>
+          <label className="wide">Duración *<select value={form.duracion} onChange={e=>update("duracion",e.target.value)}><option value="45">45 minutos</option><option value="60">60 minutos</option><option value="90">90 minutos</option><option value="120">120 minutos</option></select></label>
+        </div>
+      </div>}
 
-      <button
-        onClick={handleGenerate}
-        disabled={loading}
-        className="inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold w-full md:w-auto"
-        style={{ background: C.teal, color: "#0B2B29", opacity: loading ? 0.7 : 1 }}
-      >
-        {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-        {loading ? "Generando sesión..." : "Generar sesión STEAM"}
-      </button>
+      {step===2&&<div className="wizard-card">
+        <div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Propósito y contexto</h4><p>Cuéntale a Kantu qué necesitan aprender tus estudiantes.</p></div></div>
+        <div className="wizard-fields">
+          <label className="wide">Tema o título provisional *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Cuidamos el agua de nuestra comunidad"/></label>
+          <label className="wide">Competencia CNEB *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
+          <fieldset className="wide capacity-picker"><legend>Capacidades que se movilizarán *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
+          <label className="wide ai-field"><span>Propósito de aprendizaje *</span><button type="button" onClick={()=>suggestField("proposito")} disabled={suggesting==="proposito"}>{suggesting==="proposito"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.proposito} onChange={e=>update("proposito",e.target.value)} placeholder="Qué aprenderán, cómo lo demostrarán y para qué les servirá."/></label>
+          <label className="wide ai-field"><span>Situación significativa o contexto regional *</span><button type="button" onClick={()=>suggestField("contexto")} disabled={suggesting==="contexto"}>{suggesting==="contexto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.contexto} onChange={e=>update("contexto",e.target.value)} placeholder="Describe brevemente a tus estudiantes, su región o el problema que abordarán."/></label>
+          <label className="wide ai-field"><span>Evidencia o producto esperado *</span><button type="button" onClick={()=>suggestField("evidencia")} disabled={suggesting==="evidencia"}>{suggesting==="evidencia"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="¿Qué elaborarán, explicarán o demostrarán al finalizar?"/></label>
+          <label className="wide">Recursos disponibles<input value={form.recursos} onChange={e=>update("recursos",e.target.value)} placeholder="Ej.: botellas, cartulina, tabletas, materiales de la comunidad"/></label>
+        </div>
+        <div className="wizard-switches"><label><input type="checkbox" checked={form.steam} onChange={e=>update("steam",e.target.checked)}/><span><strong>Integrar enfoque STEAM</strong><small>Conecta dos o más áreas mediante un reto.</small></span></label><label><input type="checkbox" checked={form.inclusivo} onChange={e=>update("inclusivo",e.target.checked)}/><span><strong>Incluir orientaciones DUA</strong><small>Considera distintas formas de participar y demostrar lo aprendido.</small></span></label></div>
+      </div>}
 
-      {error && (
-        <p className="text-sm mt-4" style={{ color: "#FF8A5B" }}>
-          {error}
-        </p>
-      )}
+      {step===3&&<div className="wizard-card wizard-review">
+        <div className="wizard-card__title"><span><ClipboardList size={18}/></span><div><h4>Revisa antes de generar</h4><p>Gemini utilizará exactamente esta información.</p></div></div>
+        <div className="review-grid"><div><small>Nivel y grado</small><strong>{form.nivel} · {form.grado} {form.seccion&&`· ${form.seccion}`}</strong></div><div><small>Región y área</small><strong>{form.region} · {form.area}</strong></div><div><small>Fecha y duración</small><strong>{form.fecha} · {form.duracion} min</strong></div><div><small>Competencia</small><strong>{form.competencia}</strong></div><div className="wide"><small>Capacidades</small><p>{form.capacidades.join(" · ")}</p></div><div className="wide"><small>Tema</small><strong>{form.tema}</strong></div><div className="wide"><small>Propósito</small><p>{form.proposito}</p></div><div className="wide"><small>Contexto</small><p>{form.contexto}</p></div><div className="wide"><small>Evidencia</small><p>{form.evidencia}</p></div></div>
+      </div>}
+
+      {error&&<p className="wizard-error">{error}</p>}
+      <div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar sesión con IA"}</button>}</div>
 
       {result && (
         <div className="mt-6 rounded-xl p-5" style={{ background: "rgba(15,61,58,0.03)", border: `1px solid ${C.line}` }}>
@@ -1049,6 +1079,16 @@ function SteamGenerator({ initialGrade = "primaria" }) {
               <li key={i} className="flex gap-2"><span style={{ color: C.teal }}>·</span> {c}</li>
             ))}
           </ul>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Capacidades movilizadas</p>
+          <ul className="text-sm mb-4 space-y-1" style={{ color: C.text }}>{(result.capacidadesCNEB||[]).map((c,i)=><li key={i} className="flex gap-2"><span style={{color:C.teal}}>·</span>{c}</li>)}</ul>
+
+          <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Propósito de aprendizaje</p>
+          <p className="text-sm mb-4 leading-relaxed" style={{ color: C.text }}>{result.proposito}</p>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Criterios de evaluación</p>
+          <ul className="text-sm mb-4 space-y-1" style={{ color: C.text }}>{(result.criteriosEvaluacion||[]).map((c,i)=><li key={i} className="flex gap-2"><span style={{color:C.teal}}>·</span>{c}</li>)}</ul>
+          <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Evidencia</p>
+          <p className="text-sm mb-4 leading-relaxed" style={{ color: C.text }}>{result.evidencia}</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4"><div className="rounded-lg p-3" style={{background:"#F1F8F7"}}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Procesos pedagógicos</p><ul className="text-sm space-y-1">{(result.procesosPedagogicos||[]).map((p,i)=><li key={i}>· {p}</li>)}</ul></div><div className="rounded-lg p-3" style={{background:"#F1F8F7"}}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Procesos didácticos</p><ul className="text-sm space-y-1">{(result.procesosDidacticos||[]).map((p,i)=><li key={i}>· {p}</li>)}</ul></div></div>
 
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Materiales</p>
           <ul className="text-sm mb-4 space-y-1" style={{ color: C.text }}>
@@ -1080,8 +1120,8 @@ function SteamGenerator({ initialGrade = "primaria" }) {
           <button
             onClick={() =>
               downloadText(
-                `sesion-steam-${tema.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 30) || "generada"}.txt`,
-                `${result.titulo}\n\nGrado: ${grado}\nDuración: ${duracion} min\nÁreas STEAM: ${(result.areasSTEAM || []).join(", ")}\n\nCompetencias CNEB:\n${(result.competenciasCNEB || []).map((c) => "- " + c).join("\n")}\n\nMateriales:\n${(result.materiales || []).map((m) => "- " + m).join("\n")}\n\nInicio:\n${result.inicio}\n\nDesarrollo:\n${result.desarrollo}\n\nCierre:\n${result.cierre}\n\nProducto STEAM:\n${result.productoSTEAM}\n\nGenerado desde SciVerse para Docentes.`
+                `sesion-${form.tema.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 30) || "generada"}.txt`,
+                `${result.titulo}\n\nNivel y grado: ${form.nivel} ${form.grado}\nRegión: ${form.region}\nÁrea: ${form.area}\nDuración: ${form.duracion} min\n\nCompetencias CNEB:\n${(result.competenciasCNEB || []).map((c) => "- " + c).join("\n")}\n\nCapacidades CNEB:\n${(result.capacidadesCNEB || []).map((c) => "- " + c).join("\n")}\n\nPropósito:\n${result.proposito}\n\nCriterios de evaluación:\n${(result.criteriosEvaluacion||[]).map(c=>"- "+c).join("\n")}\n\nEvidencia:\n${result.evidencia}\n\nProcesos pedagógicos:\n${(result.procesosPedagogicos||[]).map(p=>"- "+p).join("\n")}\n\nProcesos didácticos:\n${(result.procesosDidacticos||[]).map(p=>"- "+p).join("\n")}\n\nMateriales:\n${(result.materiales || []).map((m) => "- " + m).join("\n")}\n\nInicio:\n${result.inicio}\n\nDesarrollo:\n${result.desarrollo}\n\nCierre:\n${result.cierre}\n\nProducto STEAM:\n${result.productoSTEAM}\n\nGenerado con Kantu en SciVerse.`
               )
             }
             className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
