@@ -4,9 +4,10 @@
 
 - El sitio completo (landing, registro, fichas STEAM, laboratorio 3D, retos,
   generador de sesiones, plantillas).
-- **Registro real de docentes en Supabase** — ya no se queda solo en el
-  navegador de cada uno; queda guardado en una base de datos que tú puedes
-  consultar.
+- **Registro real con contraseña y confirmación por correo en Supabase**.
+  Incluye inicio y cierre de sesión y recuperación de contraseña.
+- El registro solicita si el docente enseña en primaria o secundaria y abre
+  automáticamente los materiales, retos y generador en el nivel elegido.
 - **Generador de sesiones STEAM con Gemini** (la misma API que usas en tus
   otros proyectos como AmeLia), en vez de la API de Anthropic.
 - **Panel de administración** en `/?admin=1` para ver la lista de docentes
@@ -25,7 +26,8 @@
 1. Entra a [supabase.com](https://supabase.com) → "New project".
 2. Cuando esté listo, ve a **SQL Editor → New query**, pega el contenido
    del archivo `supabase-schema.sql` (incluido en este proyecto) y dale
-   "Run". Esto crea la tabla `docentes` con la seguridad correcta.
+   "Run". Esto crea la tabla `docentes`, conecta cada perfil con Supabase
+   Auth y configura la seguridad.
 3. Ve a **Settings → API** y copia tres valores, los vas a necesitar en el
    paso 3:
    - `Project URL`
@@ -33,6 +35,20 @@
    - `service_role` key (⚠️ esta es secreta, nunca la pongas en el código
      del navegador — solo se usa en el panel de administración, del lado
      del servidor)
+4. Ve a **Authentication → Providers → Email** y verifica que estén
+   activadas las opciones **Enable Email provider** y **Confirm email**.
+5. Ve a **Authentication → URL Configuration**:
+   - En **Site URL** coloca la dirección publicada de tu página.
+   - En **Redirect URLs** agrega esa misma dirección terminada en `/**`.
+   - Mientras haces pruebas también puedes agregar `http://localhost:5173/**`.
+6. En **Authentication → Email Templates → Confirm signup** puedes cambiar
+   el asunto a `Activa tu cuenta de SciVerse | Teaching TIC` y personalizar
+   el mensaje. No elimines el enlace `{{ .ConfirmationURL }}`.
+7. Para probar sin SMTP propio, utiliza el mismo correo que pertenece al
+   equipo de tu proyecto de Supabase. El correo predeterminado solo permite
+   destinatarios del equipo y tiene un límite muy bajo. Para docentes reales,
+   configura **Authentication → SMTP Settings** con Resend, Brevo u otro
+   proveedor SMTP.
 
 ## Paso 2 — Consigue tu clave de Gemini
 
@@ -94,6 +110,8 @@ git push -u origin main
 ## Paso 6 — Verifica que todo funcione
 
 - Entra al sitio, regístrate como si fueras un docente.
+- Abre el correo recibido, pulsa el enlace de confirmación y luego inicia
+  sesión. Antes de confirmar, el sistema no debe permitir el ingreso.
 - Ve a Supabase → **Table Editor → docentes** y confirma que tu registro
   apareció ahí.
 - Entra a `tu-sitio.vercel.app/?admin=1`, pon la clave que elegiste en
@@ -118,23 +136,20 @@ Vercel vuelve a desplegar automáticamente.
 
 ## Seguridad — qué queda protegido y cómo
 
-- La clave `anon` de Supabase (pública, va en el navegador) solo puede
-  **insertar** registros nuevos, no leer la tabla — así nadie puede ver los
-  datos de otros docentes desde el navegador.
+- La clave `anon` de Supabase es pública, pero las reglas RLS permiten a cada
+  docente leer o modificar únicamente su propio perfil.
 - La clave `service_role` (secreta) solo se usa dentro de
   `api/list-docentes.js`, que corre en el servidor de Vercel — nunca llega
   al navegador.
+- Las contraseñas y la confirmación del correo son gestionadas por Supabase
+  Auth; la aplicación nunca guarda contraseñas en la tabla `docentes`.
 - El panel de administración pide la clave `ADMIN_SECRET` antes de mostrar
-  la lista. Es una protección simple, suficiente para uso personal o de un
-  equipo chico. Si más adelante quieres un login real con usuarios y
-  contraseñas (por ejemplo para varios administradores), se puede sumar
-  Supabase Auth — dime y lo armamos.
+  la lista. Más adelante conviene reemplazarla por roles administrativos.
 
 ## Siguientes pasos sugeridos
 
 - Exportar la lista de docentes a Excel/CSV desde el panel.
-- Enviar un correo de bienvenida automático al registrarse (por ejemplo con
-  Resend).
+- Personalizar los correos con el logo y dominio de Teaching TIC.
 - Analítica de uso del sitio (Vercel Analytics, un clic desde el dashboard).
 
 Cuando quieras avanzar con cualquiera de estos, dime y lo armamos juntas.
