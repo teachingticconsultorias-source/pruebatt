@@ -41,6 +41,9 @@ import {
   ShieldCheck,
   HelpCircle,
   FileText,
+  LayoutDashboard,
+  FolderOpen,
+  CreditCard,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -1731,6 +1734,7 @@ function SciVerseApp({ profile, onLogout }) {
           </span>
         </div>
         <div className="hidden md:flex items-center gap-6 text-sm" style={{ color: C.muted }}>
+          <a href="#inicio-docente" className="hover:opacity-80">Inicio</a>
           <a href="#actividades" className="hover:opacity-80">Actividades</a>
           <a href="#lab3d" className="hover:opacity-80">Laboratorio 3D</a>
           <a href="#retos" className="hover:opacity-80">Retos grupales</a>
@@ -1746,6 +1750,45 @@ function SciVerseApp({ profile, onLogout }) {
           </button>
         </div>
       </nav>
+
+      <section id="inicio-docente" className="teacher-dashboard">
+        <div className="dashboard-welcome">
+          <div>
+            <span className="dashboard-kicker"><LayoutDashboard size={14} /> Panel del docente</span>
+            <h1>¡Hola, {profile.nombres}! 👋</h1>
+            <p>¿Qué deseas preparar hoy para tus estudiantes de {preferredGrade}?</p>
+          </div>
+          <div className="dashboard-profile">
+            <span>{(profile.nombres?.[0] || "D").toUpperCase()}{(profile.apellidos?.[0] || "").toUpperCase()}</span>
+            <div><strong>{profile.nombres} {profile.apellidos}</strong><small>{profile.ie || "Docente Teaching TIC"}</small></div>
+          </div>
+        </div>
+
+        <div className="dashboard-stats">
+          <article><span className="stat-icon teal"><Sparkles size={19} /></span><div><small>Generaciones disponibles</small><strong>1</strong><p>Plan gratuito</p></div></article>
+          <article><span className="stat-icon coral"><FolderOpen size={19} /></span><div><small>Mis materiales</small><strong>0</strong><p>Empieza creando una sesión</p></div></article>
+          <article><span className="stat-icon yellow"><School size={19} /></span><div><small>Nivel seleccionado</small><strong className="stat-word">{preferredGrade}</strong><p>Contenido personalizado</p></div></article>
+          <article><span className="stat-icon violet"><CreditCard size={19} /></span><div><small>Mi plan</small><strong className="stat-word">Gratuito</strong><p><a href="#planes-docente">Ver opciones</a></p></div></article>
+        </div>
+
+        <div className="dashboard-columns">
+          <div className="dashboard-panel">
+            <div className="panel-heading"><div><small>Accesos rápidos</small><h2>Crea y explora</h2></div><Zap size={20} /></div>
+            <div className="quick-tools">
+              <a href="#generador"><span style={{background:"#E5F8F5",color:C.tealDeep}}><Wand2 size={21} /></span><div><strong>Crear sesión con IA</strong><small>Genera una experiencia STEAM</small></div><ChevronRight size={17} /></a>
+              <a href="#actividades"><span style={{background:"#FFF0EC",color:C.coral}}><ClipboardList size={21} /></span><div><strong>Ver actividades</strong><small>Experiencias listas para adaptar</small></div><ChevronRight size={17} /></a>
+              <a href="#lab3d"><span style={{background:"#EDF3FF",color:"#4F7DDB"}}><Dna size={21} /></span><div><strong>Laboratorio 3D</strong><small>Explora modelos interactivos</small></div><ChevronRight size={17} /></a>
+              <a href="#plantillas"><span style={{background:"#FFF7DC",color:"#B78300"}}><Download size={21} /></span><div><strong>Plantillas CNEB</strong><small>Descarga recursos editables</small></div><ChevronRight size={17} /></a>
+            </div>
+          </div>
+          <aside className="dashboard-panel recent-panel">
+            <div className="panel-heading"><div><small>Tu espacio</small><h2>Materiales recientes</h2></div><Clock size={20} /></div>
+            <div className="empty-materials"><span><FolderOpen size={27} /></span><strong>Aún no tienes materiales</strong><p>Las sesiones que generes aparecerán aquí para que puedas retomarlas y descargarlas.</p><a href="#generador">Crear mi primera sesión <ArrowRight size={14} /></a></div>
+          </aside>
+        </div>
+
+        <div id="planes-docente" className="dashboard-plan"><div><span><Sparkles size={17} /></span><div><strong>Obtén más generaciones y descargas en Word</strong><p>Actualiza tu plan desde S/10 y activa tu acceso mediante Plin o Yape.</p></div></div><a href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer">Ver planes <ArrowRight size={15} /></a></div>
+      </section>
 
       <header className="px-6 md:px-10 pt-14 pb-16 max-w-5xl mx-auto text-center">
         <span
