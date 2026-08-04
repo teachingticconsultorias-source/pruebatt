@@ -6,7 +6,7 @@
 // Devuelve la respuesta normalizada en la misma forma que espera el cliente:
 // { content: [ { type: "text", text: "..." } ] }
 
-const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 const SESSION_SCHEMA = {
   type: "object",
@@ -14,13 +14,25 @@ const SESSION_SCHEMA = {
     titulo: { type: "string" },
     areasSTEAM: { type: "array", items: { type: "string" } },
     competenciasCNEB: { type: "array", items: { type: "string" } },
+    capacidadesCNEB: { type: "array", items: { type: "string" } },
+    proposito: { type: "string" },
+    criteriosEvaluacion: { type: "array", items: { type: "string" } },
+    evidencia: { type: "string" },
+    procesosPedagogicos: { type: "array", items: { type: "string" } },
+    procesosDidacticos: { type: "array", items: { type: "string" } },
     materiales: { type: "array", items: { type: "string" } },
     inicio: { type: "string" },
     desarrollo: { type: "string" },
     cierre: { type: "string" },
     productoSTEAM: { type: "string" },
   },
-  required: ["titulo", "areasSTEAM", "competenciasCNEB", "materiales", "inicio", "desarrollo", "cierre", "productoSTEAM"],
+  required: ["titulo", "areasSTEAM", "competenciasCNEB", "capacidadesCNEB", "proposito", "criteriosEvaluacion", "evidencia", "procesosPedagogicos", "procesosDidacticos", "materiales", "inicio", "desarrollo", "cierre", "productoSTEAM"],
+};
+
+const SUGGESTION_SCHEMA = {
+  type: "object",
+  properties: { suggestion: { type: "string" } },
+  required: ["suggestion"],
 };
 
 export default async function handler(req, res) {
@@ -52,8 +64,34 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages } = req.body;
-    const promptText = messages?.[0]?.content || "";
+    const { messages, mode, field, form = {} } = req.body || {};
+    const suggestionMode = mode === "suggestion";
+    const allowedFields = ["proposito", "contexto", "evidencia"];
+
+    if (suggestionMode && !allowedFields.includes(field)) {
+      res.status(400).json({ error: "Tipo de sugerencia no válido" });
+      return;
+    }
+
+    const capacities = Array.isArray(form.capacidades) ? form.capacidades.join("; ") : "";
+    const suggestionInstructions = {
+      proposito: "Redacta un propósito de aprendizaje breve en una sola oración. Debe expresar qué acción realizará el estudiante, qué contenido movilizará, en qué condición y para qué será útil.",
+      contexto: "Propón una situación significativa auténtica y cercana a la región indicada. Relaciónala con el tema y la vida del estudiante, pero no inventes nombres, cifras, festividades ni problemas locales específicos que no hayan sido proporcionados.",
+      evidencia: "Propón una evidencia concreta y verificable: un producto, actuación o desempeño que permita observar las capacidades seleccionadas y evaluar el propósito.",
+    };
+    const suggestionPrompt = `Ayuda a un docente peruano a completar solamente el campo "${field}" de una sesión CNEB.
+Nivel: ${form.nivel || "No indicado"}. Grado: ${form.grado || "No indicado"}. Área: ${form.area || "No indicada"}.
+Región: ${form.region || "No indicada"}. Tema: ${form.tema || "No indicado"}.
+Competencia: ${form.competencia || "No indicada"}. Capacidades: ${capacities || "No indicadas"}.
+Propósito actual: ${form.proposito || ""}. Contexto actual: ${form.contexto || ""}.
+${suggestionInstructions[field] || ""}
+Responde únicamente con una sugerencia lista para pegar en el formulario, en español claro y sin encabezados.`;
+    const promptText = suggestionMode ? suggestionPrompt : (messages?.[0]?.content || "");
+
+    if (!promptText.trim()) {
+      res.status(400).json({ error: "Falta información para generar la propuesta" });
+      return;
+    }
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
@@ -65,12 +103,12 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: promptText }] }],
-          systemInstruction: { parts: [{ text: "Eres un especialista peruano en planificación curricular, CNEB y enfoque STEAM. Crea propuestas pedagógicas claras, aplicables, inclusivas y seguras. No inventes competencias oficiales; selecciona únicamente las pertinentes y entrega siempre JSON válido." }] },
+          systemInstruction: { parts: [{ text: "Eres un especialista peruano en planificación curricular y CNEB. Respeta la competencia y capacidades seleccionadas. Formula criterios de evaluación como acciones observables derivadas de las capacidades, el propósito y el tema. Organiza inicio, desarrollo y cierre con procesos pedagógicos y los procesos didácticos pertinentes al área, sin convertirlos en una lista mecánica. Adapta el contexto a la región sin inventar datos locales. Entrega siempre JSON válido." }] },
           generationConfig: {
             maxOutputTokens: 2500,
             temperature: 0.7,
             responseMimeType: "application/json",
-            responseSchema: SESSION_SCHEMA,
+            responseSchema: suggestionMode ? SUGGESTION_SCHEMA : SESSION_SCHEMA,
           },
         }),
       }
@@ -86,6 +124,12 @@ export default async function handler(req, res) {
     const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
     if (!text) {
       res.status(500).json({ error: "Gemini no devolvió contenido" });
+      return;
+    }
+
+    if (suggestionMode) {
+      const parsed = JSON.parse(text);
+      res.status(200).json({ suggestion: parsed.suggestion });
       return;
     }
 
