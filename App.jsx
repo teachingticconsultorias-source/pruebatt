@@ -1095,6 +1095,57 @@ function SteamGenerator({ initialGrade = "primaria" }) {
   );
 }
 
+function CreateStudio({ preferredGrade = "primaria" }) {
+  const [creation, setCreation] = useState(null);
+  const materialOptions = [
+    { label: "Instrumento", icon: ClipboardList },
+    { label: "Ficha", icon: FileText },
+    { label: "Presentación", icon: LayoutDashboard },
+    { label: "Interactivo", icon: Target },
+  ];
+
+  return (
+    <div className="create-studio">
+      <div className="create-studio__intro">
+        <div>
+          <span className="create-studio__eyebrow"><Sparkles size={13} /> KANTU TE ACOMPAÑA</span>
+          <h2>¿Qué quieres crear hoy?</h2>
+          <p>Empieza un recurso nuevo. Todo lo que generes se guardará próximamente en «Mi biblioteca».</p>
+        </div>
+        <div className="create-studio__nova"><img src="/mascot/kantu-material.png" alt="Kantu, vicuña científica peruana de SciVerse" /><span><strong>¡Hola! Soy Kantu</strong><small>Crearemos paso a paso</small></span></div>
+      </div>
+
+      <div className="create-choice-grid">
+        <article className="create-choice create-choice--session">
+          <div className="create-choice__visual"><img src="/mascot/kantu-session.png" alt="Kantu con un planificador y un modelo de átomo" /></div>
+          <div className="create-choice__copy">
+            <span>PLANIFICACIÓN INTEGRAL</span>
+            <h3>Sesión completa</h3>
+            <p>Genera una experiencia de aprendizaje STEAM alineada al CNEB, con secuencia, evaluación y materiales.</p>
+            <div className="create-flow"><i><BookOpen size={17}/><small>Sesión</small></i><b/><i><ClipboardList size={17}/><small>Instrumento</small></i><b/><i><FolderOpen size={17}/><small>Materiales</small></i></div>
+            <button onClick={() => setCreation("session")}>Empezar <ArrowRight size={16}/></button>
+          </div>
+        </article>
+
+        <article className="create-choice create-choice--material">
+          <div className="create-choice__visual"><img src="/mascot/kantu-material.png" alt="Kantu presentando una ficha educativa" /></div>
+          <div className="create-choice__copy">
+            <span>RECURSO PUNTUAL</span>
+            <h3>Nuevo material</h3>
+            <p>Crea solamente el recurso que necesitas, sin preparar una clase completa. Rápido y directo.</p>
+            <div className="material-kinds">{materialOptions.map(({label,icon:Icon})=><button key={label} onClick={()=>setCreation(label.toLowerCase())}><i><Icon size={17}/></i><small>{label}</small></button>)}</div>
+          </div>
+        </article>
+      </div>
+
+      {creation && <div className="create-generator-wrap">
+        <div className="create-generator-head"><div><span>CREANDO CON KANTU</span><h3>{creation === "session" ? "Nueva sesión completa" : `Nuevo recurso: ${creation}`}</h3></div><button onClick={()=>setCreation(null)}>Cambiar tipo</button></div>
+        <SteamGenerator initialGrade={preferredGrade} />
+      </div>}
+    </div>
+  );
+}
+
 /* ---------------------------------------------------------------------- */
 /* REGISTRO DE DOCENTES (INTRANET)                                         */
 /* ---------------------------------------------------------------------- */
@@ -1964,12 +2015,7 @@ function SciVerseApp({ profile, onLogout }) {
 
       {/* GENERADOR STEAM */}
       <section id="generador" className="px-6 md:px-10 py-14 max-w-4xl mx-auto">
-        <span className="text-xs tracking-widest uppercase" style={{ color: C.teal, fontFamily: "'JetBrains Mono', monospace" }}>Con inteligencia artificial</span>
-        <h2 className="text-2xl md:text-3xl font-semibold mt-1 mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Generador de proyectos y sesiones STEAM</h2>
-        <p className="text-sm mb-6" style={{ color: C.muted }}>
-          ¿Necesitas una actividad sobre un tema que no está en el catálogo? Descríbelo aquí y genera una sesión nueva, lista para usar.
-        </p>
-        <SteamGenerator initialGrade={preferredGrade} />
+        <CreateStudio preferredGrade={preferredGrade} />
       </section>
 
       {/* PLANTILLAS */}
