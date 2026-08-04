@@ -1715,7 +1715,7 @@ function SciVerseApp({ profile, onLogout }) {
   const heroAccent = heroGrade === "primaria" ? C.amber : C.cyan;
 
   return (
-    <div style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
+    <div className="teacher-app-shell" style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap');
         @media print {
@@ -1726,21 +1726,32 @@ function SciVerseApp({ profile, onLogout }) {
         }
       `}</style>
 
-      <nav className="flex items-center justify-between px-6 md:px-10 py-5 sticky top-0 z-30" style={{ background: "rgba(255,255,255,0.88)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.lineSoft}` }}>
+      <aside className="teacher-sidebar">
+        <a href="#inicio-docente" className="sidebar-brand"><span><Microscope size={22} /></span><div><strong>SciVerse</strong><small>Teaching TIC</small></div></a>
+        <nav className="sidebar-menu" aria-label="Panel docente">
+          <a className="active" href="#inicio-docente"><LayoutDashboard size={18} /> Inicio</a>
+          <span>Recursos docentes</span>
+          <a href="#actividades"><ClipboardList size={18} /> Actividades</a>
+          <a href="#lab3d"><Dna size={18} /> Laboratorio 3D</a>
+          <a href="#retos"><Users size={18} /> Retos grupales</a>
+          <a href="#generador"><Wand2 size={18} /> Crear con IA</a>
+          <a href="#plantillas"><FolderOpen size={18} /> Mi biblioteca</a>
+        </nav>
+        <div className="sidebar-bottom">
+          <a className="sidebar-plan" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer"><Award size={17} /><div><small>Plan actual</small><strong>Gratuito</strong></div><ChevronRight size={15} /></a>
+          <a href="#inicio-docente"><Palette size={17} /> Personalizar</a>
+          <button onClick={onLogout}><LogOut size={17} /> Cerrar sesión</button>
+        </div>
+      </aside>
+
+      <nav className="teacher-topbar flex items-center justify-between px-6 md:px-10 py-5 sticky top-0 z-30" style={{ background: "rgba(255,255,255,0.88)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.lineSoft}` }}>
         <div className="flex items-center gap-2">
           <Microscope size={20} color={C.teal} />
           <span className="text-lg font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             SciVerse <span style={{ color: C.muted, fontWeight: 400 }}>para Docentes</span>
           </span>
         </div>
-        <div className="hidden md:flex items-center gap-6 text-sm" style={{ color: C.muted }}>
-          <a href="#inicio-docente" className="hover:opacity-80">Inicio</a>
-          <a href="#actividades" className="hover:opacity-80">Actividades</a>
-          <a href="#lab3d" className="hover:opacity-80">Laboratorio 3D</a>
-          <a href="#retos" className="hover:opacity-80">Retos grupales</a>
-          <a href="#generador" className="hover:opacity-80">Generador STEAM</a>
-          <a href="#plantillas" className="hover:opacity-80">Plantillas</a>
-        </div>
+        <span className="hidden md:inline text-xs" style={{ color: C.muted }}>Panel docente · Recursos alineados al CNEB</span>
         <div className="flex items-center gap-3">
           <span className="hidden sm:inline text-sm" style={{ color: C.muted }}>
             Hola, <strong style={{ color: C.text }}>{profile.nombres}</strong> · {heroGrade === "primaria" ? "Primaria" : "Secundaria"}
