@@ -1085,7 +1085,7 @@ function SteamGenerator({ initialGrade = "primaria" }) {
 /* REGISTRO DE DOCENTES (INTRANET)                                         */
 /* ---------------------------------------------------------------------- */
 
-function ImprovedLanding({ onRegister }) {
+function ImprovedLanding({ onRegister, onLogin }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoGrade, setDemoGrade] = useState("primaria");
   const [legalView, setLegalView] = useState(null);
@@ -1137,6 +1137,7 @@ function ImprovedLanding({ onRegister }) {
         </div>
         <div className="nav-actions">
           <button className="menu-toggle" aria-label="Abrir menú" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Layers size={20} />}</button>
+          <button onClick={onLogin} className="secondary-btn compact login-nav-btn">Iniciar sesión</button>
           <button onClick={onRegister} className="primary-btn compact">Acceder gratis <ArrowRight size={15} /></button>
         </div>
       </nav>

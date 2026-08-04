@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { BookOpen, CheckCircle2, GraduationCap, Loader2, LockKeyhole, Microscope, User } from "lucide-react";
+import { BookOpen, CheckCircle2, GraduationCap, Loader2, LockKeyhole, Microscope, ShieldCheck, Sparkles, User } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
 
 const COLORS = {
@@ -21,6 +21,7 @@ const EMPTY_FORM = {
   correo: "",
   password: "",
   confirmPassword: "",
+  acceptedTerms: false,
 };
 
 export default function AuthGate({ LandingComponent, children }) {
@@ -86,6 +87,7 @@ export default function AuthGate({ LandingComponent, children }) {
     }
     if (form.password.length < 8) return setError("La contraseña debe tener como mínimo 8 caracteres.");
     if (form.password !== form.confirmPassword) return setError("Las contraseñas no coinciden.");
+    if (!form.acceptedTerms) return setError("Debes aceptar los términos y la política de privacidad.");
 
     setSaving(true);
     setError("");
@@ -178,7 +180,7 @@ export default function AuthGate({ LandingComponent, children }) {
     return <div className="min-h-screen flex items-center justify-center" style={{ background: COLORS.bg }}><Loader2 className="animate-spin" color={COLORS.teal} /></div>;
   }
   if (profile) return children(profile, logout);
-  if (view === "landing") return <LandingComponent onRegister={() => changeView("register")} />;
+  if (view === "landing") return <LandingComponent onRegister={() => changeView("register")} onLogin={() => changeView("login")} />;
 
   const isRegister = view === "register";
   const isLogin = view === "login";
@@ -187,13 +189,26 @@ export default function AuthGate({ LandingComponent, children }) {
   const submit = isRegister ? register : isLogin ? login : isRecovery ? recover : updatePassword;
 
   return (
-    <main className="min-h-screen flex items-center justify-center px-5 py-10" style={{ background: COLORS.bg, color: COLORS.text }}>
-      <section className="w-full max-w-md rounded-2xl p-7 shadow-sm" style={{ background: COLORS.surface, border: `1px solid ${COLORS.line}` }}>
-        {view !== "new-password" && <button type="button" onClick={() => changeView("landing")} className="text-xs mb-5" style={{ color: COLORS.muted }}>← Volver a la página principal</button>}
+    <main className="min-h-screen flex items-center justify-center px-5 py-10 auth-page" style={{ background: COLORS.bg, color: COLORS.text }}>
+      <div className="auth-layout">
+        <aside className="auth-showcase">
+          <div className="auth-brand"><span><Microscope size={24} /></span><div><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></div></div>
+          <div className="auth-showcase-copy">
+            <span className="auth-eyebrow"><Sparkles size={13} /> Plataforma educativa STEAM</span>
+            <h1>Más tiempo para enseñar. Más recursos para transformar.</h1>
+            <p>Crea experiencias alineadas al CNEB y encuentra materiales adaptados al nivel en el que enseñas.</p>
+            <ul><li><CheckCircle2 size={17} /> Recursos para primaria y secundaria</li><li><CheckCircle2 size={17} /> Generador de sesiones con IA</li><li><CheckCircle2 size={17} /> Acceso seguro y confirmación por correo</li></ul>
+          </div>
+          <small className="auth-company">Teaching TIC Consultorías S.A.C. · RUC 20607945331</small>
+        </aside>
+        <section className="auth-card">
+        {view !== "new-password" && <button type="button" onClick={() => changeView("landing")} className="auth-back">← Volver a la página principal</button>}
         <div className="flex items-center gap-2 mb-2">
           <Microscope size={22} color={COLORS.teal} />
           <strong className="text-lg">SciVerse <span style={{ color: COLORS.muted, fontWeight: 400 }}>Docentes</span></strong>
         </div>
+        {(isRegister || isLogin) && <div className="auth-tabs" role="tablist" aria-label="Acceso a SciVerse"><button type="button" className={isLogin ? "active" : ""} onClick={() => changeView("login")}>Iniciar sesión</button><button type="button" className={isRegister ? "active" : ""} onClick={() => changeView("register")}>Crear cuenta</button></div>}
+        {(isRegister || isLogin) && <h1 className="auth-title">{isRegister ? "Crea tu cuenta docente" : "Bienvenido nuevamente"}</h1>}
         <p className="text-sm mb-6" style={{ color: COLORS.muted }}>
           {isRegister && "Crea tu cuenta para acceder a las herramientas de Teaching TIC."}
           {isLogin && "Ingresa con tu correo y contraseña."}
@@ -212,11 +227,11 @@ export default function AuthGate({ LandingComponent, children }) {
         ) : (
           <form onSubmit={submit} className="space-y-3">
             {isRegister && <div className="grid grid-cols-2 gap-3">
-              <AuthInput value={form.nombres} onChange={(v) => setForm({ ...form, nombres: v })} placeholder="Nombres" autoComplete="given-name" />
-              <AuthInput value={form.apellidos} onChange={(v) => setForm({ ...form, apellidos: v })} placeholder="Apellidos" autoComplete="family-name" />
+              <AuthInput label="Nombres" value={form.nombres} onChange={(v) => setForm({ ...form, nombres: v })} placeholder="Ej. María" autoComplete="given-name" />
+              <AuthInput label="Apellidos" value={form.apellidos} onChange={(v) => setForm({ ...form, apellidos: v })} placeholder="Ej. Pérez López" autoComplete="family-name" />
             </div>}
-            {isRegister && <AuthInput value={form.ie} onChange={(v) => setForm({ ...form, ie: v })} placeholder="Institución educativa (IE)" />}
-            {isRegister && <AuthInput value={form.celular} onChange={(v) => setForm({ ...form, celular: v })} placeholder="Celular" type="tel" autoComplete="tel" required={false} />}
+            {isRegister && <AuthInput label="Institución educativa" value={form.ie} onChange={(v) => setForm({ ...form, ie: v })} placeholder="Nombre de tu colegio o institución" />}
+            {isRegister && <AuthInput label="Celular (opcional)" value={form.celular} onChange={(v) => setForm({ ...form, celular: v })} placeholder="Ej. 999 999 999" type="tel" autoComplete="tel" required={false} />}
             {isRegister && <fieldset>
               <legend className="text-sm font-semibold mb-2">¿En qué nivel enseñas?</legend>
               <div className="grid grid-cols-2 gap-3">
@@ -238,9 +253,10 @@ export default function AuthGate({ LandingComponent, children }) {
                 />
               </div>
             </fieldset>}
-            {!isNewPassword && <AuthInput value={form.correo} onChange={(v) => setForm({ ...form, correo: v })} placeholder="Correo electrónico" type="email" autoComplete="email" />}
-            {!isRecovery && <AuthInput value={form.password} onChange={(v) => setForm({ ...form, password: v })} placeholder={isNewPassword ? "Nueva contraseña" : "Contraseña (mínimo 8 caracteres)"} type="password" autoComplete={isLogin ? "current-password" : "new-password"} minLength={8} />}
-            {(isRegister || isNewPassword) && <AuthInput value={form.confirmPassword} onChange={(v) => setForm({ ...form, confirmPassword: v })} placeholder="Repite tu contraseña" type="password" autoComplete="new-password" minLength={8} />}
+            {!isNewPassword && <AuthInput label="Correo electrónico" value={form.correo} onChange={(v) => setForm({ ...form, correo: v })} placeholder="docente@correo.com" type="email" autoComplete="email" />}
+            {!isRecovery && <AuthInput label={isNewPassword ? "Nueva contraseña" : "Contraseña"} value={form.password} onChange={(v) => setForm({ ...form, password: v })} placeholder="Mínimo 8 caracteres" type="password" autoComplete={isLogin ? "current-password" : "new-password"} minLength={8} />}
+            {(isRegister || isNewPassword) && <AuthInput label="Confirmar contraseña" value={form.confirmPassword} onChange={(v) => setForm({ ...form, confirmPassword: v })} placeholder="Escribe nuevamente tu contraseña" type="password" autoComplete="new-password" minLength={8} />}
+            {isRegister && <label className="auth-consent"><input type="checkbox" checked={form.acceptedTerms} onChange={(event) => setForm({ ...form, acceptedTerms: event.target.checked })} /><span>Acepto los términos y condiciones y la política de privacidad de Teaching TIC.</span></label>}
 
             {error && <p role="alert" className="text-xs" style={{ color: COLORS.danger }}>{error}</p>}
             {notice && <p role="status" className="text-xs" style={{ color: COLORS.teal }}>{notice}</p>}
@@ -257,7 +273,9 @@ export default function AuthGate({ LandingComponent, children }) {
           {isRegister ? "¿Ya tienes una cuenta? " : "¿Aún no tienes una cuenta? "}
           <button type="button" onClick={() => changeView(isRegister ? "login" : "register")} className="font-semibold" style={{ color: COLORS.teal }}>{isRegister ? "Inicia sesión" : "Regístrate"}</button>
         </div>}
+        <div className="auth-security"><ShieldCheck size={14} /> Tus datos se utilizan únicamente para gestionar tu cuenta.</div>
       </section>
+      </div>
     </main>
   );
 }
@@ -282,9 +300,9 @@ function LevelChoice({ active, icon: Icon, title, description, color, onClick })
   );
 }
 
-function AuthInput({ value, onChange, placeholder, type = "text", autoComplete, minLength, required = true }) {
+function AuthInput({ label, value, onChange, placeholder, type = "text", autoComplete, minLength, required = true }) {
   return (
-    <input
+    <label className="auth-field"><span>{label}</span><input
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
@@ -294,6 +312,6 @@ function AuthInput({ value, onChange, placeholder, type = "text", autoComplete, 
       required={required}
       className="w-full rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2"
       style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${COLORS.line}`, color: COLORS.text }}
-    />
+    /></label>
   );
 }
