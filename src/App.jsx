@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
+import jsPDF from "jspdf";
 import { supabase } from "./supabaseClient.js";
 import {
   FlaskConical,
@@ -634,6 +636,7 @@ const CELL_TYPES = {
   },
   animal: {
     label: "Célula animal",
+    glb: "/models/animal-cell-nih.glb",
     parts: [
       { kind: "sphere", args: [2.3, 24, 24], pos: [0, 0, 0], color: 0xe0a3c4, opacity: 0.16 },
       { kind: "sphere", args: [0.75, 20, 20], pos: [0.3, 0.2, 0], color: 0x9b5de5, opacity: 1, name: "Núcleo", desc: "Controla las actividades de la célula y contiene el ADN." },
@@ -647,6 +650,7 @@ const CELL_TYPES = {
   },
   neurona: {
     label: "Neurona",
+    glb: "/models/neuron-nih.glb",
     parts: [
       { kind: "sphere", args: [0.9, 22, 22], pos: [0, 0, 0], color: 0xf4d35e, opacity: 0.9, name: "Soma", desc: "Cuerpo celular de la neurona; contiene el núcleo y los organelos." },
       { kind: "sphere", args: [0.35, 16, 16], pos: [0, 0.1, 0], color: 0x9b5de5, opacity: 1, name: "Núcleo", desc: "Contiene el ADN que dirige la actividad de la neurona." },
@@ -656,22 +660,66 @@ const CELL_TYPES = {
       { kind: "cylinder", args: [0.06, 0.03, 0.7, 8], pos: [-0.7, 0.1, -0.7], rot: [0.9, 0, 0.3], color: 0xf9e79f, opacity: 1, name: "Dendritas", desc: "Reciben las señales que llegan de otras neuronas." },
     ],
   },
+  bacteria: {
+    label: "Bacteria",
+    glb: "/models/bacteria-wall-nih.glb",
+    parts: [
+      { kind: "cylinder", args: [0.7, 0.7, 2.4, 20], pos: [0, 0, 0], rot: [0, 0, Math.PI / 2], color: 0xffd166, opacity: 0.85, name: "Pared celular", desc: "Cubierta rígida que protege a la bacteria y le da forma." },
+      { kind: "sphere", args: [0.35, 12, 12], pos: [0.6, 0.1, 0], color: 0x9b5de5, opacity: 1, name: "Material genético", desc: "El ADN de la bacteria, libre en el citoplasma (no tiene núcleo)." },
+      { kind: "sphere", args: [0.15, 8, 8], pos: [-0.5, 0.2, 0.2], color: 0xf3722c, opacity: 1, name: "Ribosoma", desc: "Fabrica las proteínas que la bacteria necesita." },
+      { kind: "sphere", args: [0.13, 8, 8], pos: [-0.3, -0.2, -0.2], color: 0xf3722c, opacity: 1, name: "Ribosoma", desc: "Fabrica las proteínas que la bacteria necesita." },
+    ],
+  },
 };
 
 /* ---------------------------------------------------------------------- */
 /* HELPERS                                                                  */
 /* ---------------------------------------------------------------------- */
 
-function downloadText(filename, content) {
-  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
+function downloadPDF(filename, title, sections) {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  const maxWidth = pageWidth - margin * 2;
+  let y = 20;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(15);
+  const titleLines = doc.splitTextToSize(title, maxWidth);
+  doc.text(titleLines, margin, y);
+  y += titleLines.length * 7 + 6;
+
+  sections.forEach(({ heading, body }) => {
+    if (heading) {
+      if (y > pageHeight - 25) {
+        doc.addPage();
+        y = 20;
+      }
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.text(heading, margin, y);
+      y += 6;
+    }
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    const bodyLines = Array.isArray(body) ? body : [body];
+    bodyLines.forEach((line) => {
+      const wrapped = doc.splitTextToSize(String(line ?? ""), maxWidth);
+      wrapped.forEach((wLine) => {
+        if (y > pageHeight - 20) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(wLine, margin, y);
+        y += 5.5;
+      });
+      y += 1;
+    });
+    y += 4;
+  });
+
+  doc.save(filename);
 }
 
 /* ---------------------------------------------------------------------- */
@@ -683,6 +731,9 @@ function Cell3DViewer() {
   const stateRef = useRef({});
   const [cellType, setCellType] = useState("vegetal");
   const [selected, setSelected] = useState(null);
+  const [loadingModel, setLoadingModel] = useState(false);
+  const [usingRealModel, setUsingRealModel] = useState(false);
+  const [glbFailed, setGlbFailed] = useState(false);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -797,36 +848,85 @@ function Cell3DViewer() {
     const st = stateRef.current;
     if (!st.group) return;
     setSelected(null);
+    setGlbFailed(false);
+    setUsingRealModel(false);
 
-    while (st.group.children.length) {
-      const child = st.group.children.pop();
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
+    function clearGroup() {
+      while (st.group.children.length) {
+        const child = st.group.children.pop();
+        child.traverse?.((obj) => {
+          if (obj.geometry) obj.geometry.dispose();
+          if (obj.material) obj.material.dispose();
+        });
+      }
+      st.raycastTargets.length = 0;
     }
-    st.raycastTargets.length = 0;
+
+    function buildProcedural(def) {
+      clearGroup();
+      def.parts.forEach((p) => {
+        let geo;
+        if (p.kind === "sphere") geo = new THREE.SphereGeometry(...p.args);
+        else if (p.kind === "cylinder") geo = new THREE.CylinderGeometry(...p.args);
+        else if (p.kind === "torus") geo = new THREE.TorusGeometry(...p.args);
+        const mat = new THREE.MeshPhongMaterial({
+          color: p.color,
+          transparent: p.opacity < 1,
+          opacity: p.opacity,
+          wireframe: !!p.wire,
+          shininess: 40,
+        });
+        const mesh = new THREE.Mesh(geo, mat);
+        mesh.position.set(...p.pos);
+        if (p.rot) mesh.rotation.set(...p.rot);
+        if (p.name) {
+          mesh.userData.info = { name: p.name, desc: p.desc };
+          st.raycastTargets.push(mesh);
+        }
+        st.group.add(mesh);
+      });
+    }
 
     const def = CELL_TYPES[cellType];
-    def.parts.forEach((p) => {
-      let geo;
-      if (p.kind === "sphere") geo = new THREE.SphereGeometry(...p.args);
-      else if (p.kind === "cylinder") geo = new THREE.CylinderGeometry(...p.args);
-      else if (p.kind === "torus") geo = new THREE.TorusGeometry(...p.args);
-      const mat = new THREE.MeshPhongMaterial({
-        color: p.color,
-        transparent: p.opacity < 1,
-        opacity: p.opacity,
-        wireframe: !!p.wire,
-        shininess: 40,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(...p.pos);
-      if (p.rot) mesh.rotation.set(...p.rot);
-      if (p.name) {
-        mesh.userData.info = { name: p.name, desc: p.desc };
-        st.raycastTargets.push(mesh);
-      }
-      st.group.add(mesh);
-    });
+    let cancelled = false;
+
+    if (def.glb) {
+      setLoadingModel(true);
+      const loader = new GLTFLoader();
+      loader.load(
+        def.glb,
+        (gltf) => {
+          if (cancelled) return;
+          clearGroup();
+          const model = gltf.scene;
+          const box = new THREE.Box3().setFromObject(model);
+          const size = new THREE.Vector3();
+          box.getSize(size);
+          const center = new THREE.Vector3();
+          box.getCenter(center);
+          const maxDim = Math.max(size.x, size.y, size.z) || 1;
+          const scale = 4 / maxDim;
+          model.scale.setScalar(scale);
+          model.position.set(-center.x * scale, -center.y * scale, -center.z * scale);
+          st.group.add(model);
+          setLoadingModel(false);
+          setUsingRealModel(true);
+        },
+        undefined,
+        () => {
+          if (cancelled) return;
+          setLoadingModel(false);
+          setGlbFailed(true);
+          buildProcedural(def);
+        }
+      );
+    } else {
+      buildProcedural(def);
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [cellType]);
 
   return (
@@ -854,8 +954,27 @@ function Cell3DViewer() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-0 mt-4">
-        <div ref={mountRef} style={{ width: "100%", height: 420, cursor: "grab" }} />
+        <div className="relative">
+          <div ref={mountRef} style={{ width: "100%", height: 420, cursor: "grab" }} />
+          {loadingModel && (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ background: "rgba(255,255,255,0.7)" }}>
+              <span className="inline-flex items-center gap-2 text-sm font-medium" style={{ color: C.text }}>
+                <Loader2 size={16} className="animate-spin" /> Cargando modelo 3D real…
+              </span>
+            </div>
+          )}
+        </div>
         <div className="p-5 border-t md:border-t-0 md:border-l" style={{ borderColor: C.line }}>
+          {usingRealModel && (
+            <p className="text-[11px] font-semibold uppercase tracking-wide mb-3 inline-flex items-center gap-1 px-2 py-1 rounded-full" style={{ color: "#1F9E98", background: "rgba(31,158,152,0.12)" }}>
+              Modelo 3D real
+            </p>
+          )}
+          {glbFailed && (
+            <p className="text-xs mb-3" style={{ color: C.coral }}>
+              No se pudo cargar el modelo real, mostrando la versión simplificada.
+            </p>
+          )}
           {selected ? (
             <>
               <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "#6FE6A8" }}>
@@ -865,6 +984,10 @@ function Cell3DViewer() {
                 {selected.desc}
               </p>
             </>
+          ) : usingRealModel ? (
+            <p className="text-sm leading-relaxed" style={{ color: C.muted }}>
+              Este es el modelo 3D real. Gira y acércate para explorarlo — todavía no tiene organelos individuales para tocar, eso solo está disponible en los modelos simplificados.
+            </p>
           ) : (
             <p className="text-sm leading-relaxed" style={{ color: C.muted }}>
               Toca cualquier organelo del modelo 3D para ver su nombre y su función aquí.
@@ -1057,9 +1180,19 @@ function SteamGenerator() {
 
           <button
             onClick={() =>
-              downloadText(
-                `sesion-steam-${tema.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 30) || "generada"}.txt`,
-                `${result.titulo}\n\nGrado: ${grado}\nDuración: ${duracion} min\nÁreas STEAM: ${(result.areasSTEAM || []).join(", ")}\n\nCompetencias CNEB:\n${(result.competenciasCNEB || []).map((c) => "- " + c).join("\n")}\n\nMateriales:\n${(result.materiales || []).map((m) => "- " + m).join("\n")}\n\nInicio:\n${result.inicio}\n\nDesarrollo:\n${result.desarrollo}\n\nCierre:\n${result.cierre}\n\nProducto STEAM:\n${result.productoSTEAM}\n\nGenerado desde SciVerse para Docentes.`
+              downloadPDF(
+                `sesion-steam-${tema.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 30) || "generada"}.pdf`,
+                result.titulo,
+                [
+                  { heading: "Grado y duración", body: `${grado === "primaria" ? "Primaria" : "Secundaria"} · ${duracion} minutos` },
+                  { heading: "Áreas STEAM", body: (result.areasSTEAM || []).join(", ") },
+                  { heading: "Competencias CNEB", body: (result.competenciasCNEB || []).map((c) => `• ${c}`) },
+                  { heading: "Materiales", body: (result.materiales || []).map((m) => `• ${m}`) },
+                  { heading: "Inicio", body: result.inicio },
+                  { heading: "Desarrollo", body: result.desarrollo },
+                  { heading: "Cierre", body: result.cierre },
+                  { heading: "Producto STEAM", body: result.productoSTEAM },
+                ]
               )
             }
             className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
@@ -1503,9 +1636,17 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
           </button>
           <button
             onClick={() =>
-              downloadText(
-                `${activity.id}-${grade}.txt`,
-                `${activity.title} (${grade})\n\nCompetencia CNEB: ${activity.competencia}\n\nObjetivo:\n${v.objetivo}\n\nDuración: ${v.duracion}\n\nMateriales:\n${v.materiales.map((m) => "- " + m).join("\n")}\n\nPasos:\n${v.pasos.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n\nCierre:\n${v.cierre}\n\nGenerado desde SciVerse para Docentes.`
+              downloadPDF(
+                `${activity.id}-${grade}.pdf`,
+                `${activity.title} (${grade === "primaria" ? "Primaria" : "Secundaria"})`,
+                [
+                  { heading: "Competencia CNEB", body: activity.competencia },
+                  { heading: "Objetivo de la sesión", body: v.objetivo },
+                  { heading: "Duración", body: v.duracion },
+                  { heading: "Materiales", body: v.materiales.map((m) => `• ${m}`) },
+                  { heading: "Pasos guiados", body: v.pasos.map((p, i) => `${i + 1}. ${p}`) },
+                  { heading: "Cierre", body: v.cierre },
+                ]
               )
             }
             className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold"
@@ -1726,7 +1867,7 @@ function SciVerseApp({ profile, onLogout }) {
                 </div>
                 <h4 className="text-base font-semibold mb-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{t.title}</h4>
                 <p className="text-sm mb-4 flex-1" style={{ color: C.muted }}>{t.desc}</p>
-                <button onClick={() => downloadText(`${t.id}.txt`, TEMPLATE_CONTENT[t.id])} className="inline-flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold" style={{ background: "rgba(15,61,58,0.06)", color: C.text, border: `1px solid ${C.line}` }}>
+                <button onClick={() => downloadPDF(`${t.id}.pdf`, t.title, [{ heading: "", body: TEMPLATE_CONTENT[t.id].split("\n") }])} className="inline-flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold" style={{ background: "rgba(15,61,58,0.06)", color: C.text, border: `1px solid ${C.line}` }}>
                   <Download size={14} /> Descargar
                 </button>
               </div>
