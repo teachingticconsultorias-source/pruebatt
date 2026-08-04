@@ -54,6 +54,7 @@ export default function AuthGate({ LandingComponent, children }) {
         nivel: metadata.nivel || "primaria",
         correo: session.user.email,
         userId: session.user.id,
+        createdAt: session.user.created_at,
       });
       setChecking(false);
     };

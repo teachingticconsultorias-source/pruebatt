@@ -44,6 +44,12 @@ import {
   LayoutDashboard,
   FolderOpen,
   CreditCard,
+  Gift,
+  Video,
+  BadgeCheck,
+  Link2,
+  Copy,
+  HardDrive,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -1696,6 +1702,54 @@ export default function SciVerseDocentes() {
   return <AuthGate LandingComponent={ImprovedLanding}>{(profile, onLogout) => <SciVerseApp profile={profile} onLogout={onLogout} />}</AuthGate>;
 }
 
+function TeacherAccountModal({ profile, onClose }) {
+  const [tab, setTab] = useState("perfil");
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [form, setForm] = useState({ nombres: profile.nombres || "", apellidos: profile.apellidos || "", ie: profile.ie || "", celular: profile.celular || "", nivel: profile.nivel || "primaria" });
+  const referralUrl = `${window.location.origin}/?ref=${(profile.userId || "docente").slice(0, 8)}`;
+  const joined = profile.createdAt ? new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "long", year: "numeric" }).format(new Date(profile.createdAt)) : "Cuenta activa";
+  const tabs = [
+    ["perfil", User, "Perfil"], ["plan", Sparkles, "Plan"], ["referidos", Gift, "Referidos"], ["capacitacion", GraduationCap, "Capacitación"], ["integraciones", Link2, "Integraciones"],
+  ];
+  async function saveProfile() {
+    setSaving(true); setNotice("");
+    const { error } = await supabase.auth.updateUser({ data: { ...form } });
+    setSaving(false);
+    if (error) return setNotice("No pudimos guardar los cambios.");
+    setNotice("Perfil actualizado correctamente. Los cambios se verán completamente al volver a iniciar sesión.");
+    setEditing(false);
+  }
+  async function copyReferral() {
+    await navigator.clipboard.writeText(referralUrl);
+    setNotice("Enlace copiado.");
+  }
+  return <div className="account-backdrop" onMouseDown={onClose}>
+    <section className="account-modal" role="dialog" aria-modal="true" aria-label="Mi cuenta" onMouseDown={(event) => event.stopPropagation()}>
+      <header><div><h2>Mi cuenta</h2><p>Información de tu perfil, plan y beneficios docentes.</p></div><button onClick={onClose} aria-label="Cerrar"><X size={20} /></button></header>
+      <div className="account-layout">
+        <nav className="account-tabs">{tabs.map(([key, Icon, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => { setTab(key); setNotice(""); }}><Icon size={16} />{label}</button>)}</nav>
+        <div className="account-content">
+          {tab === "perfil" && <div>
+            <div className="profile-summary"><span>{(profile.nombres?.[0] || "D").toUpperCase()}{(profile.apellidos?.[0] || "").toUpperCase()}</span><div><h3>{profile.nombres} {profile.apellidos}</h3><p>{profile.correo}</p><small>DOCENTE · CUENTA PERSONAL</small></div></div>
+            {editing ? <div className="profile-form"><label>Nombres<input value={form.nombres} onChange={(e) => setForm({...form,nombres:e.target.value})} /></label><label>Apellidos<input value={form.apellidos} onChange={(e) => setForm({...form,apellidos:e.target.value})} /></label><label className="wide">Institución educativa<input value={form.ie} onChange={(e) => setForm({...form,ie:e.target.value})} /></label><label>Celular<input value={form.celular} onChange={(e) => setForm({...form,celular:e.target.value})} /></label><label>Nivel<select value={form.nivel} onChange={(e) => setForm({...form,nivel:e.target.value})}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><div className="wide account-actions"><button className="secondary-btn compact" onClick={() => setEditing(false)}>Cancelar</button><button className="primary-btn compact" onClick={saveProfile} disabled={saving}>{saving ? "Guardando..." : "Guardar cambios"}</button></div></div> : <div className="profile-rows"><div><span>Nombre completo</span><strong>{profile.nombres} {profile.apellidos}</strong><button onClick={() => setEditing(true)}>Cambiar</button></div><div><span>Correo</span><strong>{profile.correo}</strong></div><div><span>Rol</span><strong>Docente</strong></div><div><span>Nivel</span><strong className="capitalize">{profile.nivel}</strong></div><div><span>Institución</span><strong>{profile.ie || "Sin institución asignada"}</strong></div><div><span>Miembro desde</span><strong>{joined}</strong></div></div>}
+          </div>}
+          {tab === "plan" && <div><div className="account-heading"><span><Sparkles size={19} /></span><div><h3>Plan gratuito</h3><p>Tu uso actual en SciVerse</p></div></div><div className="usage-box"><Usage label="Generaciones con IA" current="0" total="1" /><Usage label="Materiales guardados" current="0" total="5" /><Usage label="Descargas" current="0" total="5" /></div><div className="account-plan-grid"><PlanMini name="Mensual" price="10" text="30 generaciones y descargas" /><PlanMini name="Semestral" price="30" text="60 generaciones mensuales" featured /><PlanMini name="Anual" price="50" text="100 generaciones mensuales" /></div></div>}
+          {tab === "referidos" && <div><div className="account-heading"><span><Gift size={19} /></span><div><h3>Invita a otro docente</h3><p>Comparte SciVerse con tu comunidad educativa.</p></div></div><label className="referral-link"><input readOnly value={referralUrl} /><button onClick={copyReferral}><Copy size={15} /> Copiar</button></label><a className="whatsapp-share" href={`https://wa.me/?text=${encodeURIComponent(`Te invito a conocer SciVerse de Teaching TIC: ${referralUrl}`)}`} target="_blank" rel="noreferrer"><MessageCircle size={17} /> Compartir por WhatsApp</a><div className="referral-stats"><div><strong>0</strong><span>Invitaciones registradas</span></div><div><strong>0</strong><span>Docentes que se unieron</span></div></div></div>}
+          {tab === "capacitacion" && <div><span className="training-benefit"><Sparkles size={14} /> BENEFICIO TEACHING TIC</span><h3 className="training-title">Capacítate en vivo y fortalece tu portafolio docente</h3><p className="training-lead">Participa en sesiones virtuales desarrolladas por especialistas de Teaching TIC y recibe una constancia digital.</p><div className="training-points"><p><span><Video size={17} /></span><b>Capacitación en vivo.</b> Aprende, practica y resuelve tus dudas.</p><p><span><BadgeCheck size={17} /></span><b>Constancia digital.</b> Lista para tu CV y portafolio docente.</p><p><span><BookOpen size={17} /></span><b>Aplicación educativa.</b> IA, STEAM y recursos alineados al CNEB.</p></div><div className="training-card"><small>PRÓXIMA CAPACITACIÓN</small><h4>Inteligencia artificial para crear experiencias STEAM</h4><p>Fecha y horario por confirmar · Modalidad virtual</p><a href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20reservar%20un%20cupo%20en%20la%20pr%C3%B3xima%20capacitaci%C3%B3n%20de%20SciVerse." target="_blank" rel="noreferrer">Reservar mi cupo <ArrowRight size={15} /></a></div></div>}
+          {tab === "integraciones" && <div><div className="account-heading"><span><Link2 size={19} /></span><div><h3>Integraciones</h3><p>Próximamente podrás enviar tus materiales a otras plataformas.</p></div></div><Integration icon={HardDrive} name="Google Drive" text="Guarda tus sesiones y fichas en Drive" /><Integration icon={Palette} name="Canva" text="Edita tus recursos con diseños visuales" /></div>}
+          {notice && <p className="account-notice">{notice}</p>}
+        </div>
+      </div>
+    </section>
+  </div>;
+}
+
+function Usage({ label, current, total }) { return <div><p><span>{label}</span><b>{current} / {total}</b></p><span><i style={{width:`${Math.min(100,(Number(current)/Number(total))*100)}%`}} /></span></div>; }
+function PlanMini({ name, price, text, featured }) { return <article className={featured ? "featured" : ""}>{featured && <small>RECOMENDADO</small>}<h4>{name}</h4><strong>S/{price}</strong><p>{text}</p><a href={`https://wa.me/51921090875?text=${encodeURIComponent(`Hola Teaching TIC, deseo adquirir el Plan ${name} de SciVerse por S/${price}.`)}`} target="_blank" rel="noreferrer">Elegir plan</a></article>; }
+function Integration({ icon: Icon, name, text }) { return <div className="integration-row"><span><Icon size={20} /></span><div><strong>{name}</strong><p>{text}</p></div><button disabled>Próximamente</button></div>; }
+
 function SciVerseApp({ profile, onLogout }) {
   const preferredGrade = profile.nivel === "secundaria" ? "secundaria" : "primaria";
   const [heroGrade, setHeroGrade] = useState(preferredGrade);
@@ -1703,6 +1757,7 @@ function SciVerseApp({ profile, onLogout }) {
   const [subjectFilter, setSubjectFilter] = useState("todos");
   const [selected, setSelected] = useState(null);
   const [modalGrade, setModalGrade] = useState(preferredGrade);
+  const [accountOpen, setAccountOpen] = useState(false);
 
   const filtered = ACTIVITIES.filter((a) => subjectFilter === "todos" || a.subject === subjectFilter);
   const filteredRetos = RETOS.filter((r) => gradeFilter === "todos" || r.grades.includes(gradeFilter));
@@ -1739,7 +1794,7 @@ function SciVerseApp({ profile, onLogout }) {
         </nav>
         <div className="sidebar-bottom">
           <a className="sidebar-plan" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer"><Award size={17} /><div><small>Plan actual</small><strong>Gratuito</strong></div><ChevronRight size={15} /></a>
-          <a href="#inicio-docente"><Palette size={17} /> Personalizar</a>
+          <button onClick={() => setAccountOpen(true)}><User size={17} /> Mi cuenta</button>
           <button onClick={onLogout}><LogOut size={17} /> Cerrar sesión</button>
         </div>
       </aside>
@@ -1753,9 +1808,9 @@ function SciVerseApp({ profile, onLogout }) {
         </div>
         <span className="hidden md:inline text-xs" style={{ color: C.muted }}>Panel docente · Recursos alineados al CNEB</span>
         <div className="flex items-center gap-3">
-          <span className="hidden sm:inline text-sm" style={{ color: C.muted }}>
+          <button onClick={() => setAccountOpen(true)} className="hidden sm:inline text-sm" style={{ color: C.muted }}>
             Hola, <strong style={{ color: C.text }}>{profile.nombres}</strong> · {heroGrade === "primaria" ? "Primaria" : "Secundaria"}
-          </span>
+          </button>
           <button onClick={onLogout} className="p-1.5 rounded-lg" style={{ color: C.muted }} title="Cerrar sesión">
             <LogOut size={16} />
           </button>
@@ -1769,10 +1824,10 @@ function SciVerseApp({ profile, onLogout }) {
             <h1>¡Hola, {profile.nombres}! 👋</h1>
             <p>¿Qué deseas preparar hoy para tus estudiantes de {preferredGrade}?</p>
           </div>
-          <div className="dashboard-profile">
+          <button className="dashboard-profile" onClick={() => setAccountOpen(true)}>
             <span>{(profile.nombres?.[0] || "D").toUpperCase()}{(profile.apellidos?.[0] || "").toUpperCase()}</span>
             <div><strong>{profile.nombres} {profile.apellidos}</strong><small>{profile.ie || "Docente Teaching TIC"}</small></div>
-          </div>
+          </button>
         </div>
 
         <div className="dashboard-stats">
@@ -1952,6 +2007,7 @@ function SciVerseApp({ profile, onLogout }) {
       </footer>
 
       {selected && <ActivityModal activity={selected} grade={modalGrade} setGrade={setModalGrade} onClose={() => setSelected(null)} />}
+      {accountOpen && <TeacherAccountModal profile={profile} onClose={() => setAccountOpen(false)} />}
     </div>
   );
 }
