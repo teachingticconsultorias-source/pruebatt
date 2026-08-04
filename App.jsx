@@ -36,6 +36,11 @@ import {
   LogOut,
   LockKeyhole,
   CheckCircle2,
+  Facebook,
+  MessageCircle,
+  ShieldCheck,
+  HelpCircle,
+  FileText,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -1083,6 +1088,7 @@ function SteamGenerator({ initialGrade = "primaria" }) {
 function ImprovedLanding({ onRegister }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoGrade, setDemoGrade] = useState("primaria");
+  const [legalView, setLegalView] = useState(null);
   const demoActivity = ACTIVITIES[0];
   const demoVersion = demoActivity.versions[demoGrade];
   const features = [
@@ -1094,11 +1100,26 @@ function ImprovedLanding({ onRegister }) {
     { icon: BookOpen, title: "Cinco áreas STEAM", desc: "Ciencia, Tecnología, Ingeniería, Arte y Matemática conectadas.", color: "#4FA8FF" },
   ];
   const plans = [
-    { name: "Mensual", price: "10", period: "1 mes de acceso", saving: "Flexibilidad para empezar", featured: false },
-    { name: "Semestral", price: "30", period: "6 meses de acceso", saving: "Ahorras S/30", featured: false },
-    { name: "Anual", price: "50", period: "12 meses de acceso", saving: "Ahorras S/70", featured: true },
+    { name: "Gratuito", price: "0", period: "para conocer SciVerse", saving: "Sin tarjeta", featured: false, benefits: ["Actividades de muestra", "1 generación con IA", "Laboratorio 3D", "Recursos de demostración"] },
+    { name: "Mensual", price: "10", period: "por 1 mes", saving: "Ideal para empezar", featured: false, benefits: ["30 generaciones con IA", "Actividades STEAM", "Laboratorio y simuladores", "Fichas y plantillas", "Soporte por WhatsApp"] },
+    { name: "Semestral", price: "30", period: "por 6 meses", saving: "Equivale a S/5 al mes", featured: true, benefits: ["60 generaciones mensuales", "Actividades STEAM", "Laboratorio y simuladores", "Descargas en Word", "Nuevos recursos", "Soporte prioritario"] },
+    { name: "Anual", price: "50", period: "por 12 meses", saving: "Equivale a S/4.17 al mes", featured: false, benefits: ["100 generaciones mensuales", "Acceso completo anual", "Primaria o secundaria", "Descargas en Word", "Nuevos recursos", "Soporte prioritario"] },
   ];
-  const planBenefits = ["Actividades y retos STEAM", "Laboratorio y simuladores", "Generador de sesiones con IA", "Plantillas y rúbricas CNEB", "Primaria y secundaria", "Nuevos recursos durante tu plan"];
+  const faqs = [
+    ["¿Qué puedo crear con SciVerse?", "Puedes generar sesiones y actividades STEAM, consultar experiencias guiadas, utilizar el laboratorio 3D y descargar fichas y plantillas."],
+    ["¿Los recursos están alineados al CNEB?", "Las propuestas consideran el Currículo Nacional del Perú. Todo contenido generado con IA debe ser revisado y adaptado por el docente."],
+    ["¿Funciona para primaria y secundaria?", "Sí. Durante el registro eliges tu nivel y SciVerse abre automáticamente los materiales correspondientes."],
+    ["¿Puedo descargar los materiales en Word?", "Sí. Los planes con acceso completo permiten descargar sesiones y fichas en Word para editarlas."],
+    ["¿Cómo se activa mi cuenta?", "Después de registrarte recibirás un correo de confirmación. Al abrir el enlace podrás iniciar sesión."],
+    ["¿Cómo pago con Plin o Yape?", "Selecciona un plan y te enviaremos a WhatsApp para confirmar el pago a Teaching TIC."],
+    ["¿El pago se renueva automáticamente?", "No. Los pagos por Plin o Yape no se renuevan automáticamente; tú decides cuándo renovar."],
+    ["¿La inteligencia artificial puede equivocarse?", "Sí. SciVerse es una herramienta de apoyo y el docente debe revisar el contenido antes de aplicarlo."],
+  ];
+  const choosePlan = (plan) => {
+    if (plan.name === "Gratuito") return onRegister();
+    const message = `Hola Teaching TIC, deseo adquirir el Plan ${plan.name} de SciVerse por S/${plan.price}. ¿Me comparten los datos para pagar por Plin o Yape?`;
+    window.open(`https://wa.me/51921090875?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div className="landing-shell" style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
@@ -1111,6 +1132,7 @@ function ImprovedLanding({ onRegister }) {
           <a href="#demo" onClick={() => setMenuOpen(false)}>Pruébalo</a>
           <a href="#beneficios" onClick={() => setMenuOpen(false)}>Beneficios</a>
           <a href="#planes" onClick={() => setMenuOpen(false)}>Planes</a>
+          <a href="#preguntas" onClick={() => setMenuOpen(false)}>Preguntas</a>
           <a href="#confianza" onClick={() => setMenuOpen(false)}>Para docentes</a>
         </div>
         <div className="nav-actions">
@@ -1169,17 +1191,17 @@ function ImprovedLanding({ onRegister }) {
       </section>
 
       <section id="planes" className="pricing-section">
-        <div className="section-heading"><span className="eyebrow"><Award size={13} /> Acceso simple y transparente</span><h2>Elige el tiempo que necesitas</h2><p>Todos los planes incluyen las mismas herramientas. Solo cambia el tiempo de acceso y cuánto ahorras.</p></div>
+        <div className="section-heading"><span className="eyebrow"><Award size={13} /> Precios claros y en soles</span><h2>Un plan para cada etapa docente</h2><p>Empieza gratis y elige más capacidad cuando necesites generar y descargar más materiales.</p></div>
         <div className="pricing-grid">
           {plans.map((plan) => <article key={plan.name} className={`price-card ${plan.featured ? "featured" : ""}`}>
-            {plan.featured && <span className="popular-badge"><Sparkles size={12} /> Más elegido</span>}
+            {plan.featured && <span className="popular-badge"><Sparkles size={12} /> Más conveniente</span>}
             <div className="plan-head"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
             <div className="saving-pill">{plan.saving}</div>
-            <ul>{planBenefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
-            <button onClick={onRegister} className={plan.featured ? "primary-btn plan-button" : "secondary-btn plan-button"}>Elegir plan {plan.name.toLowerCase()} <ArrowRight size={15} /></button>
+            <ul>{plan.benefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
+            <button onClick={() => choosePlan(plan)} className={plan.featured ? "primary-btn plan-button" : "secondary-btn plan-button"}>{plan.name === "Gratuito" ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`} <ArrowRight size={15} /></button>
           </article>)}
         </div>
-        <p className="pricing-note"><span>🔒</span> El registro es gratuito. Podrás elegir tu plan al activar el acceso completo.</p>
+        <p className="pricing-note"><span>🔒</span> Pago por Plin o Yape a nombre de Teaching TIC. La activación se confirma por WhatsApp.</p>
       </section>
 
       <section id="confianza" className="confidence-section">
@@ -1187,11 +1209,33 @@ function ImprovedLanding({ onRegister }) {
         <div className="quote-card"><span>“</span><p>La tecnología cobra sentido cuando ayuda al docente a crear experiencias más inclusivas, significativas y cercanas a sus estudiantes.</p><small>Teaching TIC · Innovación educativa con propósito</small></div>
       </section>
 
+      <section id="preguntas" className="faq-section">
+        <div className="section-heading"><span className="eyebrow"><HelpCircle size={13} /> Resolvemos tus dudas</span><h2>Preguntas frecuentes</h2><p>Todo lo que necesitas saber antes de crear tu cuenta o elegir un plan.</p></div>
+        <div className="faq-list">{faqs.map(([question, answer]) => <details className="faq-item" key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
+      </section>
+
       <section className="final-cta"><div><span className="eyebrow light"><Sparkles size={13} /> Tu próxima experiencia empieza aquí</span><h2>Explora, adapta y crea con SciVerse.</h2><p>Regístrate una vez y accede gratuitamente a todas las herramientas disponibles.</p></div><button onClick={onRegister} className="light-btn">Crear mi acceso gratuito <ArrowRight size={17} /></button></section>
 
-      <footer className="landing-footer"><div className="brand-lockup"><span className="brand-mark"><Microscope size={20} /></span><span><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></span></div><p>Tecnología educativa para experiencias STEAM accesibles, creativas y contextualizadas.</p><span>© 2026 Teaching TIC</span></footer>
+      <footer className="landing-footer expanded-footer">
+        <div className="footer-column"><div className="brand-lockup"><span className="brand-mark"><Microscope size={20} /></span><span><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></span></div><p>Tecnología educativa para experiencias STEAM accesibles, creativas y contextualizadas.</p><div className="social-row"><a href="https://www.facebook.com/teachingticconsultorias/" target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={17} /></a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer" aria-label="WhatsApp"><MessageCircle size={17} /></a></div></div>
+        <div className="footer-column"><h4>Explora</h4><a href="#beneficios">Herramientas</a><a href="#planes">Planes</a><a href="#preguntas">Preguntas frecuentes</a><button onClick={onRegister}>Crear cuenta</button></div>
+        <div className="footer-column"><h4>Legal y confianza</h4><button onClick={() => setLegalView("terms")}>Términos y condiciones</button><button onClick={() => setLegalView("privacy")}>Política de privacidad</button><button onClick={() => setLegalView("ai")}>Política de uso de IA</button><button onClick={() => setLegalView("complaints")}>Libro de Reclamaciones</button></div>
+        <div className="footer-column"><h4>Contacto</h4><p>Teaching TIC Consultorías S.A.C.<br />RUC 20607945331<br />Jr. Cristóbal de Peralta Norte 9 50, Dpto. 210</p><a href="mailto:teachingticconsultorias@gmail.com">teachingticconsultorias@gmail.com</a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer">+51 921 090 875</a><small>© 2026 Teaching TIC. Todos los derechos reservados.</small></div>
+      </footer>
+      {legalView && <LegalModal view={legalView} onClose={() => setLegalView(null)} />}
     </div>
   );
+}
+
+function LegalModal({ view, onClose }) {
+  const content = {
+    terms: { title: "Términos y condiciones", icon: FileText, body: ["SciVerse es una plataforma de apoyo pedagógico ofrecida por Teaching TIC Consultorías S.A.C., identificada con RUC 20607945331 y domicilio fiscal en Jr. Cristóbal de Peralta Norte 9 50, Dpto. 210.", "El usuario debe revisar y adaptar los recursos antes de utilizarlos. El acceso es personal y no debe compartirse con terceros.", "Los planes pagados se activan luego de verificar el pago. Los pagos por Plin o Yape no se renuevan automáticamente.", "Para consultas puedes escribir a teachingticconsultorias@gmail.com o comunicarte al +51 921 090 875."] },
+    privacy: { title: "Política de privacidad", icon: ShieldCheck, body: ["Teaching TIC Consultorías S.A.C., RUC 20607945331, es responsable del tratamiento de los datos recopilados a través de SciVerse.", "Recopilamos los datos necesarios para crear la cuenta, brindar soporte y gestionar el acceso: nombre, correo, institución educativa, celular y nivel educativo.", "No vendemos información personal. Los datos de autenticación son gestionados por Supabase y se utilizan para operar SciVerse y atender al usuario.", "Puedes solicitar el acceso, actualización o eliminación de tus datos escribiendo a teachingticconsultorias@gmail.com."] },
+    ai: { title: "Uso responsable de inteligencia artificial", icon: Sparkles, body: ["SciVerse utiliza inteligencia artificial para apoyar la creación de recursos educativos.", "La IA puede producir errores. El docente debe verificar competencias, desempeños, normativa, datos y pertinencia pedagógica antes de utilizar el contenido.", "No ingreses información sensible de estudiantes, diagnósticos médicos, contraseñas ni datos personales innecesarios."] },
+    complaints: { title: "Libro de Reclamaciones", icon: ClipboardList, body: ["Proveedor: Teaching TIC Consultorías S.A.C. · RUC 20607945331.", "Domicilio fiscal: Jr. Cristóbal de Peralta Norte 9 50, Dpto. 210.", "Para presentar un reclamo o queja, envía tus nombres y apellidos, documento de identidad, correo, teléfono, descripción del servicio, detalle del reclamo o queja y el pedido concreto a teachingticconsultorias@gmail.com.", "Teaching TIC enviará una constancia de recepción y atenderá la solicitud dentro del plazo legal aplicable. La presentación de un reclamo no impide acudir a otras vías de solución de controversias."] },
+  }[view];
+  const Icon = content.icon;
+  return <div className="legal-backdrop" role="presentation" onMouseDown={onClose}><section className="legal-modal" role="dialog" aria-modal="true" aria-labelledby="legal-title" onMouseDown={(event) => event.stopPropagation()}><button className="legal-close" onClick={onClose} aria-label="Cerrar"><X size={20} /></button><Icon size={26} color={C.teal} /><h2 id="legal-title">{content.title}</h2>{content.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{view === "complaints" && <div className="legal-actions"><a className="primary-btn" href="mailto:teachingticconsultorias@gmail.com?subject=Registro%20en%20el%20Libro%20de%20Reclamaciones&body=Tipo%3A%20Reclamo%20o%20queja%0ANombres%20y%20apellidos%3A%0ADNI%20o%20CE%3A%0ACorreo%3A%0ATel%C3%A9fono%3A%0AServicio%20contratado%3A%0ADetalle%3A%0APedido%20concreto%3A">Registrar por correo <Mail size={15} /></a><a className="secondary-btn" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20necesito%20orientaci%C3%B3n%20para%20presentar%20un%20reclamo." target="_blank" rel="noreferrer">Orientación por WhatsApp <MessageCircle size={15} /></a></div>}<small>Última actualización: agosto de 2026.</small></section></div>;
 }
 
 function RegistrationGate({ children }) {
