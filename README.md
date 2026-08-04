@@ -99,7 +99,7 @@ git push -u origin main
    |---|---|
    | `GEMINI_API_KEY` | Google AI Studio |
    | `VITE_SUPABASE_URL` | Supabase → Settings → API → Project URL |
-   | `VITE_SUPABASE_ANON_KEY` | Supabase → Settings → API → anon public |
+   | `VITE_SUPABASE_PUBLISHABLE_KEY` | Supabase → Settings → API Keys → Publishable key (`sb_publishable_...`) |
    | `SUPABASE_URL` | el mismo Project URL de arriba |
    | `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → service_role |
    | `ADMIN_SECRET` | invéntala tú — es la clave para entrar a `/?admin=1` |

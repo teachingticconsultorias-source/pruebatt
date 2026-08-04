@@ -81,7 +81,7 @@ export default function AuthGate({ LandingComponent, children }) {
 
   async function register(e) {
     e.preventDefault();
-    if (!supabase) return setError("Falta conectar Supabase en Vercel.");
+    if (!supabase) return setError("Falta configurar VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel. Después debes hacer un nuevo despliegue.");
     if (!form.nombres.trim() || !form.apellidos.trim() || !form.ie.trim() || !form.correo.trim() || !form.nivel) {
       return setError("Completa tus datos y selecciona si enseñas en primaria o secundaria.");
     }
@@ -125,7 +125,7 @@ export default function AuthGate({ LandingComponent, children }) {
 
   async function login(e) {
     e.preventDefault();
-    if (!supabase) return setError("Falta conectar Supabase en Vercel.");
+    if (!supabase) return setError("Falta configurar VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel. Después debes hacer un nuevo despliegue.");
     setSaving(true);
     setError("");
     const { error: authError } = await supabase.auth.signInWithPassword({
