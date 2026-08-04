@@ -6,7 +6,22 @@
 // Devuelve la respuesta normalizada en la misma forma que espera el cliente:
 // { content: [ { type: "text", text: "..." } ] }
 
-const GEMINI_MODEL = "gemini-3.5-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
+
+const SESSION_SCHEMA = {
+  type: "object",
+  properties: {
+    titulo: { type: "string" },
+    areasSTEAM: { type: "array", items: { type: "string" } },
+    competenciasCNEB: { type: "array", items: { type: "string" } },
+    materiales: { type: "array", items: { type: "string" } },
+    inicio: { type: "string" },
+    desarrollo: { type: "string" },
+    cierre: { type: "string" },
+    productoSTEAM: { type: "string" },
+  },
+  required: ["titulo", "areasSTEAM", "competenciasCNEB", "materiales", "inicio", "desarrollo", "cierre", "productoSTEAM"],
+};
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -17,6 +32,22 @@ export default async function handler(req, res) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     res.status(500).json({ error: "Falta configurar GEMINI_API_KEY en Vercel" });
+    return;
+  }
+
+  const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  const supabaseUrl = process.env.VITE_SUPABASE_URL;
+  const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  if (!accessToken || !supabaseUrl || !supabaseKey) {
+    res.status(401).json({ error: "Inicia sesión para utilizar el generador" });
+    return;
+  }
+
+  const authCheck = await fetch(`${supabaseUrl}/auth/v1/user`, {
+    headers: { apikey: supabaseKey, Authorization: `Bearer ${accessToken}` },
+  });
+  if (!authCheck.ok) {
+    res.status(401).json({ error: "Tu sesión venció. Vuelve a iniciar sesión." });
     return;
   }
 
@@ -34,7 +65,13 @@ export default async function handler(req, res) {
         },
         body: JSON.stringify({
           contents: [{ parts: [{ text: promptText }] }],
-          generationConfig: { maxOutputTokens: 1000 },
+          systemInstruction: { parts: [{ text: "Eres un especialista peruano en planificación curricular, CNEB y enfoque STEAM. Crea propuestas pedagógicas claras, aplicables, inclusivas y seguras. No inventes competencias oficiales; selecciona únicamente las pertinentes y entrega siempre JSON válido." }] },
+          generationConfig: {
+            maxOutputTokens: 2500,
+            temperature: 0.7,
+            responseMimeType: "application/json",
+            responseSchema: SESSION_SCHEMA,
+          },
         }),
       }
     );
