@@ -931,9 +931,13 @@ function SteamGenerator({ initialGrade = "primaria" }) {
 
       const userMsg = `Tema: ${tema}\nGrado: ${grado}\nDuración: ${duracion} minutos\nÁrea STEAM de énfasis: ${area}`;
 
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Tu sesión venció. Vuelve a iniciar sesión.");
+
       const response = await fetch("/api/generate-session", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
         body: JSON.stringify({
           model: "claude-sonnet-4-6",
           max_tokens: 1000,
@@ -951,7 +955,7 @@ function SteamGenerator({ initialGrade = "primaria" }) {
       const parsed = JSON.parse(clean);
       setResult(parsed);
     } catch (e) {
-      setError("No se pudo generar la sesión. Intenta de nuevo en unos segundos.");
+      setError(e.message || "No se pudo generar la sesión. Intenta de nuevo en unos segundos.");
     } finally {
       setLoading(false);
     }
