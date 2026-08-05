@@ -1310,6 +1310,7 @@ function ImprovedLanding({ onRegister, onLogin }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoGrade, setDemoGrade] = useState("primaria");
   const [legalView, setLegalView] = useState(null);
+  const [showPricing, setShowPricing] = useState(false);
   const demoActivity = ACTIVITIES[0];
   const demoVersion = demoActivity.versions[demoGrade];
   const features = [
@@ -1344,11 +1345,9 @@ function ImprovedLanding({ onRegister, onLogin }) {
         </a>
         <div className={`landing-links ${menuOpen ? "is-open" : ""}`}>
           <a href="#demo" onClick={() => setMenuOpen(false)}>Pruébalo</a>
-          <a href="#beneficios" onClick={() => setMenuOpen(false)}>Beneficios</a>
           <a href="#planes" onClick={() => setMenuOpen(false)}>Planes</a>
           <a href="#testimonios" onClick={() => setMenuOpen(false)}>Testimonios</a>
           <a href="#preguntas" onClick={() => setMenuOpen(false)}>Preguntas</a>
-          <a href="#confianza" onClick={() => setMenuOpen(false)}>Para docentes</a>
         </div>
         <div className="nav-actions">
           <button className="menu-toggle" aria-label="Abrir menú" aria-expanded={menuOpen} onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={20} /> : <Layers size={20} />}</button>
@@ -1382,50 +1381,56 @@ function ImprovedLanding({ onRegister, onLogin }) {
         </div>
       </header>
 
-      <section className="impact-strip" aria-label="Características principales">
-        <div><strong>{ACTIVITIES.length}</strong><span>actividades guiadas</span></div><div><strong>5</strong><span>áreas STEAM</span></div><div><strong>2</strong><span>niveles educativos</span></div><div><strong>CNEB</strong><span>enfoque curricular</span></div>
-      </section>
-
-      <section id="demo" className="demo-section">
-        <div className="section-heading"><span className="eyebrow"><Zap size={13} /> Prueba antes de registrarte</span><h2>Así se ve una actividad en SciVerse</h2><p>Elige un nivel y revisa una experiencia de muestra. El catálogo completo se habilita con tu registro gratuito.</p></div>
-        <div className="demo-card">
-          <div className="demo-toolbar">
-            <div><span className="subject-pill"><Zap size={14} /> Física</span><small>{demoActivity.code}</small></div>
-            <div className="grade-switch">{["primaria", "secundaria"].map((grade) => <button key={grade} onClick={() => setDemoGrade(grade)} className={demoGrade === grade ? "active" : ""}>{grade}</button>)}</div>
+      <section id="demo" className="demo-features-section">
+        <div className="demo-features-grid">
+          <div className="demo-features-left">
+            <div className="section-heading align-left"><span className="eyebrow"><Zap size={13} /> Herramientas listas para usar</span><h2>Prueba, crea y adapta</h2><p>Accede a una demo interactiva y descubre las herramientas que te ahorran tiempo cada semana.</p></div>
+            <div className="demo-card compact">
+              <div className="demo-toolbar">
+                <div><span className="subject-pill"><Zap size={14} /> Física</span><small>{demoActivity.code}</small></div>
+                <div className="grade-switch">{["primaria", "secundaria"].map((grade) => <button key={grade} onClick={() => setDemoGrade(grade)} className={demoGrade === grade ? "active" : ""}>{grade}</button>)}</div>
+              </div>
+              <div className="demo-content">
+                <div><h3>{demoActivity.title}</h3><p>{demoVersion.objetivo}</p><span className="duration"><Clock size={15} /> {demoVersion.duracion}</span></div>
+                <div className="demo-steps"><small>Ruta de aprendizaje</small>{demoVersion.pasos.slice(0, 3).map((step, index) => <p key={step}><b>{index + 1}</b>{step}</p>)}</div>
+              </div>
+              <div className="demo-footer"><button onClick={onRegister} className="primary-btn compact">Explorar todos <ArrowRight size={15} /></button></div>
+            </div>
           </div>
-          <div className="demo-content">
-            <div><h3>{demoActivity.title}</h3><p>{demoVersion.objetivo}</p><span className="duration"><Clock size={15} /> {demoVersion.duracion}</span></div>
-            <div className="demo-steps"><small>Ruta de aprendizaje</small>{demoVersion.pasos.slice(0, 3).map((step, index) => <p key={step}><b>{index + 1}</b>{step}</p>)}</div>
+          <div className="demo-features-right">
+            <div className="benefits-list">{features.map((feature) => { const Icon = feature.icon; return <div key={feature.title} className="benefit-item"><span className="benefit-icon" style={{ color: feature.color }}><Icon size={24} /></span><div><h3>{feature.title}</h3><p>{feature.desc}</p></div></div>; })}</div>
           </div>
-          <div className="demo-footer"><span>Esta es una muestra del catálogo.</span><button onClick={onRegister} className="primary-btn compact">Explorar todos los recursos <ArrowRight size={15} /></button></div>
         </div>
-      </section>
-
-      <section id="beneficios" className="benefits-section">
-        <div className="section-heading"><span className="eyebrow"><Layers size={13} /> Herramientas que trabajan contigo</span><h2>Innova sin empezar desde cero</h2><p>Recursos prácticos para planificar, explorar y acompañar experiencias STEAM significativas.</p></div>
-        <div className="feature-grid">{features.map((feature) => { const Icon = feature.icon; return <article key={feature.title} className="feature-card" style={{ "--accent": feature.color }}><span className="feature-icon"><Icon size={20} /></span><h3>{feature.title}</h3><p>{feature.desc}</p><ChevronRight size={17} /></article>; })}</div>
       </section>
 
       <section id="planes" className="pricing-section">
         <div className="section-heading"><span className="eyebrow"><Award size={13} /> Precios claros y en soles</span><h2>Un plan para cada etapa docente</h2><p>Empieza gratis y elige más capacidad cuando necesites generar y descargar más materiales.</p></div>
-        <div className="pricing-grid">
-          {PLANS.map((plan) => <article key={plan.name} className={`price-card ${plan.featured ? "featured" : ""}`}>
-            {plan.featured && <span className="popular-badge"><Sparkles size={12} /> Más conveniente</span>}
-            <div className="plan-head"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
-            <div className="saving-pill">{plan.saving}</div>
-            <ul>{plan.benefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
-            <button onClick={() => choosePlan(plan)} className={plan.featured ? "primary-btn plan-button" : "secondary-btn plan-button"}>{plan.name === "Gratuito" ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`} <ArrowRight size={15} /></button>
-          </article>)}
+        <div className="pricing-toggle-wrapper">
+          <button onClick={() => setShowPricing(!showPricing)} className="pricing-toggle-btn">
+            {showPricing ? "Ocultar planes" : "Ver planes y precios"} <ChevronRight size={18} style={{ transform: showPricing ? "rotate(90deg)" : "none", transition: "transform 0.3s ease" }} />
+          </button>
         </div>
-        <p className="pricing-note"><span>🔒</span> Pago por Plin o Yape a nombre de Teaching TIC. La activación se confirma por WhatsApp.</p>
-      </section>
-
-      <section id="confianza" className="confidence-section">
-        <div className="confidence-copy"><span className="eyebrow"><GraduationCap size={13} /> Diseñado desde la realidad educativa</span><h2>Más tiempo para acompañar. Menos tiempo preparando desde cero.</h2><p>SciVerse combina tecnología, currículo y propuestas prácticas para que cada docente pueda adaptar y crear según su contexto.</p><ul><li><Target size={17} /> Recursos contextualizados al Currículo Nacional del Perú.</li><li><Users size={17} /> Actividades para trabajo individual y colaborativo.</li><li><Cpu size={17} /> Tecnología accesible desde el navegador, sin instalaciones.</li></ul></div>
-        <div className="quote-card"><span>“</span><p>La tecnología cobra sentido cuando ayuda al docente a crear experiencias más inclusivas, significativas y cercanas a sus estudiantes.</p><small>Teaching TIC · Innovación educativa con propósito</small></div>
+        <div className={`pricing-grid-wrapper ${showPricing ? "is-open" : ""}`}>
+          <div className="pricing-grid">
+            {PLANS.map((plan) => <article key={plan.name} className={`price-card ${plan.featured ? "featured" : ""}`}>
+              {plan.featured && <span className="popular-badge"><Sparkles size={12} /> Más conveniente</span>}
+              <div className="plan-head"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
+              <div className="saving-pill">{plan.saving}</div>
+              <ul>{plan.benefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
+              <button onClick={() => choosePlan(plan)} className={plan.featured ? "primary-btn plan-button" : "secondary-btn plan-button"}>{plan.name === "Gratuito" ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`} <ArrowRight size={15} /></button>
+            </article>)}
+          </div>
+          <p className="pricing-note"><span>🔒</span> Pago por Plin o Yape a nombre de Teaching TIC. La activación se confirma por WhatsApp.</p>
+        </div>
       </section>
 
       <TestimonialsCarousel />
+
+      <section className="trust-bar">
+        <div className="trust-item"><Target size={20} /><div><strong>CNEB alineado</strong><span>Recursos contextualizados al currículo nacional</span></div></div>
+        <div className="trust-item"><Users size={20} /><div><strong>Para todos</strong><span>Primaria y secundaria, individual o colaborativo</span></div></div>
+        <div className="trust-item"><Cpu size={20} /><div><strong>Accesible</strong><span>Funciona desde el navegador, sin instalaciones</span></div></div>
+      </section>
 
       <section id="preguntas" className="faq-section">
         <div className="section-heading"><span className="eyebrow"><HelpCircle size={13} /> Resolvemos tus dudas</span><h2>Preguntas frecuentes</h2><p>Todo lo que necesitas saber antes de crear tu cuenta o elegir un plan.</p></div>
@@ -1436,9 +1441,9 @@ function ImprovedLanding({ onRegister, onLogin }) {
 
       <footer className="landing-footer expanded-footer">
         <div className="footer-column"><div className="brand-lockup"><span className="brand-mark"><Microscope size={20} /></span><span><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></span></div><p>Tecnología educativa para experiencias STEAM accesibles, creativas y contextualizadas.</p><div className="social-row"><a href="https://www.facebook.com/teachingticconsultorias/" target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={17} /></a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer" aria-label="WhatsApp"><MessageCircle size={17} /></a></div></div>
-        <div className="footer-column"><h4>Explora</h4><a href="#beneficios">Herramientas</a><a href="#planes">Planes</a><a href="#testimonios">Testimonios</a><a href="#preguntas">Preguntas frecuentes</a><button onClick={onRegister}>Crear cuenta</button></div>
+        <div className="footer-column"><h4>Explora</h4><a href="#demo">Herramientas</a><a href="#planes">Planes</a><a href="#testimonios">Testimonios</a><a href="#preguntas">Preguntas frecuentes</a><button onClick={onRegister}>Crear cuenta</button></div>
         <div className="footer-column"><h4>Legal y confianza</h4><button onClick={() => setLegalView("terms")}>Términos y condiciones</button><button onClick={() => setLegalView("privacy")}>Política de privacidad</button><button onClick={() => setLegalView("ai")}>Política de uso de IA</button><button onClick={() => setLegalView("complaints")}>Libro de Reclamaciones</button></div>
-        <div className="footer-column"><h4>Contacto</h4><p>Teaching TIC Consultorías S.A.C.<br />RUC 20607945331<br />Jr. Cristóbal de Peralta Norte 9 50, Dpto. 210</p><a href="mailto:teachingticconsultorias@gmail.com">teachingticconsultorias@gmail.com</a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer">+51 921 090 875</a><small>© 2026 Teaching TIC. Todos los derechos reservados.</small></div>
+        <div className="footer-column"><h4>Contacto</h4><p>Teaching TIC Consultorías S.A.C.<br />RUC 20607945331</p><a href="mailto:teachingticconsultorias@gmail.com">teachingticconsultorias@gmail.com</a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer">+51 921 090 875</a><small>© 2026 Teaching TIC. Todos los derechos reservados.</small></div>
       </footer>
       {legalView && <LegalModal view={legalView} onClose={() => setLegalView(null)} />}
     </div>
