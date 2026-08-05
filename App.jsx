@@ -678,7 +678,10 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
   const [result, setResult] = useState(null);
   const [suggesting, setSuggesting] = useState(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
-  const loadingMessages = [`Kantu está analizando la información curricular`, `Está organizando la ${documentName}`, "Está revisando competencias, capacidades y criterios", "Está preparando el archivo para que puedas revisarlo y descargarlo"];
+  const [activeModule, setActiveModule] = useState(null);
+  const [completedModules, setCompletedModules] = useState([]);
+  const moduleLabels = { alignment: "Alineación curricular", sequence: "Secuencia didáctica", assessment: "Evaluación formativa", annexes: "Anexos para la clase" };
+  const loadingMessages = activeModule ? [`Kantu está trabajando en: ${moduleLabels[activeModule]}`, activeModule === "alignment" ? "Está relacionando capacidades, desempeños y criterios" : activeModule === "sequence" ? "Está organizando los procesos pedagógicos y didácticos" : activeModule === "assessment" ? "Está verificando criterios y evidencias observables" : "Está preparando recursos listos para usar"] : [`Kantu está analizando la información curricular`, `Está organizando la ${documentName}`];
 
   useEffect(() => {
     if (!loading) { setLoadingMessageIndex(0); return undefined; }
@@ -717,51 +720,58 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
     setLoading(true);
     setError(null);
     setResult(null);
+    setCompletedModules([]);
     try {
-      const typeInstruction = documentType === "project" ? "Estructura un proyecto STEAM con reto auténtico, producto final, fases de investigación, diseño, creación, prueba, mejora y socialización." : documentType === "rubric" ? "Construye una rúbrica analítica. En criteriosEvaluacion incluye cada criterio observable con cuatro niveles: Inicio, En proceso, Logro esperado y Logro destacado. Usa inicio, desarrollo y cierre para explicar aplicación, retroalimentación y uso de resultados." : documentType === "checklist" ? "Construye una lista de cotejo. En criteriosEvaluacion incluye indicadores breves, observables y verificables que puedan marcarse Sí, No o En proceso. Usa inicio, desarrollo y cierre para explicar antes, durante y después de la observación." : "Genera una sesión de aprendizaje con inicio, desarrollo y cierre, aplicando procesos pedagógicos y didácticos pertinentes.";
-      const systemInstruction = `Eres especialista en planificación curricular peruana y CNEB. Genera una ${documentName} aplicable, contextualizada, inclusiva y coherente con los datos del docente. ${typeInstruction} No inventes competencias oficiales. Responde ÚNICAMENTE con JSON válido con esta forma exacta:
-{
-  "titulo": "string",
-  "areasSTEAM": ["string", "..."],
-  "competenciasCNEB": ["string", "..."],
-  "capacidadesCNEB": ["string", "..."],
-  "proposito": "string",
-  "criteriosEvaluacion": ["string", "..."],
-  "evidencia": "string",
-  "procesosPedagogicos": ["string", "..."],
-  "procesosDidacticos": ["string", "..."],
-  "materiales": ["string", "..."],
-  "inicio": "string",
-  "desarrollo": "string",
-  "cierre": "string",
-  "productoSTEAM": "string"
-}`;
-
-      const userMsg = `Producto solicitado: ${documentName}\nNivel: ${form.nivel}\nGrado: ${form.grado}\nRegión del Perú: ${form.region}\nSección: ${form.seccion || "No indicada"}\nFecha: ${form.fecha}\nDuración: ${form.duracion} minutos\nÁrea curricular: ${form.area}\nTema: ${form.tema}\nCompetencia oficial: ${form.competencia}\nCapacidades oficiales seleccionadas:\n- ${form.capacidades.join("\n- ")}\nPropósito propuesto por el docente: ${form.proposito}\nSituación contextualizada: ${form.contexto}\nEvidencia esperada: ${form.evidencia}\nRecursos disponibles: ${form.recursos || "Materiales accesibles del entorno"}\nIntegrar enfoque STEAM: ${form.steam ? "Sí" : "No"}\nIncluir ajustes inclusivos/DUA: ${form.inclusivo ? "Sí" : "No"}\nLos criterios deben derivarse de las capacidades y del tema, redactarse como acciones observables y verificables, e indicar qué hará el estudiante, sobre qué contenido y con qué condición de calidad.`;
-
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error("Tu sesión venció. Vuelve a iniciar sesión.");
-
-      const response = await fetch("/api/generate-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-        body: JSON.stringify({
-          max_tokens: 2500,
-          messages: [
-            { role: "user", content: `${systemInstruction}\n\n${userMsg}` },
-          ],
-        }),
+      const generated = {};
+      for (const moduleName of ["alignment", "sequence", "assessment", "annexes"]) {
+        setActiveModule(moduleName);
+        const response = await fetch("/api/generate-session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          body: JSON.stringify({ mode: "module", module: moduleName, form, previous: generated }),
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(`${moduleLabels[moduleName]}: ${data.error || "no pudo completarse"}`);
+        if (!data.result) throw new Error(`${moduleLabels[moduleName]} no llegó completo.`);
+        generated[moduleName] = data.result;
+        setCompletedModules((current) => [...current, moduleName]);
+      }
+      const alignment = generated.alignment;
+      const sequence = generated.sequence;
+      const assessment = generated.assessment;
+      setResult({
+        titulo: alignment.titulo,
+        areasSTEAM: form.steam ? [form.area, "Enfoque STEAM"] : [form.area],
+        competenciasCNEB: [form.competencia],
+        capacidadesCNEB: form.capacidades,
+        proposito: alignment.proposito,
+        desempenosPrecisados: alignment.desempenosPrecisados,
+        criteriosDetallados: assessment.criterios,
+        criteriosEvaluacion: assessment.criterios.map((item) => item.criterio),
+        evidencia: alignment.evidencia,
+        enfoquesTransversales: alignment.enfoquesTransversales,
+        preparacionDocente: sequence.preparacionDocente,
+        procesosPedagogicos: sequence.procesosPedagogicos,
+        procesosDidacticos: sequence.procesosDidacticos,
+        materiales: sequence.materiales,
+        inicio: sequence.inicio.actividades,
+        desarrollo: sequence.desarrollo.actividades,
+        cierre: sequence.cierre.actividades,
+        tiempos: { inicio: sequence.inicio.minutos, desarrollo: sequence.desarrollo.minutos, cierre: sequence.cierre.minutos },
+        orientacionesDUA: sequence.orientacionesDUA,
+        instrumentoSugerido: assessment.instrumentoSugerido,
+        reflexionesDocente: assessment.reflexionesDocente,
+        anexos: generated.annexes.anexos,
+        productoSTEAM: alignment.evidencia,
       });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Error del servidor");
-      if (!data.session) throw new Error(`La ${documentName} no llegó completa. Intenta generarla nuevamente.`);
-      setResult(data.session);
     } catch (e) {
       setError(e.message || `No se pudo generar la ${documentName}. Intenta de nuevo en unos segundos.`);
     } finally {
       setLoading(false);
+      setActiveModule(null);
     }
   }
 
@@ -809,7 +819,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
 
       {loading && <div className="kantu-working" role="status" aria-live="polite">
         <div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img src={documentType === "session" ? "/mascot/kantu-session.png" : "/mascot/kantu-material.png"} alt="Kantu trabajando en el recurso educativo"/></div>
-        <div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>{loadingMessages[loadingMessageIndex]}…</h4><p>Esto puede tomar unos segundos. Puedes dejar esta pantalla abierta mientras termina.</p><div className="kantu-progress"><i/><i/><i/></div></div>
+        <div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>{loadingMessages[loadingMessageIndex]}…</h4><p>La sesión se construye por módulos para revisar mejor su coherencia pedagógica.</p><div className="module-generation-status">{Object.entries(moduleLabels).map(([key,label])=><span key={key} className={completedModules.includes(key)?"done":activeModule===key?"active":""}>{completedModules.includes(key)?<CheckCircle2 size={13}/>:activeModule===key?<Loader2 size={13} className="animate-spin"/>:<i/>}{label}</span>)}</div></div>
       </div>}
 
       {result && (
@@ -834,12 +844,15 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Capacidades movilizadas</p>
           <ul className="text-sm mb-4 space-y-1" style={{ color: C.text }}>{(result.capacidadesCNEB||[]).map((c,i)=><li key={i} className="flex gap-2"><span style={{color:C.teal}}>·</span>{c}</li>)}</ul>
 
+          {!!result.desempenosPrecisados?.length&&<><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Desempeños precisados</p><div className="modular-table">{result.desempenosPrecisados.map((item,i)=><div key={i}><small>{item.capacidad}</small><p>{item.desempeno}</p></div>)}</div></>}
+
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Propósito de aprendizaje</p>
           <p className="text-sm mb-4 leading-relaxed" style={{ color: C.text }}>{result.proposito}</p>
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Criterios de evaluación</p>
           <ul className="text-sm mb-4 space-y-1" style={{ color: C.text }}>{(result.criteriosEvaluacion||[]).map((c,i)=><li key={i} className="flex gap-2"><span style={{color:C.teal}}>·</span>{c}</li>)}</ul>
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Evidencia</p>
           <p className="text-sm mb-4 leading-relaxed" style={{ color: C.text }}>{result.evidencia}</p>
+          {!!result.enfoquesTransversales?.length&&<><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Enfoques transversales</p><div className="modular-table">{result.enfoquesTransversales.map((item,i)=><div key={i}><small>{item.enfoque} · {item.valor}</small><p>{item.actitudObservable}</p></div>)}</div></>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4"><div className="rounded-lg p-3" style={{background:"#F1F8F7"}}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Procesos pedagógicos</p><ul className="text-sm space-y-1">{(result.procesosPedagogicos||[]).map((p,i)=><li key={i}>· {p}</li>)}</ul></div><div className="rounded-lg p-3" style={{background:"#F1F8F7"}}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Procesos didácticos</p><ul className="text-sm space-y-1">{(result.procesosDidacticos||[]).map((p,i)=><li key={i}>· {p}</li>)}</ul></div></div>
 
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Materiales</p>
@@ -851,18 +864,21 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
 
           <div className="space-y-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[0]}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[0]} {result.tiempos&&`· ${result.tiempos.inicio} min`}</p>
               <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.inicio}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[1]}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[1]} {result.tiempos&&`· ${result.tiempos.desarrollo} min`}</p>
               <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.desarrollo}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[2]}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[2]} {result.tiempos&&`· ${result.tiempos.cierre} min`}</p>
               <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.cierre}</p>
             </div>
           </div>
+
+          {!!result.orientacionesDUA?.length&&<div className="modular-section"><h5>Orientaciones DUA</h5><ul>{result.orientacionesDUA.map((item,i)=><li key={i}>{item}</li>)}</ul></div>}
+          {!!result.anexos?.length&&<div className="modular-section"><h5>Anexos generados</h5>{result.anexos.map((item,i)=><details key={i}><summary>Anexo {i+1}: {item.titulo}</summary><small>{item.tipo} · {item.proposito}</small><p>{item.contenido}</p><strong>Indicaciones:</strong><p>{item.instrucciones}</p></details>)}</div>}
 
           <div className="mt-4 rounded-lg p-4" style={{ background: "rgba(62,198,192,0.06)", borderLeft: `3px solid ${C.teal}` }}>
             <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.teal }}>{sectionLabels[3]}</p>
@@ -873,7 +889,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
             onClick={() =>
               downloadWord(
                 `${documentType}-${form.tema.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 30) || "generado"}.docx`,
-                `${result.titulo}\n\nTipo de recurso: ${documentName}\nNivel y grado: ${form.nivel} ${form.grado}\nRegión: ${form.region}\nÁrea: ${form.area}\nDuración: ${form.duracion} min\n\nCompetencias CNEB:\n${(result.competenciasCNEB || []).map((c) => "- " + c).join("\n")}\n\nCapacidades CNEB:\n${(result.capacidadesCNEB || []).map((c) => "- " + c).join("\n")}\n\nPropósito:\n${result.proposito}\n\nCriterios de evaluación:\n${(result.criteriosEvaluacion||[]).map(c=>"- "+c).join("\n")}\n\nEvidencia:\n${result.evidencia}\n\nProcesos pedagógicos:\n${(result.procesosPedagogicos||[]).map(p=>"- "+p).join("\n")}\n\nProcesos didácticos:\n${(result.procesosDidacticos||[]).map(p=>"- "+p).join("\n")}\n\nMateriales:\n${(result.materiales || []).map((m) => "- " + m).join("\n")}\n\nInicio:\n${result.inicio}\n\nDesarrollo:\n${result.desarrollo}\n\nCierre:\n${result.cierre}\n\nProducto o evidencia final:\n${result.productoSTEAM}`,
+                `${result.titulo}\n\nTipo de recurso: ${documentName}\nNivel y grado: ${form.nivel} ${form.grado}\nRegión: ${form.region}\nÁrea: ${form.area}\nFecha: ${form.fecha}\nDuración: ${form.duracion} min\n\nCompetencias CNEB:\n${(result.competenciasCNEB || []).map((c) => "- " + c).join("\n")}\n\nCapacidades CNEB:\n${(result.capacidadesCNEB || []).map((c) => "- " + c).join("\n")}\n\nDesempeños precisados:\n${(result.desempenosPrecisados||[]).map(item=>`- ${item.capacidad}: ${item.desempeno}`).join("\n")}\n\nPropósito:\n${result.proposito}\n\nCriterios de evaluación:\n${(result.criteriosDetallados||[]).map(item=>`- ${item.capacidad}: ${item.criterio}\n  Evidencia observable: ${item.evidenciaObservable}`).join("\n")}\n\nEvidencia:\n${result.evidencia}\n\nEnfoques transversales:\n${(result.enfoquesTransversales||[]).map(item=>`- ${item.enfoque} (${item.valor}): ${item.actitudObservable}`).join("\n")}\n\nPreparación docente:\n${(result.preparacionDocente||[]).map(item=>"- "+item).join("\n")}\n\nProcesos pedagógicos:\n${(result.procesosPedagogicos||[]).map(p=>"- "+p).join("\n")}\n\nProcesos didácticos:\n${(result.procesosDidacticos||[]).map(p=>"- "+p).join("\n")}\n\nMateriales:\n${(result.materiales || []).map((m) => "- " + m).join("\n")}\n\nInicio (${result.tiempos?.inicio||""} min):\n${result.inicio}\n\nDesarrollo (${result.tiempos?.desarrollo||""} min):\n${result.desarrollo}\n\nCierre (${result.tiempos?.cierre||""} min):\n${result.cierre}\n\nOrientaciones DUA:\n${(result.orientacionesDUA||[]).map(item=>"- "+item).join("\n")}\n\nInstrumento sugerido:\n${result.instrumentoSugerido||""}\n\nReflexiones del docente:\n${(result.reflexionesDocente||[]).map(item=>"- "+item).join("\n")}\n\nANEXOS\n${(result.anexos||[]).map((item,index)=>`\nAnexo ${index+1}: ${item.titulo}\nTipo: ${item.tipo}\nPropósito: ${item.proposito}\n\n${item.contenido}\n\nIndicaciones: ${item.instrucciones}`).join("\n")}`,
                 result.titulo
               )
             }
