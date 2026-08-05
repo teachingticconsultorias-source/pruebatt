@@ -1310,7 +1310,7 @@ function ImprovedLanding({ onRegister, onLogin }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoGrade, setDemoGrade] = useState("primaria");
   const [legalView, setLegalView] = useState(null);
-  const [showPricing, setShowPricing] = useState(false);
+  const [showPlansModal, setShowPlansModal] = useState(false);
   const demoActivity = ACTIVITIES[0];
   const demoVersion = demoActivity.versions[demoGrade];
   const features = [
@@ -1345,7 +1345,7 @@ function ImprovedLanding({ onRegister, onLogin }) {
         </a>
         <div className={`landing-links ${menuOpen ? "is-open" : ""}`}>
           <a href="#demo" onClick={() => setMenuOpen(false)}>Pruébalo</a>
-          <a href="#planes" onClick={() => setMenuOpen(false)}>Planes</a>
+          <button onClick={() => { setShowPlansModal(true); setMenuOpen(false); }} style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit', padding: 0 }}>Planes</button>
           <a href="#testimonios" onClick={() => setMenuOpen(false)}>Testimonios</a>
           <a href="#preguntas" onClick={() => setMenuOpen(false)}>Preguntas</a>
         </div>
@@ -1403,26 +1403,6 @@ function ImprovedLanding({ onRegister, onLogin }) {
         </div>
       </section>
 
-      <section id="planes" className="pricing-section">
-        <div className="section-heading"><span className="eyebrow"><Award size={13} /> Precios claros y en soles</span><h2>Un plan para cada etapa docente</h2><p>Empieza gratis y elige más capacidad cuando necesites generar y descargar más materiales.</p></div>
-        <div className="pricing-toggle-wrapper">
-          <button onClick={() => setShowPricing(!showPricing)} className="pricing-toggle-btn">
-            {showPricing ? "Ocultar planes" : "Ver planes y precios"} <ChevronRight size={18} style={{ transform: showPricing ? "rotate(90deg)" : "none", transition: "transform 0.3s ease" }} />
-          </button>
-        </div>
-        <div className={`pricing-grid-wrapper ${showPricing ? "is-open" : ""}`}>
-          <div className="pricing-grid">
-            {PLANS.map((plan) => <article key={plan.name} className={`price-card ${plan.featured ? "featured" : ""}`}>
-              {plan.featured && <span className="popular-badge"><Sparkles size={12} /> Más conveniente</span>}
-              <div className="plan-head"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
-              <div className="saving-pill">{plan.saving}</div>
-              <ul>{plan.benefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
-              <button onClick={() => choosePlan(plan)} className={plan.featured ? "primary-btn plan-button" : "secondary-btn plan-button"}>{plan.name === "Gratuito" ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`} <ArrowRight size={15} /></button>
-            </article>)}
-          </div>
-          <p className="pricing-note"><span>🔒</span> Pago por Plin o Yape a nombre de Teaching TIC. La activación se confirma por WhatsApp.</p>
-        </div>
-      </section>
 
       <TestimonialsCarousel />
 
@@ -1441,11 +1421,12 @@ function ImprovedLanding({ onRegister, onLogin }) {
 
       <footer className="landing-footer expanded-footer">
         <div className="footer-column"><div className="brand-lockup"><span className="brand-mark"><Microscope size={20} /></span><span><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></span></div><p>Tecnología educativa para experiencias STEAM accesibles, creativas y contextualizadas.</p><div className="social-row"><a href="https://www.facebook.com/teachingticconsultorias/" target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={17} /></a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer" aria-label="WhatsApp"><MessageCircle size={17} /></a></div></div>
-        <div className="footer-column"><h4>Explora</h4><a href="#demo">Herramientas</a><a href="#planes">Planes</a><a href="#testimonios">Testimonios</a><a href="#preguntas">Preguntas frecuentes</a><button onClick={onRegister}>Crear cuenta</button></div>
+        <div className="footer-column"><h4>Explora</h4><a href="#demo">Herramientas</a><button onClick={() => setShowPlansModal(true)} style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit', padding: 0, textAlign: 'left' }}>Planes</button><a href="#testimonios">Testimonios</a><a href="#preguntas">Preguntas frecuentes</a><button onClick={onRegister}>Crear cuenta</button></div>
         <div className="footer-column"><h4>Legal y confianza</h4><button onClick={() => setLegalView("terms")}>Términos y condiciones</button><button onClick={() => setLegalView("privacy")}>Política de privacidad</button><button onClick={() => setLegalView("ai")}>Política de uso de IA</button><button onClick={() => setLegalView("complaints")}>Libro de Reclamaciones</button></div>
         <div className="footer-column"><h4>Contacto</h4><p>Teaching TIC Consultorías S.A.C.<br />RUC 20607945331</p><a href="mailto:teachingticconsultorias@gmail.com">teachingticconsultorias@gmail.com</a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer">+51 921 090 875</a><small>© 2026 Teaching TIC. Todos los derechos reservados.</small></div>
       </footer>
       {legalView && <LegalModal view={legalView} onClose={() => setLegalView(null)} />}
+      {showPlansModal && <PlansModal onClose={() => setShowPlansModal(false)} onChoosePlan={onRegister} />}
     </div>
   );
 }
@@ -1459,6 +1440,39 @@ function LegalModal({ view, onClose }) {
   }[view];
   const Icon = content.icon;
   return <div className="legal-backdrop" role="presentation" onMouseDown={onClose}><section className="legal-modal" role="dialog" aria-modal="true" aria-labelledby="legal-title" onMouseDown={(event) => event.stopPropagation()}><button className="legal-close" onClick={onClose} aria-label="Cerrar"><X size={20} /></button><Icon size={26} color={C.teal} /><h2 id="legal-title">{content.title}</h2>{content.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{view === "complaints" && <div className="legal-actions"><a className="primary-btn" href="mailto:teachingticconsultorias@gmail.com?subject=Registro%20en%20el%20Libro%20de%20Reclamaciones&body=Tipo%3A%20Reclamo%20o%20queja%0ANombres%20y%20apellidos%3A%0ADNI%20o%20CE%3A%0ACorreo%3A%0ATel%C3%A9fono%3A%0AServicio%20contratado%3A%0ADetalle%3A%0APedido%20concreto%3A">Registrar por correo <Mail size={15} /></a><a className="secondary-btn" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20necesito%20orientaci%C3%B3n%20para%20presentar%20un%20reclamo." target="_blank" rel="noreferrer">Orientación por WhatsApp <MessageCircle size={15} /></a></div>}<small>Última actualización: agosto de 2026.</small></section></div>;
+}
+
+function PlansModal({ onClose, onChoosePlan }) {
+  const handleChoosePlan = (plan) => {
+    if (plan.name === "Gratuito") return onChoosePlan("gratuito");
+    const message = `Hola Teaching TIC, deseo adquirir el Plan ${plan.name} de SciVerse por S/${plan.price}. ¿Me comparten los datos para pagar por Plin o Yape?`;
+    window.open(`https://wa.me/51921090875?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+    onClose();
+  };
+  return (
+    <div className="plans-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="plans-modal" role="dialog" aria-modal="true" aria-labelledby="plans-title" onMouseDown={(event) => event.stopPropagation()}>
+        <button className="plans-close" onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+        <div className="plans-header">
+          <span className="eyebrow"><Award size={13} /> Precios claros y en soles</span>
+          <h2 id="plans-title">Un plan para cada etapa docente</h2>
+          <p>Empieza gratis y elige más capacidad cuando necesites generar y descargar más materiales.</p>
+        </div>
+        <div className="plans-grid">
+          {PLANS.map((plan) => (
+            <article key={plan.name} className={`plan-card ${plan.featured ? "featured" : ""}`}>
+              {plan.featured && <span className="plan-badge"><Sparkles size={12} /> Más conveniente</span>}
+              <div className="plan-header"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
+              <div className="plan-saving">{plan.saving}</div>
+              <ul>{plan.benefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
+              <button onClick={() => handleChoosePlan(plan)} className={plan.featured ? "primary-btn" : "secondary-btn"}>{plan.name === "Gratuito" ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`} <ArrowRight size={15} /></button>
+            </article>
+          ))}
+        </div>
+        <p className="plans-note"><span>🔒</span> Pago por Plin o Yape a nombre de Teaching TIC. La activación se confirma por WhatsApp.</p>
+      </section>
+    </div>
+  );
 }
 
 function RegistrationGate({ children }) {
