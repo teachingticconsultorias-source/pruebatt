@@ -35,6 +35,21 @@ const SUGGESTION_SCHEMA = {
   required: ["suggestion"],
 };
 
+const CHALLENGE_SCHEMA = {
+  type: "object",
+  properties: {
+    titulo: { type: "string" }, mision: { type: "string" }, objetivo: { type: "string" },
+    competencia: { type: "string" }, capacidades: { type: "array", items: { type: "string" } },
+    duracion: { type: "string" }, equipo: { type: "string" },
+    roles: { type: "array", items: { type: "string" } }, materiales: { type: "array", items: { type: "string" } },
+    preparacion: { type: "array", items: { type: "string" } }, pasos: { type: "array", items: { type: "string" } },
+    reglas: { type: "array", items: { type: "string" } }, producto: { type: "string" },
+    criterios: { type: "array", items: { type: "string" } }, preguntas: { type: "array", items: { type: "string" } },
+    adaptacionesDUA: { type: "array", items: { type: "string" } },
+  },
+  required: ["titulo","mision","objetivo","competencia","capacidades","duracion","equipo","roles","materiales","preparacion","pasos","reglas","producto","criterios","preguntas","adaptacionesDUA"],
+};
+
 const INSTRUMENT_SCHEMA = {
   type: "object",
   properties: {
@@ -199,6 +214,7 @@ export default async function handler(req, res) {
     const suggestionMode = mode === "suggestion";
     const instrumentMode = mode === "instrument";
     const moduleMode = mode === "module";
+    const challengeMode = mode === "challenge";
     const allowedFields = ["proposito", "contexto", "evidencia"];
 
     if (suggestionMode && !allowedFields.includes(field)) {
@@ -230,7 +246,12 @@ Evidencia de aprendizaje: ${form.evidencia}. Cantidad de criterios: ${form.numer
 Criterios ya aprobados en la sesión: ${JSON.stringify(form.criteriosBase || [])}.
 Cuando existan criterios aprobados, consérvalos y conviértelos en el instrumento sin sustituirlos por criterios distintos. Cada criterio debe mantener su capacidad relacionada, empezar con un verbo observable, indicar el contenido y una condición de calidad. No repitas criterios.
 ${instrumentType === "rubric" ? "Para cada criterio redacta descriptores progresivos y coherentes para Inicio, En proceso, Logro esperado y Logro destacado. Evita limitarte a adjetivos como bueno o excelente." : "Para la lista de cotejo deja inicio, enProceso, logroEsperado y logroDestacado como cadenas vacías; los criterios se evaluarán con Sí, No y Observaciones."}`;
-    const promptText = suggestionMode ? suggestionPrompt : instrumentMode ? instrumentPrompt : moduleMode ? modulePrompt(moduleName, form, previous) : (messages?.[0]?.content || "");
+    const challengePrompt = `Diseña un reto grupal colaborativo, seguro y listo para aplicar en un aula peruana.
+Nivel y grado: ${form.nivel || "No indicado"} · ${form.grado || "No indicado"}. Área: ${form.area || "No indicada"}. Tema: ${form.tema || "No indicado"}.
+Región o contexto: ${form.region || "No indicado"}. Duración: ${form.duracion || "45"} minutos. Estudiantes: ${form.estudiantes || "No indicado"}. Integrantes por equipo: ${form.integrantes || "4"}.
+Materiales disponibles: ${form.materiales || "materiales sencillos del aula"}. Competencia solicitada: ${form.competencia || "selecciona la competencia CNEB más pertinente"}.
+El reto debe exigir colaboración real, asignar roles complementarios y terminar en un producto, solución o prototipo observable. Describe acciones concretas y numeradas. Formula criterios observables derivados de la competencia, el tema y el producto. Adapta el contexto sin inventar nombres, cifras, costumbres ni problemas locales específicos. Incluye apoyos DUA y evita actividades peligrosas o que requieran materiales difíciles de conseguir.`;
+    const promptText = challengeMode ? challengePrompt : suggestionMode ? suggestionPrompt : instrumentMode ? instrumentPrompt : moduleMode ? modulePrompt(moduleName, form, previous) : (messages?.[0]?.content || "");
 
     if (!promptText.trim()) {
       res.status(400).json({ error: "Falta información para generar la propuesta" });
@@ -249,9 +270,9 @@ ${instrumentType === "rubric" ? "Para cada criterio redacta descriptores progres
           contents: [{ parts: [{ text: promptText }] }],
           systemInstruction: { parts: [{ text: "Eres un especialista peruano en planificación curricular y CNEB. Respeta la competencia y capacidades seleccionadas. Formula criterios de evaluación como acciones observables derivadas de las capacidades, el propósito y el tema. Organiza inicio, desarrollo y cierre con procesos pedagógicos y los procesos didácticos pertinentes al área, sin convertirlos en una lista mecánica. Adapta el contexto a la región sin inventar datos locales. Entrega siempre JSON válido." }] },
           generationConfig: {
-            maxOutputTokens: suggestionMode ? 800 : instrumentMode ? 5000 : moduleMode ? (moduleName === "annexes" ? 6500 : 4500) : 8192,
+            maxOutputTokens: suggestionMode ? 800 : challengeMode ? 4500 : instrumentMode ? 5000 : moduleMode ? (moduleName === "annexes" ? 6500 : 4500) : 8192,
             responseMimeType: "application/json",
-            responseSchema: suggestionMode ? SUGGESTION_SCHEMA : instrumentMode ? INSTRUMENT_SCHEMA : moduleMode ? MODULE_SCHEMAS[moduleName] : SESSION_SCHEMA,
+            responseSchema: challengeMode ? CHALLENGE_SCHEMA : suggestionMode ? SUGGESTION_SCHEMA : instrumentMode ? INSTRUMENT_SCHEMA : moduleMode ? MODULE_SCHEMAS[moduleName] : SESSION_SCHEMA,
           },
         }),
       }
@@ -279,6 +300,12 @@ ${instrumentType === "rubric" ? "Para cada criterio redacta descriptores progres
     if (suggestionMode) {
       const parsed = JSON.parse(text);
       res.status(200).json({ suggestion: parsed.suggestion });
+      return;
+    }
+
+    if (challengeMode) {
+      const challenge = JSON.parse(text);
+      res.status(200).json({ challenge, model: GEMINI_MODEL });
       return;
     }
 

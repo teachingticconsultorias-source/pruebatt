@@ -119,7 +119,7 @@ async function saveTeacherMaterial({tipo,titulo,form,contenido}) {
 
 async function downloadWord(filename, content, title="Documento SciVerse") {
   const paragraphs=String(content||"").split(/\n/).map(line=>line.trim()?wordParagraph(line,{size:20}):wordParagraph("",{after:40}));
-  const doc=new Document({ creator:"Teaching TIC Consultorías S.A.C.", title, styles:{ default:{ document:{ run:{font:"Arial",size:20,color:WORD.ink}, paragraph:{spacing:{after:90,line:276}} } } }, sections:[{ properties:{page:{size:{width:11906,height:16838},margin:{top:1134,right:1134,bottom:1134,left:1134}}}, children:[wordParagraph(title,{bold:true,size:30,color:WORD.purpleDark,alignment:AlignmentType.CENTER,after:220}),...paragraphs] }] });
+  const doc=new Document({ creator:"Teaching TIC Consultorías S.A.C.", title, styles:{ default:{ document:{ run:{font:"Arial",size:20,color:WORD.ink}, paragraph:{spacing:{after:90,line:276}} } } }, sections:[{ properties:{page:{size:{width:11906,height:16838},margin:{top:1050,right:1134,bottom:950,left:1134}}}, headers:{default:new Header({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"SciVerse",bold:true,font:"Arial",size:23,color:"168B84"}),new TextRun({text:" · una iniciativa de Teaching TIC",font:"Arial",size:16,color:"6F8885"})]}),new Paragraph({border:{bottom:{style:BorderStyle.SINGLE,size:6,color:"CBE4E1"}},children:[]})]})}, footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"Teaching TIC · Página ",font:"Arial",size:14,color:"6F8885"}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:14,color:"6F8885"})]})]})}, children:[wordParagraph(title,{bold:true,size:30,color:"0F625D",alignment:AlignmentType.CENTER,after:220}),...paragraphs] }] });
   await triggerWordDownload(doc,filename);
 }
 
@@ -164,6 +164,36 @@ async function downloadChecklistWord({form,instrument,profile={}}) {
   const doc=new Document({creator:"Teaching TIC Consultorías S.A.C.",title:instrument.titulo||"Lista de cotejo",styles:{default:{document:{run:{font:"Arial",size:15,color:RUBRIC_WORD.ink},paragraph:{spacing:{after:40,line:220}}}}},sections:[{properties:{page:{size:{width:16838,height:11906,orientation:PageOrientation.LANDSCAPE},margin:{top:520,right:550,bottom:520,left:550}}},headers:{default:new Header({children:[rubricParagraph("Teaching TIC · Kantu",{size:13,color:RUBRIC_WORD.muted,alignment:AlignmentType.RIGHT,after:0})]})},footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"SciVerse para docentes · Página ",font:"Arial",size:13,color:RUBRIC_WORD.muted}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:13,color:RUBRIC_WORD.muted})]})]})},children}]});
   const slug=(form.tema||instrument.titulo||"lista-de-cotejo").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,55);
   await triggerWordDownload(doc,`lista-de-cotejo-${slug}.docx`);
+}
+
+async function downloadActivityWord(activity,grade) {
+  const v=activity.versions[grade];
+  const detail=activity.detalle;
+  const green="0F625D",teal="168B84",pale="E4F6F3",pale2="F4FAF9",yellow="FFF3C4",ink="173E3B",muted="5D7774",white="FFFFFF";
+  const heading=(number,title)=>new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[700,8938],layout:TableLayoutType.FIXED,borders:{top:{style:BorderStyle.NONE},bottom:{style:BorderStyle.NONE},left:{style:BorderStyle.NONE},right:{style:BorderStyle.NONE},insideHorizontal:{style:BorderStyle.NONE},insideVertical:{style:BorderStyle.NONE}},rows:[new TableRow({children:[wordCell(number,700,{fill:green,color:white,bold:true,align:AlignmentType.CENTER}),wordCell(title.toUpperCase(),8938,{fill:pale,color:green,bold:true})]})]});
+  const infoTable=new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[3212,3213,3213],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell([wordParagraph("NIVEL RECOMENDADO",{bold:true,color:teal,size:16,after:35}),wordParagraph(v.nivel,{bold:true,color:ink,size:18})],3212,{fill:pale2}),wordCell([wordParagraph("TIEMPO SUGERIDO",{bold:true,color:teal,size:16,after:35}),wordParagraph(detail.tiempo,{bold:true,color:ink,size:18})],3213,{fill:pale2}),wordCell([wordParagraph("ORGANIZACIÓN",{bold:true,color:teal,size:16,after:35}),wordParagraph(detail.organizacion,{color:ink,size:17})],3213,{fill:pale2})]})]});
+  const successBox=new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[900,8738],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell("✓",900,{fill:green,color:white,bold:true,align:AlignmentType.CENTER}),wordCell([wordParagraph("CONDICIÓN DE ÉXITO",{bold:true,color:green,size:17,after:35}),wordParagraph(v.condicion,{color:ink,size:19})],8738,{fill:pale})]})]});
+  const evidenceBox=new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[4819,4819],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell([wordParagraph("PREGUNTAS PARA ACOMPAÑAR",{bold:true,color:green,size:17,after:55}),...detail.acompanamiento.map(item=>wordParagraph(item,{bullet:true,size:18,after:55}))],4819,{fill:pale2}),wordCell([wordParagraph("EVIDENCIAS QUE DEBE RECOGER",{bold:true,color:green,size:17,after:55}),...detail.evidencias.map(item=>wordParagraph(item,{bullet:true,size:18,after:55}))],4819,{fill:pale2})]})]});
+  const children=[
+    wordParagraph(`${activity.code} · ${SUBJECTS[activity.subject].label.toUpperCase()}`,{bold:true,color:teal,size:17,after:60}),
+    wordParagraph(activity.title,{bold:true,color:green,size:32,after:80}),
+    wordParagraph("Guía pedagógica para aplicar una experiencia STEAM en el aula",{color:muted,size:19,after:180}),
+    infoTable,
+    wordParagraph("",{after:70}),
+    heading("01","Competencia CNEB"),wordParagraph(activity.competencia,{bold:true,color:ink,size:20,before:90,after:150}),
+    heading("02","El reto"),wordParagraph(v.objetivo,{color:ink,size:20,before:90,after:150}),
+    heading("03","Antes de empezar"),...detail.preparacion.map(item=>wordParagraph(item,{bullet:true,size:19,before:25,after:65})),
+    heading("04","Materiales"),...v.materiales.map(item=>wordParagraph(item,{bullet:true,size:19,before:25,after:65})),
+    heading("05","¿Cómo se juega?"),...v.pasos.map(item=>new Paragraph({numbering:{reference:"activity-steps",level:0},spacing:{before:45,after:85,line:290},children:[wordRun(item,{size:19,color:ink})]})),
+    successBox,wordParagraph("",{after:65}),
+    heading("06","Acompañamiento y evaluación"),wordParagraph("Durante el reto, observa el razonamiento antes de intervenir. Utiliza estas preguntas y recoge evidencias del proceso, no solo del producto final.",{color:muted,size:18,before:80,after:80}),evidenceBox,
+    wordParagraph("VARIACIÓN — MÁS DIFÍCIL",{bold:true,color:"9B6B00",size:17,before:150,after:45}),
+    new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[WORD_WIDTH],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell(v.variacion,WORD_WIDTH,{fill:yellow})]})]}),
+    wordParagraph("PREGUNTA PARA REFLEXIONAR",{bold:true,color:teal,size:17,before:150,after:45}),
+    new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[WORD_WIDTH],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell(wordParagraph(v.reflexion,{bold:true,italics:true,color:green,size:21,alignment:AlignmentType.CENTER,after:0}),WORD_WIDTH,{fill:pale})]})]}),
+  ];
+  const doc=new Document({creator:"Teaching TIC Consultorías S.A.C.",title:activity.title,description:"Guía de actividad STEAM de SciVerse",numbering:{config:[{reference:"activity-steps",levels:[{level:0,format:"decimal",text:"%1.",alignment:AlignmentType.LEFT,style:{paragraph:{indent:{left:540,hanging:260}},run:{bold:true,color:green,font:"Arial",size:19}}}]}]},styles:{default:{document:{run:{font:"Arial",size:20,color:ink},paragraph:{spacing:{after:100,line:290}}}}},sections:[{properties:{page:{size:{width:11906,height:16838},margin:{top:1050,right:1134,bottom:950,left:1134},pageNumbers:{start:1,formatType:NumberFormat.DECIMAL}}},headers:{default:new Header({children:[new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:40},children:[new TextRun({text:"SciVerse",bold:true,font:"Arial",size:24,color:"A9D6D1"}),new TextRun({text:"  ·  una iniciativa de Teaching TIC",font:"Arial",size:17,color:"B9C9C7"})]}),new Paragraph({spacing:{after:0},border:{bottom:{style:BorderStyle.SINGLE,size:6,color:"CBE4E1"}},children:[]})]})},footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"Teaching TIC · Recursos para docentes · Página ",font:"Arial",size:15,color:muted}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:15,color:muted})]})]})},children}]});
+  await triggerWordDownload(doc,`${activity.id}-${grade}.docx`);
 }
 
 function wordMomentSubsection(title, item, {development=false}={}) {
@@ -606,38 +636,58 @@ const RETOS = [
   {
     id: "detectives-gravedad",
     title: "Detectives de la gravedad",
-    subject: "fisica",
+    subject: "fisica", area: "Ciencia y Tecnología", teamSize: "4 estudiantes",
     grades: ["primaria", "secundaria"],
-    desc: "Equipos compiten prediciendo, antes de cada prueba práctica, cuál objeto llegará primero al soltar distintos pares. Gana el equipo con más aciertos.",
-    duracion: "20 min",
-    icon: Zap,
+    desc: "Predigan, experimenten y expliquen qué ocurre cuando se dejan caer objetos diferentes.",
+    duracion: "30 min", icon: Zap,
+    competencia: CNEB.indaga,
+    mision: "Resolver qué características influyen realmente en la caída de los objetos y defender una conclusión basada en evidencias.",
+    producto: "Registro de predicciones, resultados y una explicación oral del equipo.",
+    roles: ["Coordinador/a", "Responsable de materiales", "Registrador/a", "Portavoz"],
+    materiales: ["Objetos seguros de distintos tamaños y masas", "Hojas de registro", "Cinta métrica", "Cronómetro opcional"],
+    preparacion: ["Selecciona pares de objetos que puedan soltarse sin riesgo.", "Marca una misma altura de lanzamiento.", "Prepara una tabla con predicción, resultado y explicación."],
+    pasos: ["Presenta la misión sin adelantar la respuesta.", "Cada equipo observa dos objetos y registra cuál cree que llegará primero y por qué.", "Realizan tres pruebas desde la misma altura y registran resultados.", "Comparan sus predicciones con la evidencia y reformulan su explicación.", "El portavoz comunica la conclusión y responde preguntas de otro equipo."],
+    reglas: ["Todos predicen antes de experimentar.", "Los objetos se sueltan, no se lanzan.", "La conclusión debe mencionar al menos una evidencia."],
+    criterios: ["Formula una predicción explicando su razonamiento.", "Registra los resultados de forma ordenada.", "Compara la predicción con la evidencia obtenida.", "Comunica una conclusión sustentada en los resultados."],
+    preguntas: ["¿Qué cambió entre una prueba y otra?", "¿Qué evidencia contradijo su primera idea?", "¿Cómo harían la prueba más confiable?"],
   },
   {
     id: "debate-acido-base",
     title: "El gran debate ácido-base",
-    subject: "quimica",
+    subject: "quimica", area: "Ciencia y Tecnología", teamSize: "4 o 5 estudiantes",
     grades: ["secundaria"],
-    desc: "Cada equipo analiza información sobre una mezcla, determina si es ácida, básica o neutra y argumenta su respuesta frente a la clase.",
-    duracion: "30 min",
-    icon: FlaskConical,
-  },
-  {
-    id: "arma-celula",
-    title: "Arma la célula",
-    subject: "biologia",
-    grades: ["primaria"],
-    desc: "Carrera por equipos: usando una lámina como guía, cada equipo ubica tarjetas con los nombres de las partes de la célula en el lugar correcto.",
-    duracion: "20 min",
-    icon: Dna,
+    desc: "Analicen evidencias de sustancias cotidianas y defiendan una clasificación científica.",
+    duracion: "35 min", icon: FlaskConical, competencia: CNEB.indaga,
+    mision: "Clasificar muestras como ácidas, básicas o neutras y convencer a un jurado usando datos, no suposiciones.", producto: "Panel de clasificación con argumentos y evidencias.",
+    roles: ["Coordinador/a", "Analista de datos", "Responsable de seguridad", "Portavoz"], materiales: ["Tarjetas con resultados de pH", "Ficha de análisis", "Papelote", "Plumones"],
+    preparacion: ["Prepara tarjetas con sustancias conocidas y datos de pH seguros.", "Organiza una mesa por equipo.", "Define normas de seguridad; no se prueban sustancias."],
+    pasos: ["Entrega un caso y tarjetas de evidencia a cada equipo.", "Los equipos interpretan la escala de pH y clasifican las muestras.", "Construyen un argumento con afirmación, evidencia y razonamiento.", "Intercambian una tarjeta con otro equipo para revisar su clasificación.", "Presentan y responden una objeción del jurado."],
+    reglas: ["No se manipulan ni prueban sustancias reales.", "Cada conclusión debe citar un dato de pH.", "Las discrepancias se resuelven revisando evidencia."], criterios: ["Interpreta correctamente datos de la escala de pH.", "Clasifica las muestras de manera coherente.", "Sustenta su conclusión con evidencia.", "Participa respetando los roles del equipo."], preguntas: ["¿Qué dato fue decisivo?", "¿Una sustancia puede clasificarse solo por su apariencia?", "¿Cómo mejorarían su argumento?"],
   },
   {
     id: "torre-mas-alta",
     title: "La torre más alta con menos material",
-    subject: "ingenieria",
+    subject: "ingenieria", area: "Ciencia y Tecnología", teamSize: "4 estudiantes",
     grades: ["primaria", "secundaria"],
-    desc: "Reto de ingeniería en equipos: construir la torre más alta posible usando la misma cantidad limitada de materiales, sin que se caiga en 10 segundos.",
-    duracion: "25 min",
-    icon: Cog,
+    desc: "Diseñen, construyan y mejoren una estructura estable utilizando recursos limitados.",
+    duracion: "45 min", icon: Cog, competencia: CNEB.disena,
+    mision: "Construir la torre autónoma más alta posible con la misma cantidad de materiales para todos los equipos.", producto: "Prototipo estable, boceto y explicación de una mejora realizada.",
+    roles: ["Diseñador/a", "Constructor/a", "Responsable de recursos", "Evaluador/a"], materiales: ["20 hojas de papel por equipo", "50 cm de cinta adhesiva", "Regla", "Ficha de diseño"],
+    preparacion: ["Entrega exactamente la misma cantidad de materiales.", "Delimita una zona de construcción.", "Prepara una regla de medición y una superficie plana."],
+    pasos: ["Presenta restricciones y condición de éxito.", "Cada equipo dibuja un diseño antes de tocar los materiales.", "Construyen una primera versión y registran su altura.", "Realizan una prueba de estabilidad de 10 segundos.", "Identifican una falla, mejoran el prototipo y vuelven a medir.", "Comparan soluciones explicando qué decisión dio estabilidad."],
+    reglas: ["La torre debe sostenerse sin apoyo humano.", "No se entregan materiales adicionales.", "Debe existir un boceto y una mejora documentada."], criterios: ["Propone un diseño acorde con las restricciones.", "Utiliza los materiales de forma eficiente.", "Prueba e identifica fallas del prototipo.", "Justifica la mejora aplicada a la estructura."], preguntas: ["¿Qué parte soporta mayor carga?", "¿Por qué una base más ancha puede ayudar?", "¿Qué cambiarían con una tercera oportunidad?"],
+  },
+  {
+    id:"puente-papel", title:"Un puente que sí resiste", subject:"ingenieria", area:"Ciencia y Tecnología", teamSize:"4 estudiantes", grades:["primaria","secundaria"], desc:"Construyan un puente de papel capaz de soportar la mayor carga posible.", duracion:"45 min", icon:Layers, competencia:CNEB.disena,
+    mision:"Crear un puente de papel que cubra 25 cm y soporte al menos diez monedas sin colapsar.", producto:"Prototipo, registro de pruebas y explicación técnica.", roles:["Diseñador/a","Constructor/a","Encargado/a de pruebas","Registrador/a"], materiales:["6 hojas de papel","30 cm de cinta","Dos apoyos","Monedas o fichas iguales","Regla"], preparacion:["Coloca dos apoyos separados 25 cm.","Entrega materiales equivalentes.","Prepara una tabla para registrar cada prueba."], pasos:["Analicen el reto y propongan dos formas de reforzar el papel.","Elijan una alternativa y dibujen el diseño.","Construyan sin superar los materiales asignados.","Añadan carga de una en una y registren el máximo.","Rediseñen una parte y realicen la prueba final.","Expliquen qué forma estructural mejoró la resistencia."], reglas:["El puente solo puede apoyarse en los extremos.","La carga se coloca en el centro.","Toda mejora debe registrarse."], criterios:["Representa una alternativa mediante un boceto.","Construye respetando las restricciones.","Registra datos de las pruebas.","Explica la relación entre forma y resistencia."], preguntas:["¿Dónde comenzó a deformarse?","¿Qué forma distribuyó mejor el peso?","¿Qué dato demuestra que mejoraron?"],
+  },
+  {
+    id:"agua-comunidad", title:"Cada gota cuenta", subject:"tecnologia", area:"Ciencia y Tecnología", teamSize:"5 estudiantes", grades:["primaria","secundaria"], desc:"Diseñen una solución realista para reducir el desperdicio de agua en la escuela.", duracion:"60 min", icon:Target, competencia:CNEB.disena,
+    mision:"Detectar una situación de desperdicio de agua y presentar una solución viable para la comunidad educativa.", producto:"Propuesta ilustrada o prototipo sencillo con plan de aplicación.", roles:["Observador/a","Investigador/a","Diseñador/a","Comunicador/a","Evaluador/a"], materiales:["Plano o croquis de la escuela","Papelotes","Plumones","Material reciclado opcional"], preparacion:["Define espacios seguros que puedan observarse.","Prepara preguntas para entrevistar a usuarios.","Aclara que no se manipulan conexiones de agua."], pasos:["Identifiquen dónde y cómo se usa el agua.","Seleccionen un problema observable y describan a quién afecta.","Propongan tres ideas y elijan una con criterios de impacto y viabilidad.","Representen la solución mediante un boceto o prototipo.","Reciban retroalimentación de otro equipo y mejoren.","Presenten la solución y una acción concreta para implementarla."], reglas:["La propuesta debe ser segura y realizable.","Debe responder a una evidencia observada.","Todo integrante aporta en la presentación o producto."], criterios:["Define un problema concreto del entorno.","Propone una solución relacionada con sus causas.","Representa y mejora la propuesta.","Comunica beneficios y condiciones de aplicación."], preguntas:["¿Qué evidencia muestra que existe el problema?","¿Quién utilizará la solución?","¿Qué podría impedir que funcione?"],
+  },
+  {
+    id:"especie-local", title:"Guardianes de una especie local", subject:"biologia", area:"Ciencia y Tecnología", teamSize:"4 estudiantes", grades:["primaria","secundaria"], desc:"Investiguen una especie de su región y creen una acción para promover su cuidado.", duracion:"50 min", icon:Sparkles, competencia:CNEB.explica,
+    mision:"Explicar por qué una especie local es importante y diseñar un mensaje de protección basado en información confiable.", producto:"Campaña breve: afiche, audio, exposición o mural informativo.", roles:["Investigador/a","Verificador/a de información","Diseñador/a","Portavoz"], materiales:["Fuentes seleccionadas por el docente","Fichas","Papelotes o dispositivo disponible","Plumones"], preparacion:["Selecciona fuentes breves y confiables.","Evita atribuir amenazas no verificadas a la comunidad.","Ofrece opciones de producto para atender la diversidad."], pasos:["Elijan una especie pertinente al contexto regional.","Identifiquen características, hábitat e importancia.","Distingan datos comprobables de opiniones.","Definan una audiencia y un mensaje de cuidado.","Creen el producto y realicen una revisión cruzada.","Presenten la campaña y acuerden una acción posible."], reglas:["Toda afirmación debe provenir de las fuentes entregadas.","El mensaje evita culpabilizar a personas o comunidades.","La acción propuesta debe ser posible para estudiantes."], criterios:["Selecciona información relevante y confiable.","Explica la importancia de la especie.","Propone una acción coherente de cuidado.","Adapta el mensaje a una audiencia concreta."], preguntas:["¿Qué dato podría sorprender a su audiencia?","¿Cómo saben que la fuente es confiable?","¿Qué acción sí puede realizar su escuela?"],
   },
 ];
 
@@ -1742,13 +1792,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
             <Printer size={16} /> Imprimir / guardar como PDF
           </button>
           <button
-            onClick={() =>
-              downloadWord(
-                `${activity.id}-${grade}.docx`,
-                `Nivel: ${v.nivel}\nTiempo sugerido: ${activity.detalle.tiempo}\nOrganización: ${activity.detalle.organizacion}\n\nCompetencia CNEB:\n${activity.competencia}\n\nEl reto:\n${v.objetivo}\n\nAntes de empezar:\n${activity.detalle.preparacion.map((p,i)=>`${i+1}. ${p}`).join("\n")}\n\nMateriales:\n${v.materiales.map((m) => "- " + m).join("\n")}\n\n¿Cómo se juega?\n${v.pasos.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n\nPreguntas para acompañar:\n${activity.detalle.acompanamiento.map(p=>`- ${p}`).join("\n")}\n\nCondición de éxito:\n${v.condicion}\n\nEvidencias que debe recoger:\n${activity.detalle.evidencias.map(p=>`- ${p}`).join("\n")}\n\nVariación — más difícil:\n${v.variacion}\n\nPregunta para reflexionar:\n${v.reflexion}`,
-                activity.title
-              )
-            }
+            onClick={() => downloadActivityWord(activity,grade)}
             className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold"
             style={{ background: accent, color: "#0B2B29" }}
           >
@@ -1760,24 +1804,60 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
   );
 }
 
-function RetoCard({ reto }) {
+function challengeText(reto){
+  const list=(title,items)=>`\n${title.toUpperCase()}\n${(items||[]).map((item,index)=>`${index+1}. ${item}`).join("\n")}`;
+  return `MISIÓN\n${reto.mision}\n\nOBJETIVO DE APRENDIZAJE\n${reto.objetivo||reto.competencia}\n\nCOMPETENCIA CNEB\n${reto.competencia}\n\nORGANIZACIÓN\nDuración: ${reto.duracion}\nEquipo: ${reto.equipo||reto.teamSize}${list("Roles",reto.roles)}${list("Materiales",reto.materiales)}${list("Preparación del docente",reto.preparacion)}${list("Desarrollo paso a paso",reto.pasos)}${list("Reglas",reto.reglas)}\n\nPRODUCTO O EVIDENCIA\n${reto.producto}${list("Criterios observables",reto.criterios)}${list("Preguntas de reflexión",reto.preguntas)}${reto.adaptacionesDUA?list("Apoyos DUA",reto.adaptacionesDUA):""}`;
+}
+
+function RetoCard({ reto, onOpen }) {
   const subj = SUBJECTS[reto.subject];
   const Icon = reto.icon;
   return (
-    <div className="rounded-xl p-5" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
-      <div className="flex items-center justify-between mb-3">
-        <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: "rgba(15,61,58,0.05)" }}>
+    <article className="challenge-card">
+      <div className="challenge-card-top">
+        <div>
           <Icon size={17} color={subj.color} />
         </div>
-        <span className="text-xs inline-flex items-center gap-1" style={{ color: C.muted }}><Clock size={12} /> {reto.duracion}</span>
+        <span><Clock size={12} /> {reto.duracion}</span>
       </div>
-      <h4 className="text-base font-semibold mb-1.5" style={{ color: C.text, fontFamily: "'Space Grotesk', sans-serif" }}>{reto.title}</h4>
-      <p className="text-sm mb-3" style={{ color: C.muted }}>{reto.desc}</p>
-      <div className="flex gap-1.5">
-        {reto.grades.map((g) => <GradeTag key={g} grade={g} />)}
-      </div>
-    </div>
+      <small>{reto.area} · {reto.teamSize}</small><h3>{reto.title}</h3><p>{reto.desc}</p>
+      <div className="challenge-card-meta"><span><Target size={13}/> {reto.producto}</span></div>
+      <footer><div>{reto.grades.map(g=><GradeTag key={g} grade={g}/>)}</div><button onClick={onOpen}>Ver reto <ArrowRight size={14}/></button></footer>
+    </article>
   );
+}
+
+function RetoModal({reto,onClose,onCreateInstrument}){
+  const Icon=reto.icon||Users;
+  return <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><div className="challenge-modal">
+    <header><button onClick={onClose} aria-label="Cerrar"><X size={19}/></button><span><Icon size={20}/></span><div><small>RETO COLABORATIVO · {reto.area||"Área curricular"}</small><h2>{reto.title||reto.titulo}</h2><p><Clock size={13}/> {reto.duracion} <Users size={13}/> {reto.equipo||reto.teamSize}</p></div></header>
+    <main>
+      <section className="challenge-mission"><small>LA MISIÓN</small><p>{reto.mision}</p></section>
+      <div className="challenge-detail-grid"><section><h3><Target size={16}/> Objetivo y alineación</h3>{reto.objetivo&&<p>{reto.objetivo}</p>}<strong>Competencia CNEB</strong><p>{reto.competencia}</p>{reto.capacidades?.length>0&&<><strong>Capacidades</strong><ul>{reto.capacidades.map((x,i)=><li key={i}>{x}</li>)}</ul></>}</section><section><h3><Users size={16}/> Organización del equipo</h3><strong>Roles sugeridos</strong><ul>{(reto.roles||[]).map((x,i)=><li key={i}>{x}</li>)}</ul><strong>Producto o evidencia</strong><p>{reto.producto}</p></section></div>
+      <section className="challenge-detail"><h3>Antes de comenzar</h3><div className="challenge-two-cols"><div><strong>Materiales</strong><ul>{(reto.materiales||[]).map((x,i)=><li key={i}>{x}</li>)}</ul></div><div><strong>Preparación docente</strong><ul>{(reto.preparacion||[]).map((x,i)=><li key={i}>{x}</li>)}</ul></div></div></section>
+      <section className="challenge-detail"><h3>Desarrollo paso a paso</h3><ol>{(reto.pasos||[]).map((x,i)=><li key={i}><b>{i+1}</b><span>{x}</span></li>)}</ol></section>
+      <div className="challenge-detail-grid"><section><h3>Reglas del reto</h3><ul>{(reto.reglas||[]).map((x,i)=><li key={i}>{x}</li>)}</ul></section><section><h3>Criterios observables</h3><ul>{(reto.criterios||[]).map((x,i)=><li key={i}>{x}</li>)}</ul></section></div>
+      <section className="challenge-reflection"><h3>Preguntas para reflexionar</h3>{(reto.preguntas||[]).map((x,i)=><p key={i}>“{x}”</p>)}</section>
+      {reto.adaptacionesDUA?.length>0&&<section className="challenge-detail"><h3>Apoyos para la diversidad</h3><ul>{reto.adaptacionesDUA.map((x,i)=><li key={i}>{x}</li>)}</ul></section>}
+    </main>
+    <footer><button onClick={()=>downloadWord(`reto-${(reto.id||reto.titulo||"grupal").toString().toLowerCase().replace(/[^a-z0-9]+/g,"-")}.docx`,challengeText(reto),reto.title||reto.titulo)}><Download size={15}/> Descargar en Word</button><button onClick={onCreateInstrument}><ClipboardList size={15}/> Crear instrumento de evaluación</button></footer>
+  </div></div>;
+}
+
+function ChallengeCreator({profile,preferredGrade,onCreated}){
+  const [form,setForm]=useState({nivel:preferredGrade,grado:preferredGrade==="primaria"?"5.º":"2.º",area:"Ciencia y Tecnología",tema:"",region:"",duracion:"45",estudiantes:"25",integrantes:"4",materiales:"papelotes, plumones y materiales reciclados",competencia:""});
+  const [loading,setLoading]=useState(false); const [error,setError]=useState("");
+  const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
+  async function generate(){
+    if(!form.tema.trim()) return setError("Escribe el tema o problema que deseas trabajar.");
+    setLoading(true);setError("");
+    try{const {data:{session}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"challenge",form})});const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo crear el reto");const reto={...data.challenge,id:`kantu-${Date.now()}`,title:data.challenge.titulo,area:form.area,subject:"tecnologia",grades:[form.nivel],teamSize:data.challenge.equipo,icon:Wand2};await saveTeacherMaterial({tipo:"challenge",titulo:reto.title,form:{...form,grado:form.grado},contenido:reto});onCreated(reto);}catch(e){setError(e.message);}finally{setLoading(false);}
+  }
+  return <div className="challenge-creator"><div className="challenge-creator-intro"><img src="/mascot/kantu-material.png" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Construyamos un reto para tu grupo</h2><p>Completa el contexto del aula. Kantu organizará la misión, los roles, las reglas, la secuencia y los criterios observables.</p></div></div><div className="challenge-form">
+    <label>Nivel<select value={form.nivel} onChange={e=>update("nivel",e.target.value)}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><label>Grado<input value={form.grado} onChange={e=>update("grado",e.target.value)}/></label><label>Área curricular<select value={form.area} onChange={e=>update("area",e.target.value)}>{["Ciencia y Tecnología","Matemática","Comunicación","Personal Social","Arte y Cultura","Educación para el Trabajo"].map(x=><option key={x}>{x}</option>)}</select></label>
+    <label className="wide">Tema, problema o aprendizaje que deseas trabajar *<textarea value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Reducir el desperdicio de agua en nuestra escuela"/></label><label>Región o contexto<input value={form.region} onChange={e=>update("region",e.target.value)} placeholder="Ej.: Áncash, contexto rural"/></label><label>Duración (minutos)<input type="number" min="20" value={form.duracion} onChange={e=>update("duracion",e.target.value)}/></label><label>N.º de estudiantes<input type="number" min="4" value={form.estudiantes} onChange={e=>update("estudiantes",e.target.value)}/></label><label>Integrantes por equipo<input type="number" min="2" max="8" value={form.integrantes} onChange={e=>update("integrantes",e.target.value)}/></label><label className="wide">Materiales disponibles<textarea value={form.materiales} onChange={e=>update("materiales",e.target.value)}/></label><label className="wide">Competencia CNEB <small>Opcional: Kantu puede sugerirla</small><input value={form.competencia} onChange={e=>update("competencia",e.target.value)} placeholder="Déjalo vacío para recibir una sugerencia"/></label>
+    {error&&<p className="challenge-error">{error}</p>}<button className="challenge-generate" onClick={generate} disabled={loading}><Sparkles size={17}/>{loading?"Kantu está construyendo el reto…":"Crear reto con Kantu"}</button>
+  </div>{loading&&<div className="kantu-generation-overlay"><div className="kantu-working kantu-working--overlay"><div className="kantu-working__visual"><img src="/mascot/kantu-material.png" alt="Kantu trabajando"/><span className="kantu-orbit"><Sparkles size={17}/></span></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando la misión y los equipos…</h4><p>También estoy alineando el reto al CNEB y redactando criterios que puedas observar durante la actividad.</p><div className="kantu-progress"><i/><i/><i/></div></div></div></div>}</div>;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1842,6 +1922,8 @@ function SciVerseApp({ profile, onLogout }) {
   const [gradeFilter, setGradeFilter] = useState(preferredGrade);
   const [subjectFilter, setSubjectFilter] = useState("todos");
   const [selected, setSelected] = useState(null);
+  const [selectedReto, setSelectedReto] = useState(null);
+  const [retoView, setRetoView] = useState("explorar");
   const [modalGrade, setModalGrade] = useState(preferredGrade);
   const [accountOpen, setAccountOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("inicio");
@@ -1863,7 +1945,7 @@ function SciVerseApp({ profile, onLogout }) {
     return()=>window.removeEventListener("sciverse:material-created",refresh);
   },[loadTeacherMaterials]);
 
-  const materialTypeLabel={session:"Sesión de aprendizaje",project:"Proyecto STEAM",rubric:"Rúbrica",checklist:"Lista de cotejo"};
+  const materialTypeLabel={session:"Sesión de aprendizaje",project:"Proyecto STEAM",rubric:"Rúbrica",checklist:"Lista de cotejo",challenge:"Reto grupal"};
   const formatMaterialDate=value=>new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(value));
 
   const filtered = ACTIVITIES.filter((a) => a.versions[heroGrade] && (subjectFilter === "todos" || a.subject === subjectFilter));
@@ -1978,24 +2060,12 @@ function SciVerseApp({ profile, onLogout }) {
       </section>}
 
       {/* RETOS GRUPALES */}
-      {activeSection === "retos" && <section id="retos" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-          <div>
-            <span className="text-xs tracking-widest uppercase" style={{ color: C.violet, fontFamily: "'JetBrains Mono', monospace" }}>Para el aula completa</span>
-            <h2 className="text-2xl md:text-3xl font-semibold mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Retos grupales</h2>
-          </div>
-          <div className="flex gap-2">
-            {["todos", "primaria", "secundaria"].map((g) => (
-              <button key={g} onClick={() => setGradeFilter(g)} className="px-3 py-1.5 rounded-full text-sm font-medium capitalize" style={{ background: gradeFilter === g ? (g === "primaria" ? C.amber : g === "secundaria" ? C.cyan : C.violet) : "transparent", color: gradeFilter === g ? "#0B2B29" : C.muted, border: `1px solid ${C.line}` }}>
-                {g}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {filteredRetos.map((r) => <RetoCard key={r.id} reto={r} />)}
-        </div>
+      {activeSection === "retos" && <section id="retos" className="challenge-page">
+        <header className="challenge-hero"><div><span><Users size={14}/> APRENDIZAJE COLABORATIVO</span><h1>Retos para pensar, crear y resolver en equipo</h1><p>Dinámicas completas con roles, reglas, producto final y criterios observables para aplicar en el aula.</p></div><div className="challenge-main-tabs"><button className={retoView==="explorar"?"active":""} onClick={()=>setRetoView("explorar")}><Layers size={17}/> Explorar retos</button><button className={retoView==="crear"?"active":""} onClick={()=>setRetoView("crear")}><Wand2 size={17}/> Crear reto con Kantu</button></div></header>
+        {retoView==="explorar"?<>
+          <div className="challenge-filter"><div><small>NIVEL</small>{["todos","primaria","secundaria"].map(g=><button key={g} className={gradeFilter===g?"active":""} onClick={()=>setGradeFilter(g)}>{g==="todos"?"Todos":g[0].toUpperCase()+g.slice(1)}</button>)}</div><span>{filteredRetos.length} retos disponibles</span></div>
+          <div className="challenge-grid">{filteredRetos.map(r=><RetoCard key={r.id} reto={r} onOpen={()=>setSelectedReto(r)}/>)}</div>
+        </>:<ChallengeCreator profile={profile} preferredGrade={preferredGrade} onCreated={reto=>{setSelectedReto(reto);loadTeacherMaterials();}}/>}
       </section>}
 
       {/* GENERADOR STEAM */}
@@ -2048,6 +2118,7 @@ function SciVerseApp({ profile, onLogout }) {
       </footer>
 
       {selected && <ActivityModal activity={selected} grade={modalGrade} setGrade={setModalGrade} onClose={() => setSelected(null)} />}
+      {selectedReto && <RetoModal reto={selectedReto} profile={profile} onClose={()=>setSelectedReto(null)} onCreateInstrument={()=>{setSelectedReto(null);setActiveSection("crear");}} />}
       {accountOpen && <TeacherAccountModal profile={profile} onClose={() => setAccountOpen(false)} />}
     </div>
   );
