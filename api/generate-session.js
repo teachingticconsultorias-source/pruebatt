@@ -6,7 +6,7 @@
 // Devuelve la respuesta normalizada en la misma forma que espera el cliente:
 // { content: [ { type: "text", text: "..." } ] }
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3.6-flash";
 
 const SESSION_SCHEMA = {
   type: "object",
