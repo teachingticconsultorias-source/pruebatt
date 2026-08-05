@@ -1,5 +1,4 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import * as THREE from "three";
 import { supabase } from "./supabaseClient.js";
 import AuthGate from "./AuthGate.jsx";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
@@ -51,6 +50,7 @@ import {
   Link2,
   Copy,
   HardDrive,
+  Pencil,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -632,293 +632,6 @@ const TEMPLATES = [
 ];
 
 /* ---------------------------------------------------------------------- */
-/* 3D CELL DATA                                                            */
-/* ---------------------------------------------------------------------- */
-
-const CELL_TYPES = {
-  vegetal: {
-    label: "Célula vegetal",
-    parts: [
-      { kind: "sphere", args: [2.75, 20, 20], pos: [0, 0, 0], color: 0x2d6a4f, opacity: 0.12, wire: true },
-      { kind: "sphere", args: [2.6, 24, 24], pos: [0, 0, 0], color: 0x74c69d, opacity: 0.14 },
-      { kind: "sphere", args: [0.7, 20, 20], pos: [0.6, 0.3, 0], color: 0x9b5de5, opacity: 1, name: "Núcleo", desc: "Controla las actividades de la célula y contiene el ADN." },
-      { kind: "sphere", args: [1.05, 20, 20], pos: [-0.7, -0.5, -0.2], color: 0x4ea8de, opacity: 0.4, name: "Vacuola", desc: "Almacena agua y nutrientes, y da soporte a la célula." },
-      { kind: "sphere", args: [0.32, 12, 12], pos: [1.4, -0.6, 0.8], color: 0x2b9348, opacity: 1, name: "Cloroplasto", desc: "Realiza la fotosíntesis: transforma la luz en energía." },
-      { kind: "sphere", args: [0.3, 12, 12], pos: [-1.3, 0.9, 0.6], color: 0x2b9348, opacity: 1, name: "Cloroplasto", desc: "Realiza la fotosíntesis: transforma la luz en energía." },
-      { kind: "sphere", args: [0.28, 12, 12], pos: [0.3, -1.5, -0.9], color: 0x2b9348, opacity: 1, name: "Cloroplasto", desc: "Realiza la fotosíntesis: transforma la luz en energía." },
-      { kind: "sphere", args: [0.22, 10, 10], pos: [-0.4, -1.2, 1.1], color: 0xf3722c, opacity: 1, name: "Mitocondria", desc: "Produce la energía que la célula necesita para funcionar." },
-      { kind: "sphere", args: [0.2, 10, 10], pos: [1.2, 1.1, -0.7], color: 0xf3722c, opacity: 1, name: "Mitocondria", desc: "Produce la energía que la célula necesita para funcionar." },
-    ],
-  },
-  animal: {
-    label: "Célula animal",
-    parts: [
-      { kind: "sphere", args: [2.3, 24, 24], pos: [0, 0, 0], color: 0xe0a3c4, opacity: 0.16 },
-      { kind: "sphere", args: [0.75, 20, 20], pos: [0.3, 0.2, 0], color: 0x9b5de5, opacity: 1, name: "Núcleo", desc: "Controla las actividades de la célula y contiene el ADN." },
-      { kind: "torus", args: [0.55, 0.09, 10, 20], pos: [-1.0, 0.5, 0.3], rot: [1.3, 0.4, 0], color: 0xffd166, opacity: 1, name: "Aparato de Golgi", desc: "Empaqueta y distribuye las proteínas producidas en la célula." },
-      { kind: "torus", args: [0.45, 0.08, 10, 20], pos: [-1.0, 0.7, 0.3], rot: [1.3, 0.4, 0], color: 0xffd166, opacity: 1, name: "Aparato de Golgi", desc: "Empaqueta y distribuye las proteínas producidas en la célula." },
-      { kind: "sphere", args: [0.22, 10, 10], pos: [1.2, -0.8, 0.6], color: 0xf3722c, opacity: 1, name: "Mitocondria", desc: "Produce la energía que la célula necesita para funcionar." },
-      { kind: "sphere", args: [0.2, 10, 10], pos: [0.8, 1.0, -0.9], color: 0xf3722c, opacity: 1, name: "Mitocondria", desc: "Produce la energía que la célula necesita para funcionar." },
-      { kind: "sphere", args: [0.15, 8, 8], pos: [-0.9, -1.0, -0.5], color: 0xef476f, opacity: 1, name: "Lisosoma", desc: "Digiere desechos y sustancias dentro de la célula." },
-      { kind: "sphere", args: [0.13, 8, 8], pos: [-0.5, -1.3, 0.7], color: 0xef476f, opacity: 1, name: "Lisosoma", desc: "Digiere desechos y sustancias dentro de la célula." },
-    ],
-  },
-  neurona: {
-    label: "Neurona",
-    parts: [
-      { kind: "sphere", args: [0.9, 22, 22], pos: [0, 0, 0], color: 0xf4d35e, opacity: 0.9, name: "Soma", desc: "Cuerpo celular de la neurona; contiene el núcleo y los organelos." },
-      { kind: "sphere", args: [0.35, 16, 16], pos: [0, 0.1, 0], color: 0x9b5de5, opacity: 1, name: "Núcleo", desc: "Contiene el ADN que dirige la actividad de la neurona." },
-      { kind: "cylinder", args: [0.12, 0.16, 3.2, 12], pos: [2.4, -0.1, 0], rot: [0, 0, Math.PI / 2], color: 0xf9e79f, opacity: 1, name: "Axón", desc: "Transmite el impulso nervioso hacia otras neuronas." },
-      { kind: "cylinder", args: [0.07, 0.03, 0.9, 8], pos: [-0.9, 0.7, 0.2], rot: [0, 0, 0.8], color: 0xf9e79f, opacity: 1, name: "Dendritas", desc: "Reciben las señales que llegan de otras neuronas." },
-      { kind: "cylinder", args: [0.07, 0.03, 0.9, 8], pos: [-0.9, -0.4, 0.4], rot: [0, 0, -0.7], color: 0xf9e79f, opacity: 1, name: "Dendritas", desc: "Reciben las señales que llegan de otras neuronas." },
-      { kind: "cylinder", args: [0.06, 0.03, 0.7, 8], pos: [-0.7, 0.1, -0.7], rot: [0.9, 0, 0.3], color: 0xf9e79f, opacity: 1, name: "Dendritas", desc: "Reciben las señales que llegan de otras neuronas." },
-    ],
-  },
-};
-
-/* ---------------------------------------------------------------------- */
-/* HELPERS                                                                  */
-/* ---------------------------------------------------------------------- */
-
-async function downloadWord(filename, content, documentTitle = "Recurso educativo SciVerse") {
-  const lines = String(content).split("\n");
-  const paragraphs = [
-    new Paragraph({
-      text: documentTitle,
-      heading: HeadingLevel.TITLE,
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 300 },
-    }),
-    ...lines.map((rawLine) => {
-      const line = rawLine.trim();
-      if (!line) return new Paragraph({ text: "", spacing: { after: 80 } });
-      if (line.startsWith("- ")) return new Paragraph({ text: line.slice(2), bullet: { level: 0 }, spacing: { after: 70 } });
-      if (/^\d+\.\s/.test(line)) return new Paragraph({ text: line, spacing: { after: 90 } });
-      if (line.endsWith(":")) return new Paragraph({ text: line.slice(0, -1), heading: HeadingLevel.HEADING_2, spacing: { before: 180, after: 90 } });
-      if (line.length < 70 && line === line.toUpperCase() && /[A-ZÁÉÍÓÚÑ]/.test(line)) return new Paragraph({ text: line, heading: HeadingLevel.HEADING_2, spacing: { before: 180, after: 90 } });
-      return new Paragraph({ children: [new TextRun({ text: line, size: 22 })], spacing: { after: 100 }, alignment: AlignmentType.JUSTIFIED });
-    }),
-    new Paragraph({ children: [new TextRun({ text: "Generado con Kantu en SciVerse · Teaching TIC", italics: true, color: "4F7773", size: 18 })], spacing: { before: 300 }, alignment: AlignmentType.CENTER }),
-  ];
-  const doc = new Document({
-    creator: "Teaching TIC",
-    title: documentTitle,
-    description: "Recurso educativo editable generado en SciVerse",
-    sections: [{ properties: {}, children: paragraphs }],
-  });
-  const blob = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename.endsWith(".docx") ? filename : `${filename}.docx`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-/* ---------------------------------------------------------------------- */
-/* 3D CELL VIEWER                                                           */
-/* ---------------------------------------------------------------------- */
-
-function Cell3DViewer() {
-  const mountRef = useRef(null);
-  const stateRef = useRef({});
-  const [cellType, setCellType] = useState("vegetal");
-  const [selected, setSelected] = useState(null);
-
-  useEffect(() => {
-    const mount = mountRef.current;
-    if (!mount) return;
-
-    const width = mount.clientWidth;
-    const height = 420;
-
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 0, 6.5);
-
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(width, height);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    mount.appendChild(renderer.domElement);
-
-    scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-    const point = new THREE.PointLight(0xffffff, 1.1);
-    point.position.set(4, 4, 6);
-    scene.add(point);
-    const point2 = new THREE.PointLight(0x00f5c4, 0.4);
-    point2.position.set(-5, -3, -4);
-    scene.add(point2);
-
-    const group = new THREE.Group();
-    scene.add(group);
-    const raycastTargets = [];
-
-    const raycaster = new THREE.Raycaster();
-    const pointer = new THREE.Vector2();
-
-    let dragging = false;
-    let moved = false;
-    let lastX = 0;
-    let lastY = 0;
-    let rafId;
-
-    function onPointerDown(e) {
-      dragging = true;
-      moved = false;
-      lastX = e.clientX;
-      lastY = e.clientY;
-    }
-    function onPointerMove(e) {
-      if (!dragging) return;
-      const dx = e.clientX - lastX;
-      const dy = e.clientY - lastY;
-      if (Math.abs(dx) + Math.abs(dy) > 2) moved = true;
-      group.rotation.y += dx * 0.006;
-      group.rotation.x = Math.max(-1, Math.min(1, group.rotation.x + dy * 0.006));
-      lastX = e.clientX;
-      lastY = e.clientY;
-    }
-    function onPointerUp(e) {
-      dragging = false;
-      if (moved) return;
-      const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-      raycaster.setFromCamera(pointer, camera);
-      const hits = raycaster.intersectObjects(raycastTargets, false);
-      if (hits.length > 0) {
-        setSelected(hits[0].object.userData.info);
-      }
-    }
-    function onWheel(e) {
-      e.preventDefault();
-      camera.position.z = Math.max(3.5, Math.min(9, camera.position.z + e.deltaY * 0.002));
-    }
-
-    renderer.domElement.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-    renderer.domElement.addEventListener("wheel", onWheel, { passive: false });
-
-    function animate() {
-      if (!dragging) group.rotation.y += 0.0025;
-      renderer.render(scene, camera);
-      rafId = requestAnimationFrame(animate);
-    }
-    animate();
-
-    function onResize() {
-      const w = mount.clientWidth;
-      camera.aspect = w / height;
-      camera.updateProjectionMatrix();
-      renderer.setSize(w, height);
-    }
-    window.addEventListener("resize", onResize);
-
-    stateRef.current = { scene, camera, renderer, group, raycastTargets, onResize, onPointerDown, onPointerMove, onPointerUp, onWheel, rafId: () => rafId };
-
-    return () => {
-      cancelAnimationFrame(rafId);
-      window.removeEventListener("resize", onResize);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
-      renderer.domElement.removeEventListener("wheel", onWheel);
-      scene.traverse((obj) => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
-      });
-      renderer.dispose();
-      if (mount.contains(renderer.domElement)) mount.removeChild(renderer.domElement);
-    };
-  }, []);
-
-  // rebuild geometry when cell type changes
-  useEffect(() => {
-    const st = stateRef.current;
-    if (!st.group) return;
-    setSelected(null);
-
-    while (st.group.children.length) {
-      const child = st.group.children.pop();
-      if (child.geometry) child.geometry.dispose();
-      if (child.material) child.material.dispose();
-    }
-    st.raycastTargets.length = 0;
-
-    const def = CELL_TYPES[cellType];
-    def.parts.forEach((p) => {
-      let geo;
-      if (p.kind === "sphere") geo = new THREE.SphereGeometry(...p.args);
-      else if (p.kind === "cylinder") geo = new THREE.CylinderGeometry(...p.args);
-      else if (p.kind === "torus") geo = new THREE.TorusGeometry(...p.args);
-      const mat = new THREE.MeshPhongMaterial({
-        color: p.color,
-        transparent: p.opacity < 1,
-        opacity: p.opacity,
-        wireframe: !!p.wire,
-        shininess: 40,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(...p.pos);
-      if (p.rot) mesh.rotation.set(...p.rot);
-      if (p.name) {
-        mesh.userData.info = { name: p.name, desc: p.desc };
-        st.raycastTargets.push(mesh);
-      }
-      st.group.add(mesh);
-    });
-  }, [cellType]);
-
-  return (
-    <div className="rounded-2xl overflow-hidden" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5">
-        <div className="flex items-center gap-2">
-          {Object.entries(CELL_TYPES).map(([key, def]) => (
-            <button
-              key={key}
-              onClick={() => setCellType(key)}
-              className="px-3 py-1.5 rounded-full text-sm font-medium"
-              style={{
-                background: cellType === key ? "#6FE6A8" : "transparent",
-                color: cellType === key ? "#0B2B29" : C.muted,
-                border: `1px solid ${C.line}`,
-              }}
-            >
-              {def.label}
-            </button>
-          ))}
-        </div>
-        <span className="text-xs inline-flex items-center gap-1.5" style={{ color: C.muted }}>
-          <RotateCw size={13} /> Arrastra para girar · rueda para acercar · toca un organelo
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_260px] gap-0 mt-4">
-        <div ref={mountRef} style={{ width: "100%", height: 420, cursor: "grab" }} />
-        <div className="p-5 border-t md:border-t-0 md:border-l" style={{ borderColor: C.line }}>
-          {selected ? (
-            <>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: "#6FE6A8" }}>
-                {selected.name}
-              </p>
-              <p className="text-sm leading-relaxed" style={{ color: C.text }}>
-                {selected.desc}
-              </p>
-            </>
-          ) : (
-            <p className="text-sm leading-relaxed" style={{ color: C.muted }}>
-              Selecciona una estructura para conocer su nombre y su función.
-            </p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 /* ---------------------------------------------------------------------- */
 /* STEAM SESSION GENERATOR                                                  */
 /* ---------------------------------------------------------------------- */
@@ -964,6 +677,14 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [suggesting, setSuggesting] = useState(null);
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const loadingMessages = [`Kantu está analizando la información curricular`, `Está organizando la ${documentName}`, "Está revisando competencias, capacidades y criterios", "Está preparando el archivo para que puedas revisarlo y descargarlo"];
+
+  useEffect(() => {
+    if (!loading) { setLoadingMessageIndex(0); return undefined; }
+    const timer = window.setInterval(() => setLoadingMessageIndex((current) => (current + 1) % loadingMessages.length), 2600);
+    return () => window.clearInterval(timer);
+  }, [loading, documentType]);
 
   const grades = form.nivel === "Primaria" ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"] : ["1.º", "2.º", "3.º", "4.º", "5.º"];
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
@@ -1086,6 +807,11 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
       {error&&<p className="wizard-error">{error}</p>}
       <div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":`Generar ${documentName} con IA`}</button>}</div>
 
+      {loading && <div className="kantu-working" role="status" aria-live="polite">
+        <div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img src={documentType === "session" ? "/mascot/kantu-session.png" : "/mascot/kantu-material.png"} alt="Kantu trabajando en el recurso educativo"/></div>
+        <div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>{loadingMessages[loadingMessageIndex]}…</h4><p>Esto puede tomar unos segundos. Puedes dejar esta pantalla abierta mientras termina.</p><div className="kantu-progress"><i/><i/><i/></div></div>
+      </div>}
+
       {result && (
         <div className="mt-6 rounded-xl p-5" style={{ background: "rgba(15,61,58,0.03)", border: `1px solid ${C.line}` }}>
           <h4 className="text-lg font-semibold mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
@@ -1162,6 +888,63 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session" })
   );
 }
 
+function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentType = "checklist" }) {
+  const isRubric = instrumentType === "rubric";
+  const instrumentName = isRubric ? "rúbrica" : "lista de cotejo";
+  const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
+  const [step, setStep] = useState(1);
+  const [form, setForm] = useState({ nivel: initialLevel, grado: initialLevel === "Primaria" ? "3.º" : "1.º", area: "Ciencia y Tecnología", region: "", tema: "", competencia: CNEB.indaga, capacidades: GENERATOR_CAPACITIES[CNEB.indaga], evidencia: "", numeroCriterios: "6" });
+  const [instrument, setInstrument] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [suggesting, setSuggesting] = useState(false);
+  const [error, setError] = useState(null);
+  const grades = form.nivel === "Primaria" ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"] : ["1.º", "2.º", "3.º", "4.º", "5.º"];
+  const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
+  const changeLevel = (nivel) => setForm((current) => ({ ...current, nivel, grado: "1.º" }));
+  const changeArea = (area) => { const competencia = GENERATOR_COMPETENCIES[area][0]; setForm((current) => ({ ...current, area, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] })); };
+  const changeCompetence = (competencia) => setForm((current) => ({ ...current, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] }));
+  const toggleCapacity = (capacity) => setForm((current) => ({ ...current, capacidades: current.capacidades.includes(capacity) ? current.capacidades.filter((item) => item !== capacity) : [...current.capacidades, capacity] }));
+
+  async function getToken() { const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; if (!token) throw new Error("Tu sesión venció. Vuelve a iniciar sesión."); return token; }
+  async function suggestEvidence() {
+    if (!form.tema.trim() || !form.region || !form.capacidades.length) return setError("Completa el tema, la región y las capacidades para que Kantu pueda sugerir la evidencia.");
+    setSuggesting(true); setError(null);
+    try { const token = await getToken(); const response = await fetch("/api/generate-session", { method:"POST", headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`}, body:JSON.stringify({mode:"suggestion",field:"evidencia",form}) }); const data=await response.json(); if(!response.ok) throw new Error(data.error||"No se pudo sugerir la evidencia"); update("evidencia",data.suggestion); } catch(e) { setError(e.message); } finally { setSuggesting(false); }
+  }
+  function continueFlow() {
+    setError(null);
+    if (step === 1 && (!form.nivel || !form.grado || !form.area || !form.region || !form.tema.trim() || !form.competencia || !form.capacidades.length)) return setError("Completa el contexto curricular y selecciona al menos una capacidad.");
+    if (step === 2 && !form.evidencia.trim()) return setError("Escribe la evidencia o solicita una sugerencia a Kantu.");
+    setStep((current) => Math.min(3, current + 1));
+  }
+  async function generateInstrument() {
+    setLoading(true); setError(null); setInstrument(null);
+    try { const token=await getToken(); const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({mode:"instrument",instrumentType,form})}); const data=await response.json(); if(!response.ok) throw new Error(data.error||`No se pudo generar la ${instrumentName}`); if(!data.instrument) throw new Error("El instrumento no llegó completo. Intenta nuevamente."); setInstrument(data.instrument); setEditing(false); } catch(e){setError(e.message);} finally{setLoading(false);}
+  }
+  function updateCriterion(index, key, value) { setInstrument((current) => ({ ...current, criterios: current.criterios.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item) })); }
+  function downloadInstrument() {
+    const criteriaText = instrument.criterios.map((item,index) => isRubric ? `${index+1}. ${item.criterio}\n- Inicio: ${item.inicio}\n- En proceso: ${item.enProceso}\n- Logro esperado: ${item.logroEsperado}\n- Logro destacado: ${item.logroDestacado}` : `${index+1}. ${item.criterio}\n- Sí: ☐   No: ☐   Observaciones: ____________________`).join("\n\n");
+    downloadWord(`${instrumentType}-${form.tema.toLowerCase().replace(/\s+/g,"-").slice(0,30)}.docx`, `Nivel y grado: ${form.nivel} ${form.grado}\nÁrea: ${form.area}\nTema: ${form.tema}\n\nCompetencia evaluada:\n${instrument.competencia}\n\nCapacidades:\n${instrument.capacidades.map((item)=>`- ${item}`).join("\n")}\n\nEvidencia de aprendizaje:\n${instrument.evidencia}\n\nCriterios de evaluación:\n${criteriaText}`, instrument.titulo);
+  }
+
+  return <div className="instrument-builder">
+    <div className="instrument-steps">{["Contexto","Evidencia","Revisión"].map((label,index)=><div key={label} className={step>=index+1?"active":""}><b>{step>index+1?<CheckCircle2 size={14}/>:index+1}</b><span>{label}</span></div>)}</div>
+    {step===1&&<div className="wizard-card"><div className="wizard-card__title"><span><GraduationCap size={18}/></span><div><h4>Contexto del instrumento</h4><p>Kantu utilizará esta información para alinearlo al CNEB.</p></div></div><div className="wizard-fields instrument-context-grid">
+      <label>Nivel *<select value={form.nivel} onChange={e=>changeLevel(e.target.value)}><option>Primaria</option><option>Secundaria</option></select></label><label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label><label>Área *<select value={form.area} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+      <label>Región *<select value={form.region} onChange={e=>update("region",e.target.value)}><option value="">Selecciona una región</option>{PERU_REGIONS.map(r=><option key={r}>{r}</option>)}</select></label><label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Cuidamos el agua de la comunidad"/></label>
+      <label className="wide">Competencia *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
+      <fieldset className="wide capacity-picker"><legend>Capacidades que serán evaluadas *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
+    </div></div>}
+    {step===2&&<div className="wizard-card"><div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Evidencia de aprendizaje</h4><p>Indica qué producirá o realizará el estudiante para demostrar lo aprendido.</p></div></div><div className="evidence-editor"><div><strong>{form.competencia}</strong><small>{form.capacidades.length} capacidades seleccionadas</small></div><button onClick={suggestEvidence} disabled={suggesting}>{suggesting?<Loader2 size={15} className="animate-spin"/>:<Sparkles size={15}/>} Sugerir con Kantu</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Describe el producto, actuación o desempeño observable..."/></div><label className="criteria-count">Cantidad de criterios<select value={form.numeroCriterios} onChange={e=>update("numeroCriterios",e.target.value)}>{[4,5,6,7,8,9,10].map(n=><option key={n}>{n}</option>)}</select></label></div>}
+    {step===3&&!instrument&&<div className="wizard-card instrument-review"><div className="wizard-card__title"><span><ClipboardList size={18}/></span><div><h4>Revisa el contexto</h4><p>Puedes volver y editar cualquier dato antes de generar.</p></div></div><div className="context-summary"><div><small>Contexto</small><strong>{form.area} · {form.grado} · {form.region}</strong><p>{form.tema}</p></div><button onClick={()=>setStep(1)}>Editar contexto</button></div><div className="context-summary"><div><small>Evidencia</small><p>{form.evidencia}</p></div><button onClick={()=>setStep(2)}>Editar evidencia</button></div></div>}
+    {error&&<p className="wizard-error">{error}</p>}
+    {!instrument&&<div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<3?<button className="wizard-next" onClick={continueFlow}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={generateInstrument} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está trabajando...":`Generar ${instrumentName}`}</button>}</div>}
+    {loading&&<div className="kantu-working"><div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img src="/mascot/kantu-material.png" alt="Kantu creando el instrumento"/></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Está construyendo criterios observables y alineados…</h4><p>Está revisando la competencia, las capacidades y la evidencia de aprendizaje.</p><div className="kantu-progress"><i/><i/><i/></div></div></div>}
+    {instrument&&<div className="instrument-result"><div className="instrument-result__actions"><div><small>INSTRUMENTO GENERADO</small><h3>{instrument.titulo}</h3></div><div><button onClick={()=>setEditing(!editing)}><Pencil size={14}/>{editing?"Terminar edición":"Editar"}</button><button onClick={generateInstrument}><RotateCw size={14}/>Regenerar</button><button className="primary" onClick={downloadInstrument}><Download size={14}/>Word</button></div></div><div className="instrument-meta"><strong>Competencia evaluada</strong><p>{instrument.competencia}</p><strong>Capacidades</strong><ul>{instrument.capacidades.map((item,index)=><li key={index}>{item}</li>)}</ul><strong>Evidencia de aprendizaje</strong>{editing?<textarea value={instrument.evidencia} onChange={e=>setInstrument(current=>({...current,evidencia:e.target.value}))}/>:<p>{instrument.evidencia}</p>}</div><div className="instrument-table-wrap"><table className={isRubric?"rubric-table":"checklist-table"}><thead><tr><th>N.º</th><th>Criterio de evaluación</th>{isRubric?<><th>Inicio</th><th>En proceso</th><th>Logro esperado</th><th>Logro destacado</th></>:<><th>Sí</th><th>No</th><th>Observaciones</th></>}</tr></thead><tbody>{instrument.criterios.map((item,index)=><tr key={index}><td>{index+1}</td><td>{editing?<textarea value={item.criterio} onChange={e=>updateCriterion(index,"criterio",e.target.value)}/>:<><small>{item.capacidad}</small>{item.criterio}</>}</td>{isRubric?<>{["inicio","enProceso","logroEsperado","logroDestacado"].map(key=><td key={key}>{editing?<textarea value={item[key]} onChange={e=>updateCriterion(index,key,e.target.value)}/>:item[key]}</td>)}</>:<><td><i className="empty-check"/></td><td><i className="empty-check"/></td><td><span className="observation-line"/></td></>}</tr>)}</tbody></table></div></div>}
+  </div>;
+}
+
 function CreateStudio({ preferredGrade = "primaria" }) {
   const [creation, setCreation] = useState(null);
   const creationOptions = [
@@ -1187,7 +970,7 @@ function CreateStudio({ preferredGrade = "primaria" }) {
 
       {creation && <div className="create-generator-wrap">
         <div className="create-generator-head"><div><span>CREANDO CON KANTU</span><h3>{selectedType?.label}</h3><p>{selectedType?.desc}</p></div><button onClick={()=>setCreation(null)}>← Elegir otro producto</button></div>
-        <SteamGenerator initialGrade={preferredGrade} documentType={creation} />
+        {(creation === "rubric" || creation === "checklist") ? <EvaluationInstrumentGenerator initialGrade={preferredGrade} instrumentType={creation} /> : <SteamGenerator initialGrade={preferredGrade} documentType={creation} />}
       </div>}
     </div>
   );

@@ -35,6 +35,32 @@ const SUGGESTION_SCHEMA = {
   required: ["suggestion"],
 };
 
+const INSTRUMENT_SCHEMA = {
+  type: "object",
+  properties: {
+    titulo: { type: "string" },
+    competencia: { type: "string" },
+    capacidades: { type: "array", items: { type: "string" } },
+    evidencia: { type: "string" },
+    criterios: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          capacidad: { type: "string" },
+          criterio: { type: "string" },
+          inicio: { type: "string" },
+          enProceso: { type: "string" },
+          logroEsperado: { type: "string" },
+          logroDestacado: { type: "string" },
+        },
+        required: ["capacidad", "criterio", "inicio", "enProceso", "logroEsperado", "logroDestacado"],
+      },
+    },
+  },
+  required: ["titulo", "competencia", "capacidades", "evidencia", "criterios"],
+};
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método no permitido" });
@@ -64,8 +90,9 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages, mode, field, form = {} } = req.body || {};
+    const { messages, mode, field, form = {}, instrumentType } = req.body || {};
     const suggestionMode = mode === "suggestion";
+    const instrumentMode = mode === "instrument";
     const allowedFields = ["proposito", "contexto", "evidencia"];
 
     if (suggestionMode && !allowedFields.includes(field)) {
@@ -86,7 +113,13 @@ Competencia: ${form.competencia || "No indicada"}. Capacidades: ${capacities || 
 Propósito actual: ${form.proposito || ""}. Contexto actual: ${form.contexto || ""}.
 ${suggestionInstructions[field] || ""}
 Responde únicamente con una sugerencia lista para pegar en el formulario, en español claro y sin encabezados.`;
-    const promptText = suggestionMode ? suggestionPrompt : (messages?.[0]?.content || "");
+    const instrumentPrompt = `Genera un instrumento de evaluación CNEB de tipo ${instrumentType === "rubric" ? "rúbrica analítica" : "lista de cotejo"}.
+Nivel: ${form.nivel}. Grado: ${form.grado}. Área: ${form.area}. Región: ${form.region || "No indicada"}.
+Tema: ${form.tema}. Competencia: ${form.competencia}. Capacidades seleccionadas: ${capacities}.
+Evidencia de aprendizaje: ${form.evidencia}. Cantidad de criterios: ${form.numeroCriterios || 6}.
+Cada criterio debe derivarse de una capacidad y del tema, empezar con un verbo observable, indicar el contenido y una condición de calidad. No repitas criterios.
+${instrumentType === "rubric" ? "Para cada criterio redacta descriptores progresivos y coherentes para Inicio, En proceso, Logro esperado y Logro destacado. Evita limitarte a adjetivos como bueno o excelente." : "Para la lista de cotejo deja inicio, enProceso, logroEsperado y logroDestacado como cadenas vacías; los criterios se evaluarán con Sí, No y Observaciones."}`;
+    const promptText = suggestionMode ? suggestionPrompt : instrumentMode ? instrumentPrompt : (messages?.[0]?.content || "");
 
     if (!promptText.trim()) {
       res.status(400).json({ error: "Falta información para generar la propuesta" });
@@ -105,9 +138,9 @@ Responde únicamente con una sugerencia lista para pegar en el formulario, en es
           contents: [{ parts: [{ text: promptText }] }],
           systemInstruction: { parts: [{ text: "Eres un especialista peruano en planificación curricular y CNEB. Respeta la competencia y capacidades seleccionadas. Formula criterios de evaluación como acciones observables derivadas de las capacidades, el propósito y el tema. Organiza inicio, desarrollo y cierre con procesos pedagógicos y los procesos didácticos pertinentes al área, sin convertirlos en una lista mecánica. Adapta el contexto a la región sin inventar datos locales. Entrega siempre JSON válido." }] },
           generationConfig: {
-            maxOutputTokens: suggestionMode ? 800 : 8192,
+            maxOutputTokens: suggestionMode ? 800 : instrumentMode ? 5000 : 8192,
             responseMimeType: "application/json",
-            responseSchema: suggestionMode ? SUGGESTION_SCHEMA : SESSION_SCHEMA,
+            responseSchema: suggestionMode ? SUGGESTION_SCHEMA : instrumentMode ? INSTRUMENT_SCHEMA : SESSION_SCHEMA,
           },
         }),
       }
@@ -135,6 +168,12 @@ Responde únicamente con una sugerencia lista para pegar en el formulario, en es
     if (suggestionMode) {
       const parsed = JSON.parse(text);
       res.status(200).json({ suggestion: parsed.suggestion });
+      return;
+    }
+
+    if (instrumentMode) {
+      const instrument = JSON.parse(text);
+      res.status(200).json({ instrument });
       return;
     }
 
