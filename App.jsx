@@ -952,7 +952,10 @@ const GENERATOR_CAPACITIES = {
 };
 const PERU_REGIONS = ["Amazonas","Áncash","Apurímac","Arequipa","Ayacucho","Cajamarca","Callao","Cusco","Huancavelica","Huánuco","Ica","Junín","La Libertad","Lambayeque","Lima","Loreto","Madre de Dios","Moquegua","Pasco","Piura","Puno","San Martín","Tacna","Tumbes","Ucayali"];
 
-function SteamGenerator({ initialGrade = "primaria" }) {
+function SteamGenerator({ initialGrade = "primaria", documentType = "session" }) {
+  const documentNames = { session: "sesión de aprendizaje", project: "proyecto STEAM", rubric: "rúbrica de evaluación", checklist: "lista de cotejo" };
+  const documentName = documentNames[documentType] || documentNames.session;
+  const sectionLabels = documentType === "project" ? ["Inicio y reto", "Fases del proyecto", "Cierre y socialización", "Producto final"] : documentType === "rubric" ? ["Aplicación", "Uso de los descriptores", "Retroalimentación", "Evidencia evaluada"] : documentType === "checklist" ? ["Antes de observar", "Durante la observación", "Después de observar", "Evidencia verificada"] : ["Inicio", "Desarrollo", "Cierre", "Producto STEAM"];
   const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
   const today = new Date().toISOString().slice(0, 10);
   const [step, setStep] = useState(1);
@@ -994,7 +997,8 @@ function SteamGenerator({ initialGrade = "primaria" }) {
     setError(null);
     setResult(null);
     try {
-      const systemInstruction = `Eres especialista en planificación curricular peruana y CNEB. Genera una sesión aplicable, contextualizada, inclusiva y coherente con los datos del docente. No inventes competencias oficiales. Responde ÚNICAMENTE con JSON válido con esta forma exacta:
+      const typeInstruction = documentType === "project" ? "Estructura un proyecto STEAM con reto auténtico, producto final, fases de investigación, diseño, creación, prueba, mejora y socialización." : documentType === "rubric" ? "Construye una rúbrica analítica. En criteriosEvaluacion incluye cada criterio observable con cuatro niveles: Inicio, En proceso, Logro esperado y Logro destacado. Usa inicio, desarrollo y cierre para explicar aplicación, retroalimentación y uso de resultados." : documentType === "checklist" ? "Construye una lista de cotejo. En criteriosEvaluacion incluye indicadores breves, observables y verificables que puedan marcarse Sí, No o En proceso. Usa inicio, desarrollo y cierre para explicar antes, durante y después de la observación." : "Genera una sesión de aprendizaje con inicio, desarrollo y cierre, aplicando procesos pedagógicos y didácticos pertinentes.";
+      const systemInstruction = `Eres especialista en planificación curricular peruana y CNEB. Genera una ${documentName} aplicable, contextualizada, inclusiva y coherente con los datos del docente. ${typeInstruction} No inventes competencias oficiales. Responde ÚNICAMENTE con JSON válido con esta forma exacta:
 {
   "titulo": "string",
   "areasSTEAM": ["string", "..."],
@@ -1012,7 +1016,7 @@ function SteamGenerator({ initialGrade = "primaria" }) {
   "productoSTEAM": "string"
 }`;
 
-      const userMsg = `Nivel: ${form.nivel}\nGrado: ${form.grado}\nRegión del Perú: ${form.region}\nSección: ${form.seccion || "No indicada"}\nFecha: ${form.fecha}\nDuración: ${form.duracion} minutos\nÁrea curricular: ${form.area}\nTema: ${form.tema}\nCompetencia oficial: ${form.competencia}\nCapacidades oficiales seleccionadas:\n- ${form.capacidades.join("\n- ")}\nPropósito propuesto por el docente: ${form.proposito}\nSituación contextualizada: ${form.contexto}\nEvidencia esperada: ${form.evidencia}\nRecursos disponibles: ${form.recursos || "Materiales accesibles del entorno"}\nIntegrar enfoque STEAM: ${form.steam ? "Sí" : "No"}\nIncluir ajustes inclusivos/DUA: ${form.inclusivo ? "Sí" : "No"}\nLos criterios deben derivarse de las capacidades y del tema, redactarse como acciones observables y verificables, e indicar qué hará el estudiante, sobre qué contenido y con qué condición de calidad. Organiza inicio, desarrollo y cierre incorporando procesos pedagógicos y los procesos didácticos pertinentes al área y competencia; no los menciones de forma decorativa: aplícalos en las actividades.`;
+      const userMsg = `Producto solicitado: ${documentName}\nNivel: ${form.nivel}\nGrado: ${form.grado}\nRegión del Perú: ${form.region}\nSección: ${form.seccion || "No indicada"}\nFecha: ${form.fecha}\nDuración: ${form.duracion} minutos\nÁrea curricular: ${form.area}\nTema: ${form.tema}\nCompetencia oficial: ${form.competencia}\nCapacidades oficiales seleccionadas:\n- ${form.capacidades.join("\n- ")}\nPropósito propuesto por el docente: ${form.proposito}\nSituación contextualizada: ${form.contexto}\nEvidencia esperada: ${form.evidencia}\nRecursos disponibles: ${form.recursos || "Materiales accesibles del entorno"}\nIntegrar enfoque STEAM: ${form.steam ? "Sí" : "No"}\nIncluir ajustes inclusivos/DUA: ${form.inclusivo ? "Sí" : "No"}\nLos criterios deben derivarse de las capacidades y del tema, redactarse como acciones observables y verificables, e indicar qué hará el estudiante, sobre qué contenido y con qué condición de calidad.`;
 
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
@@ -1031,10 +1035,10 @@ function SteamGenerator({ initialGrade = "primaria" }) {
 
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Error del servidor");
-      if (!data.session) throw new Error("La sesión no llegó completa. Intenta generarla nuevamente.");
+      if (!data.session) throw new Error(`La ${documentName} no llegó completa. Intenta generarla nuevamente.`);
       setResult(data.session);
     } catch (e) {
-      setError(e.message || "No se pudo generar la sesión. Intenta de nuevo en unos segundos.");
+      setError(e.message || `No se pudo generar la ${documentName}. Intenta de nuevo en unos segundos.`);
     } finally {
       setLoading(false);
     }
@@ -1048,7 +1052,7 @@ function SteamGenerator({ initialGrade = "primaria" }) {
       <div className="wizard-caption">Paso {step} de 3</div>
 
       {step===1&&<div className="wizard-card">
-        <div className="wizard-card__title"><span><School size={18}/></span><div><h4>Diseño curricular CNEB</h4><p>Define el nivel, grado, área y datos de la sesión.</p></div></div>
+        <div className="wizard-card__title"><span><School size={18}/></span><div><h4>Diseño curricular CNEB</h4><p>Define el nivel, grado, área y datos de la {documentName}.</p></div></div>
         <div className="wizard-fields">
           <label>Nivel educativo *<select value={form.nivel} onChange={e=>changeLevel(e.target.value)}><option>Primaria</option><option>Secundaria</option></select></label>
           <label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
@@ -1080,7 +1084,7 @@ function SteamGenerator({ initialGrade = "primaria" }) {
       </div>}
 
       {error&&<p className="wizard-error">{error}</p>}
-      <div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar sesión con IA"}</button>}</div>
+      <div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":`Generar ${documentName} con IA`}</button>}</div>
 
       {result && (
         <div className="mt-6 rounded-xl p-5" style={{ background: "rgba(15,61,58,0.03)", border: `1px solid ${C.line}` }}>
@@ -1121,37 +1125,36 @@ function SteamGenerator({ initialGrade = "primaria" }) {
 
           <div className="space-y-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Inicio</p>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[0]}</p>
               <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.inicio}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Desarrollo</p>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[1]}</p>
               <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.desarrollo}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Cierre</p>
+              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[2]}</p>
               <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.cierre}</p>
             </div>
           </div>
 
           <div className="mt-4 rounded-lg p-4" style={{ background: "rgba(62,198,192,0.06)", borderLeft: `3px solid ${C.teal}` }}>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.teal }}>Producto STEAM</p>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.teal }}>{sectionLabels[3]}</p>
             <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.productoSTEAM}</p>
           </div>
 
           <button
             onClick={() =>
               downloadWord(
-                `sesion-${form.tema.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 30) || "generada"}.docx`,
-                `${result.titulo}\n\nNivel y grado: ${form.nivel} ${form.grado}\nRegión: ${form.region}\nÁrea: ${form.area}\nDuración: ${form.duracion} min\n\nCompetencias CNEB:\n${(result.competenciasCNEB || []).map((c) => "- " + c).join("\n")}\n\nCapacidades CNEB:\n${(result.capacidadesCNEB || []).map((c) => "- " + c).join("\n")}\n\nPropósito:\n${result.proposito}\n\nCriterios de evaluación:\n${(result.criteriosEvaluacion||[]).map(c=>"- "+c).join("\n")}\n\nEvidencia:\n${result.evidencia}\n\nProcesos pedagógicos:\n${(result.procesosPedagogicos||[]).map(p=>"- "+p).join("\n")}\n\nProcesos didácticos:\n${(result.procesosDidacticos||[]).map(p=>"- "+p).join("\n")}\n\nMateriales:\n${(result.materiales || []).map((m) => "- " + m).join("\n")}\n\nInicio:\n${result.inicio}\n\nDesarrollo:\n${result.desarrollo}\n\nCierre:\n${result.cierre}\n\nProducto STEAM:\n${result.productoSTEAM}\n\nGenerado con Kantu en SciVerse.`
-                `${result.titulo}\n\nNivel y grado: ${form.nivel} ${form.grado}\nRegión: ${form.region}\nÁrea: ${form.area}\nDuración: ${form.duracion} min\n\nCompetencias CNEB:\n${(result.competenciasCNEB || []).map((c) => "- " + c).join("\n")}\n\nCapacidades CNEB:\n${(result.capacidadesCNEB || []).map((c) => "- " + c).join("\n")}\n\nPropósito:\n${result.proposito}\n\nCriterios de evaluación:\n${(result.criteriosEvaluacion||[]).map(c=>"- "+c).join("\n")}\n\nEvidencia:\n${result.evidencia}\n\nProcesos pedagógicos:\n${(result.procesosPedagogicos||[]).map(p=>"- "+p).join("\n")}\n\nProcesos didácticos:\n${(result.procesosDidacticos||[]).map(p=>"- "+p).join("\n")}\n\nMateriales:\n${(result.materiales || []).map((m) => "- " + m).join("\n")}\n\nInicio:\n${result.inicio}\n\nDesarrollo:\n${result.desarrollo}\n\nCierre:\n${result.cierre}\n\nProducto STEAM:\n${result.productoSTEAM}`,
+                `${documentType}-${form.tema.trim().toLowerCase().replace(/\s+/g, "-").slice(0, 30) || "generado"}.docx`,
+                `${result.titulo}\n\nTipo de recurso: ${documentName}\nNivel y grado: ${form.nivel} ${form.grado}\nRegión: ${form.region}\nÁrea: ${form.area}\nDuración: ${form.duracion} min\n\nCompetencias CNEB:\n${(result.competenciasCNEB || []).map((c) => "- " + c).join("\n")}\n\nCapacidades CNEB:\n${(result.capacidadesCNEB || []).map((c) => "- " + c).join("\n")}\n\nPropósito:\n${result.proposito}\n\nCriterios de evaluación:\n${(result.criteriosEvaluacion||[]).map(c=>"- "+c).join("\n")}\n\nEvidencia:\n${result.evidencia}\n\nProcesos pedagógicos:\n${(result.procesosPedagogicos||[]).map(p=>"- "+p).join("\n")}\n\nProcesos didácticos:\n${(result.procesosDidacticos||[]).map(p=>"- "+p).join("\n")}\n\nMateriales:\n${(result.materiales || []).map((m) => "- " + m).join("\n")}\n\nInicio:\n${result.inicio}\n\nDesarrollo:\n${result.desarrollo}\n\nCierre:\n${result.cierre}\n\nProducto o evidencia final:\n${result.productoSTEAM}`,
                 result.titulo
               )
             }
             className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
             style={{ background: "rgba(15,61,58,0.08)", color: C.text, border: `1px solid ${C.line}` }}
           >
-            <Download size={14} /> Descargar sesión en Word
+            <Download size={14} /> Descargar {documentName} en Word
           </button>
         </div>
       )}
@@ -1161,12 +1164,13 @@ function SteamGenerator({ initialGrade = "primaria" }) {
 
 function CreateStudio({ preferredGrade = "primaria" }) {
   const [creation, setCreation] = useState(null);
-  const materialOptions = [
-    { label: "Instrumento", icon: ClipboardList },
-    { label: "Ficha", icon: FileText },
-    { label: "Presentación", icon: LayoutDashboard },
-    { label: "Interactivo", icon: Target },
+  const creationOptions = [
+    { id: "session", label: "Sesión de aprendizaje", desc: "Planificación completa con propósito, criterios, evidencia y secuencia didáctica.", icon: BookOpen, tone: "teal" },
+    { id: "project", label: "Proyecto STEAM", desc: "Reto, producto final, fases, recursos y evaluación para aprender creando.", icon: Cog, tone: "coral" },
+    { id: "rubric", label: "Rúbrica", desc: "Criterios observables y niveles de logro alineados a las capacidades.", icon: ClipboardList, tone: "violet" },
+    { id: "checklist", label: "Lista de cotejo", desc: "Indicadores claros y verificables para registrar Sí, No o En proceso.", icon: CheckCircle2, tone: "yellow" },
   ];
+  const selectedType = creationOptions.find((item) => item.id === creation);
 
   return (
     <div className="create-studio">
@@ -1179,32 +1183,11 @@ function CreateStudio({ preferredGrade = "primaria" }) {
         <div className="create-studio__nova"><img src="/mascot/kantu-material.png" alt="Kantu, vicuña científica peruana de SciVerse" /><span><strong>¡Hola! Soy Kantu</strong><small>Crearemos paso a paso</small></span></div>
       </div>
 
-      <div className="create-choice-grid">
-        <article className="create-choice create-choice--session">
-          <div className="create-choice__visual"><img src="/mascot/kantu-session.png" alt="Kantu con un planificador y un modelo de átomo" /></div>
-          <div className="create-choice__copy">
-            <span>PLANIFICACIÓN INTEGRAL</span>
-            <h3>Sesión completa</h3>
-            <p>Genera una experiencia de aprendizaje STEAM alineada al CNEB, con secuencia, evaluación y materiales.</p>
-            <div className="create-flow"><i><BookOpen size={17}/><small>Sesión</small></i><b/><i><ClipboardList size={17}/><small>Instrumento</small></i><b/><i><FolderOpen size={17}/><small>Materiales</small></i></div>
-            <button onClick={() => setCreation("session")}>Empezar <ArrowRight size={16}/></button>
-          </div>
-        </article>
-
-        <article className="create-choice create-choice--material">
-          <div className="create-choice__visual"><img src="/mascot/kantu-material.png" alt="Kantu presentando una ficha educativa" /></div>
-          <div className="create-choice__copy">
-            <span>RECURSO PUNTUAL</span>
-            <h3>Nuevo material</h3>
-            <p>Crea solamente el recurso que necesitas, sin preparar una clase completa. Rápido y directo.</p>
-            <div className="material-kinds">{materialOptions.map(({label,icon:Icon})=><button key={label} onClick={()=>setCreation(label.toLowerCase())}><i><Icon size={17}/></i><small>{label}</small></button>)}</div>
-          </div>
-        </article>
-      </div>
+      {!creation && <div className="creation-type-grid">{creationOptions.map(({id,label,desc,icon:Icon,tone})=><button key={id} className={`creation-type-card ${tone}`} onClick={()=>setCreation(id)}><span><Icon size={22}/></span><div><small>CREAR CON IA</small><h3>{label}</h3><p>{desc}</p><b>Comenzar <ArrowRight size={15}/></b></div></button>)}</div>}
 
       {creation && <div className="create-generator-wrap">
-        <div className="create-generator-head"><div><span>CREANDO CON KANTU</span><h3>{creation === "session" ? "Nueva sesión completa" : `Nuevo recurso: ${creation}`}</h3></div><button onClick={()=>setCreation(null)}>Cambiar tipo</button></div>
-        <SteamGenerator initialGrade={preferredGrade} />
+        <div className="create-generator-head"><div><span>CREANDO CON KANTU</span><h3>{selectedType?.label}</h3><p>{selectedType?.desc}</p></div><button onClick={()=>setCreation(null)}>← Elegir otro producto</button></div>
+        <SteamGenerator initialGrade={preferredGrade} documentType={creation} />
       </div>}
     </div>
   );
@@ -1878,6 +1861,7 @@ function SciVerseApp({ profile, onLogout }) {
   const [selected, setSelected] = useState(null);
   const [modalGrade, setModalGrade] = useState(preferredGrade);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("inicio");
 
   const filtered = ACTIVITIES.filter((a) => subjectFilter === "todos" || a.subject === subjectFilter);
   const filteredRetos = RETOS.filter((r) => gradeFilter === "todos" || r.grades.includes(gradeFilter));
@@ -1902,14 +1886,14 @@ function SciVerseApp({ profile, onLogout }) {
       `}</style>
 
       <aside className="teacher-sidebar">
-        <a href="#inicio-docente" className="sidebar-brand"><span><Microscope size={22} /></span><div><strong>SciVerse</strong><small>Teaching TIC</small></div></a>
+        <button className="sidebar-brand" onClick={()=>setActiveSection("inicio")}><span><Microscope size={22} /></span><div><strong>SciVerse</strong><small>Teaching TIC</small></div></button>
         <nav className="sidebar-menu" aria-label="Panel docente">
-          <a className="active" href="#inicio-docente"><LayoutDashboard size={18} /> Inicio</a>
+          <button className={activeSection==="inicio"?"active":""} onClick={()=>setActiveSection("inicio")}><LayoutDashboard size={18} /> Inicio</button>
           <span>Recursos docentes</span>
-          <a href="#actividades"><ClipboardList size={18} /> Actividades</a>
-          <a href="#retos"><Users size={18} /> Retos grupales</a>
-          <a href="#generador"><Wand2 size={18} /> Crear con IA</a>
-          <a href="#plantillas"><FolderOpen size={18} /> Mi biblioteca</a>
+          <button className={activeSection==="actividades"?"active":""} onClick={()=>setActiveSection("actividades")}><ClipboardList size={18} /> Actividades</button>
+          <button className={activeSection==="crear"?"active":""} onClick={()=>setActiveSection("crear")}><Wand2 size={18} /> Crear con IA</button>
+          <button className={activeSection==="retos"?"active":""} onClick={()=>setActiveSection("retos")}><Users size={18} /> Retos grupales</button>
+          <button className={activeSection==="biblioteca"?"active":""} onClick={()=>setActiveSection("biblioteca")}><FolderOpen size={18} /> Mi biblioteca</button>
         </nav>
         <div className="sidebar-bottom">
           <a className="sidebar-plan" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer"><Award size={17} /><div><small>Plan actual</small><strong>Gratuito</strong></div><ChevronRight size={15} /></a>
@@ -1936,7 +1920,15 @@ function SciVerseApp({ profile, onLogout }) {
         </div>
       </nav>
 
-      <section id="inicio-docente" className="teacher-dashboard">
+      <nav className="teacher-mobile-nav" aria-label="Navegación móvil del panel">
+        <button className={activeSection==="inicio"?"active":""} onClick={()=>setActiveSection("inicio")}><LayoutDashboard size={17}/><span>Inicio</span></button>
+        <button className={activeSection==="actividades"?"active":""} onClick={()=>setActiveSection("actividades")}><ClipboardList size={17}/><span>Actividades</span></button>
+        <button className={activeSection==="crear"?"active":""} onClick={()=>setActiveSection("crear")}><Wand2 size={18}/><span>Crear</span></button>
+        <button className={activeSection==="retos"?"active":""} onClick={()=>setActiveSection("retos")}><Users size={17}/><span>Retos</span></button>
+        <button className={activeSection==="biblioteca"?"active":""} onClick={()=>setActiveSection("biblioteca")}><FolderOpen size={17}/><span>Biblioteca</span></button>
+      </nav>
+
+      {activeSection === "inicio" && <section id="inicio-docente" className="teacher-dashboard">
         <div className="dashboard-welcome">
           <div>
             <span className="dashboard-kicker"><LayoutDashboard size={14} /> Panel del docente</span>
@@ -1960,21 +1952,22 @@ function SciVerseApp({ profile, onLogout }) {
           <div className="dashboard-panel">
             <div className="panel-heading"><div><small>Accesos rápidos</small><h2>Crea y explora</h2></div><Zap size={20} /></div>
             <div className="quick-tools">
-              <a href="#generador"><span style={{background:"#E5F8F5",color:C.tealDeep}}><Wand2 size={21} /></span><div><strong>Crear sesión con IA</strong><small>Genera una experiencia STEAM</small></div><ChevronRight size={17} /></a>
-              <a href="#actividades"><span style={{background:"#FFF0EC",color:C.coral}}><ClipboardList size={21} /></span><div><strong>Ver actividades</strong><small>Experiencias listas para adaptar</small></div><ChevronRight size={17} /></a>
-              <a href="#plantillas"><span style={{background:"#FFF7DC",color:"#B78300"}}><Download size={21} /></span><div><strong>Plantillas CNEB</strong><small>Descarga recursos editables</small></div><ChevronRight size={17} /></a>
+              <button onClick={()=>setActiveSection("actividades")}><span style={{background:"#FFF0EC",color:C.coral}}><ClipboardList size={21} /></span><div><strong>Ver actividades</strong><small>Experiencias listas para adaptar</small></div><ChevronRight size={17} /></button>
+              <button onClick={()=>setActiveSection("crear")}><span style={{background:"#E5F8F5",color:C.tealDeep}}><Wand2 size={21} /></span><div><strong>Crear con IA</strong><small>Sesión, proyecto e instrumentos</small></div><ChevronRight size={17} /></button>
+              <button onClick={()=>setActiveSection("retos")}><span style={{background:"#F4EEFF",color:C.violet}}><Users size={21} /></span><div><strong>Retos grupales</strong><small>Aprendizaje colaborativo</small></div><ChevronRight size={17} /></button>
+              <button onClick={()=>setActiveSection("biblioteca")}><span style={{background:"#FFF7DC",color:"#B78300"}}><FolderOpen size={21} /></span><div><strong>Mi biblioteca</strong><small>Recursos y descargas Word</small></div><ChevronRight size={17} /></button>
             </div>
           </div>
           <aside className="dashboard-panel recent-panel">
             <div className="panel-heading"><div><small>Tu espacio</small><h2>Materiales recientes</h2></div><Clock size={20} /></div>
-            <div className="empty-materials"><span><FolderOpen size={27} /></span><strong>Aún no tienes materiales</strong><p>Las sesiones que generes aparecerán aquí para que puedas retomarlas y descargarlas.</p><a href="#generador">Crear mi primera sesión <ArrowRight size={14} /></a></div>
+            <div className="empty-materials"><span><FolderOpen size={27} /></span><strong>Aún no tienes materiales</strong><p>Las sesiones que generes aparecerán aquí para que puedas retomarlas y descargarlas.</p><button onClick={()=>setActiveSection("crear")}>Crear mi primer recurso <ArrowRight size={14} /></button></div>
           </aside>
         </div>
 
         <div id="planes-docente" className="dashboard-plan"><div><span><Sparkles size={17} /></span><div><strong>Obtén más generaciones y descargas en Word</strong><p>Actualiza tu plan desde S/10 y activa tu acceso mediante Plin o Yape.</p></div></div><a href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer">Ver planes <ArrowRight size={15} /></a></div>
-      </section>
+      </section>}
 
-      <header className="px-6 md:px-10 pt-14 pb-16 max-w-5xl mx-auto text-center">
+      {activeSection === "actividades" && <><header className="px-6 md:px-10 pt-14 pb-16 max-w-5xl mx-auto text-center">
         <span
           className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full mb-6"
           style={{ color: heroAccent, background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, fontFamily: "'JetBrains Mono', monospace" }}
@@ -2042,10 +2035,10 @@ function SciVerseApp({ profile, onLogout }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {filtered.map((a) => <ActivityCard key={a.id} activity={a} onOpen={openActivity} grade={heroGrade} />)}
         </div>
-      </section>
+      </section></>}
 
       {/* RETOS GRUPALES */}
-      <section id="retos" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
+      {activeSection === "retos" && <section id="retos" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
           <div>
             <span className="text-xs tracking-widest uppercase" style={{ color: C.violet, fontFamily: "'JetBrains Mono', monospace" }}>Para el aula completa</span>
@@ -2063,15 +2056,15 @@ function SciVerseApp({ profile, onLogout }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {filteredRetos.map((r) => <RetoCard key={r.id} reto={r} />)}
         </div>
-      </section>
+      </section>}
 
       {/* GENERADOR STEAM */}
-      <section id="generador" className="px-6 md:px-10 py-14 max-w-4xl mx-auto">
+      {activeSection === "crear" && <section id="generador" className="px-6 md:px-10 py-14 max-w-5xl mx-auto">
         <CreateStudio preferredGrade={preferredGrade} />
-      </section>
+      </section>}
 
       {/* PLANTILLAS */}
-      <section id="plantillas" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
+      {activeSection === "biblioteca" && <section id="plantillas" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
         <span className="text-xs tracking-widest uppercase" style={{ color: C.amber, fontFamily: "'JetBrains Mono', monospace" }}>Listas para imprimir</span>
         <h2 className="text-2xl md:text-3xl font-semibold mt-1 mb-8" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Plantillas descargables alineadas al CNEB</h2>
 
@@ -2092,18 +2085,18 @@ function SciVerseApp({ profile, onLogout }) {
             );
           })}
         </div>
-      </section>
+      </section>}
 
-      <section className="px-6 md:px-10 pb-20 max-w-4xl mx-auto text-center">
+      {activeSection === "crear" && <section className="px-6 md:px-10 pb-20 max-w-4xl mx-auto text-center">
         <div className="rounded-2xl p-10" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
           <GraduationCap size={26} color={C.teal} className="mx-auto mb-4" />
           <h3 className="text-xl md:text-2xl font-semibold mb-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>¿Prefieres que te arme la sesión directamente en el chat?</h3>
           <p className="text-sm mb-6" style={{ color: C.muted }}>Cuéntame el tema y el grado, y armamos juntos una ficha guiada nueva para tu clase.</p>
-          <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold" style={{ background: C.teal, color: "#0B2B29" }} onClick={() => document.getElementById("generador")?.scrollIntoView({ behavior: "smooth" })}>
-            Proponer una actividad <ArrowRight size={15} />
+          <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold" style={{ background: C.teal, color: "#0B2B29" }} onClick={() => window.scrollTo({top:0,behavior:"smooth"})}>
+            Volver al creador <ArrowRight size={15} />
           </button>
         </div>
-      </section>
+      </section>}
 
       <footer className="px-6 md:px-10 py-8 text-center text-xs" style={{ color: C.muted, borderTop: `1px solid ${C.lineSoft}` }}>
         SciVerse para Docentes — un espacio de Frida García Rurush, IA educativa.
