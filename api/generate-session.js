@@ -6,7 +6,7 @@
 // Devuelve la respuesta normalizada en la misma forma que espera el cliente:
 // { content: [ { type: "text", text: "..." } ] }
 
-const GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_MODEL = process.env.GEMINI_MAIN_MODEL || "gemini-3.6-flash";
 
 const SESSION_SCHEMA = {
   type: "object",
@@ -61,6 +61,68 @@ const INSTRUMENT_SCHEMA = {
   required: ["titulo", "competencia", "capacidades", "evidencia", "criterios"],
 };
 
+const MODULE_SCHEMAS = {
+  alignment: {
+    type: "object",
+    properties: {
+      titulo: { type: "string" },
+      proposito: { type: "string" },
+      evidencia: { type: "string" },
+      desempenosPrecisados: { type: "array", items: { type: "object", properties: { capacidad: { type: "string" }, desempeno: { type: "string" } }, required: ["capacidad", "desempeno"] } },
+      criteriosEvaluacion: { type: "array", items: { type: "object", properties: { capacidad: { type: "string" }, criterio: { type: "string" } }, required: ["capacidad", "criterio"] } },
+      enfoquesTransversales: { type: "array", items: { type: "object", properties: { enfoque: { type: "string" }, valor: { type: "string" }, actitudObservable: { type: "string" } }, required: ["enfoque", "valor", "actitudObservable"] } },
+    },
+    required: ["titulo", "proposito", "evidencia", "desempenosPrecisados", "criteriosEvaluacion", "enfoquesTransversales"],
+  },
+  sequence: {
+    type: "object",
+    properties: {
+      preparacionDocente: { type: "array", items: { type: "string" } },
+      materiales: { type: "array", items: { type: "string" } },
+      procesosPedagogicos: { type: "array", items: { type: "string" } },
+      procesosDidacticos: { type: "array", items: { type: "string" } },
+      inicio: { type: "object", properties: { minutos: { type: "integer" }, actividades: { type: "string" } }, required: ["minutos", "actividades"] },
+      desarrollo: { type: "object", properties: { minutos: { type: "integer" }, actividades: { type: "string" } }, required: ["minutos", "actividades"] },
+      cierre: { type: "object", properties: { minutos: { type: "integer" }, actividades: { type: "string" } }, required: ["minutos", "actividades"] },
+      orientacionesDUA: { type: "array", items: { type: "string" } },
+    },
+    required: ["preparacionDocente", "materiales", "procesosPedagogicos", "procesosDidacticos", "inicio", "desarrollo", "cierre", "orientacionesDUA"],
+  },
+  assessment: {
+    type: "object",
+    properties: {
+      instrumentoSugerido: { type: "string" },
+      criterios: { type: "array", items: { type: "object", properties: { capacidad: { type: "string" }, criterio: { type: "string" }, evidenciaObservable: { type: "string" } }, required: ["capacidad", "criterio", "evidenciaObservable"] } },
+      reflexionesDocente: { type: "array", items: { type: "string" } },
+    },
+    required: ["instrumentoSugerido", "criterios", "reflexionesDocente"],
+  },
+  annexes: {
+    type: "object",
+    properties: {
+      anexos: { type: "array", items: { type: "object", properties: { titulo: { type: "string" }, tipo: { type: "string" }, proposito: { type: "string" }, contenido: { type: "string" }, instrucciones: { type: "string" } }, required: ["titulo", "tipo", "proposito", "contenido", "instrucciones"] } },
+    },
+    required: ["anexos"],
+  },
+};
+
+function formContext(form) {
+  const capacities = Array.isArray(form.capacidades) ? form.capacidades.join("; ") : "";
+  return `Nivel: ${form.nivel}. Grado: ${form.grado}. Área: ${form.area}. Región: ${form.region}.
+Tema: ${form.tema}. Duración total: ${form.duracion} minutos.
+Competencia oficial: ${form.competencia}. Capacidades oficiales: ${capacities}.
+Propósito propuesto: ${form.proposito}. Contexto: ${form.contexto}. Evidencia: ${form.evidencia}.
+Recursos disponibles: ${form.recursos || "materiales accesibles del entorno"}. DUA: ${form.inclusivo ? "sí" : "no"}. STEAM: ${form.steam ? "sí" : "no"}.`;
+}
+
+function modulePrompt(moduleName, form, previous = {}) {
+  const context = formContext(form);
+  if (moduleName === "alignment") return `${context}\nConstruye únicamente la alineación curricular. Conserva literalmente la competencia y las capacidades entregadas. Precisa un desempeño por cada capacidad seleccionada y formula criterios observables derivados de capacidad, tema, propósito y evidencia. Incluye solo enfoques transversales verdaderamente pertinentes. No inventes referentes locales.`;
+  if (moduleName === "sequence") return `${context}\nAlineación aprobada: ${JSON.stringify(previous.alignment || {})}\nDiseña únicamente la preparación y secuencia de la sesión. Distribuye exactamente ${form.duracion} minutos entre inicio, desarrollo y cierre. Integra los procesos pedagógicos y los procesos didácticos específicos del área de manera natural. Describe acciones concretas del docente y estudiantes, retroalimentación formativa y orientaciones DUA aplicables.`;
+  if (moduleName === "assessment") return `${context}\nAlineación: ${JSON.stringify(previous.alignment || {})}\nSecuencia: ${JSON.stringify(previous.sequence || {})}\nDiseña únicamente la evaluación. Cada criterio debe conservar la relación con una capacidad, ser observable y poder verificarse en una evidencia. Evita criterios genéricos, adjetivos subjetivos y duplicados. Sugiere el instrumento más pertinente y preguntas de reflexión para completar después de la clase.`;
+  return `${context}\nAlineación: ${JSON.stringify(previous.alignment || {})}\nSecuencia: ${JSON.stringify(previous.sequence || {})}\nEvaluación: ${JSON.stringify(previous.assessment || {})}\nPropón exactamente tres anexos textuales utilizables en clase y coherentes con la evidencia: una ficha o texto base, una actividad para estudiantes y un recurso de apoyo. No afirmes que incluyes imágenes que no fueron generadas. El contenido debe estar listo para copiar a Word y adecuado al grado.`;
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     res.status(405).json({ error: "Método no permitido" });
@@ -90,13 +152,18 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { messages, mode, field, form = {}, instrumentType } = req.body || {};
+    const { messages, mode, field, form = {}, instrumentType, module: moduleName, previous = {} } = req.body || {};
     const suggestionMode = mode === "suggestion";
     const instrumentMode = mode === "instrument";
+    const moduleMode = mode === "module";
     const allowedFields = ["proposito", "contexto", "evidencia"];
 
     if (suggestionMode && !allowedFields.includes(field)) {
       res.status(400).json({ error: "Tipo de sugerencia no válido" });
+      return;
+    }
+    if (moduleMode && !MODULE_SCHEMAS[moduleName]) {
+      res.status(400).json({ error: "Módulo de generación no válido" });
       return;
     }
 
@@ -119,7 +186,7 @@ Tema: ${form.tema}. Competencia: ${form.competencia}. Capacidades seleccionadas:
 Evidencia de aprendizaje: ${form.evidencia}. Cantidad de criterios: ${form.numeroCriterios || 6}.
 Cada criterio debe derivarse de una capacidad y del tema, empezar con un verbo observable, indicar el contenido y una condición de calidad. No repitas criterios.
 ${instrumentType === "rubric" ? "Para cada criterio redacta descriptores progresivos y coherentes para Inicio, En proceso, Logro esperado y Logro destacado. Evita limitarte a adjetivos como bueno o excelente." : "Para la lista de cotejo deja inicio, enProceso, logroEsperado y logroDestacado como cadenas vacías; los criterios se evaluarán con Sí, No y Observaciones."}`;
-    const promptText = suggestionMode ? suggestionPrompt : instrumentMode ? instrumentPrompt : (messages?.[0]?.content || "");
+    const promptText = suggestionMode ? suggestionPrompt : instrumentMode ? instrumentPrompt : moduleMode ? modulePrompt(moduleName, form, previous) : (messages?.[0]?.content || "");
 
     if (!promptText.trim()) {
       res.status(400).json({ error: "Falta información para generar la propuesta" });
@@ -138,9 +205,9 @@ ${instrumentType === "rubric" ? "Para cada criterio redacta descriptores progres
           contents: [{ parts: [{ text: promptText }] }],
           systemInstruction: { parts: [{ text: "Eres un especialista peruano en planificación curricular y CNEB. Respeta la competencia y capacidades seleccionadas. Formula criterios de evaluación como acciones observables derivadas de las capacidades, el propósito y el tema. Organiza inicio, desarrollo y cierre con procesos pedagógicos y los procesos didácticos pertinentes al área, sin convertirlos en una lista mecánica. Adapta el contexto a la región sin inventar datos locales. Entrega siempre JSON válido." }] },
           generationConfig: {
-            maxOutputTokens: suggestionMode ? 800 : instrumentMode ? 5000 : 8192,
+            maxOutputTokens: suggestionMode ? 800 : instrumentMode ? 5000 : moduleMode ? (moduleName === "annexes" ? 6500 : 4500) : 8192,
             responseMimeType: "application/json",
-            responseSchema: suggestionMode ? SUGGESTION_SCHEMA : instrumentMode ? INSTRUMENT_SCHEMA : SESSION_SCHEMA,
+            responseSchema: suggestionMode ? SUGGESTION_SCHEMA : instrumentMode ? INSTRUMENT_SCHEMA : moduleMode ? MODULE_SCHEMAS[moduleName] : SESSION_SCHEMA,
           },
         }),
       }
@@ -174,6 +241,12 @@ ${instrumentType === "rubric" ? "Para cada criterio redacta descriptores progres
     if (instrumentMode) {
       const instrument = JSON.parse(text);
       res.status(200).json({ instrument });
+      return;
+    }
+
+    if (moduleMode) {
+      const moduleResult = JSON.parse(text);
+      res.status(200).json({ module: moduleName, result: moduleResult, model: GEMINI_MODEL });
       return;
     }
 
