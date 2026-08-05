@@ -1634,31 +1634,15 @@ function PunchHoles() {
 function ActivityCard({ activity, onOpen, grade }) {
   const subj = SUBJECTS[activity.subject];
   const Icon = subj.icon;
+  const v=activity.versions[grade];
   return (
-    <button
-      onClick={() => onOpen(activity)}
-      className="relative text-left rounded-xl overflow-hidden pl-8 pr-5 py-5 transition-transform duration-200 hover:-translate-y-1 focus:outline-none focus-visible:ring-2"
-      style={{ background: C.surface, border: `1px solid ${C.line}`, outlineColor: subj.color }}
-    >
-      <PunchHoles />
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[11px] tracking-widest" style={{ color: subj.color, fontFamily: "'JetBrains Mono', monospace" }}>
-          {activity.code}
-        </span>
-        <Icon size={18} color={subj.color} />
-      </div>
-      <h3 className="text-lg font-semibold leading-snug mb-2" style={{ color: C.text, fontFamily: "'Space Grotesk', sans-serif" }}>
-        {activity.title}
-      </h3>
-      <p className="text-sm mb-4" style={{ color: C.muted }}>
-        {subj.label} · {activity.versions.primaria&&activity.versions.secundaria?"Primaria y Secundaria":activity.versions.primaria?"Primaria":"Secundaria"}
-      </p>
-      <div className="flex items-center gap-2">
-        <GradeTag grade={grade} />
-      </div>
-      <div className="mt-4 inline-flex items-center gap-1 text-sm font-medium" style={{ color: subj.color }}>
-        Ver ficha guiada <ChevronRight size={15} />
-      </div>
+    <button onClick={()=>onOpen(activity)} className="steam-catalog-card" style={{"--activity-color":subj.color}}>
+      <div className="steam-card-top"><span><Icon size={19}/></span><small>{activity.code} · {subj.label}</small><ChevronRight size={17}/></div>
+      <h3>{activity.title}</h3>
+      <p className="steam-card-challenge">{v.objetivo}</p>
+      <div className="steam-card-meta"><span><GraduationCap size={13}/>{v.nivel}</span><span><Clock size={13}/>{activity.detalle.tiempo}</span></div>
+      <div className="steam-card-success"><small>CONDICIÓN DE ÉXITO</small><p>{v.condicion}</p></div>
+      <div className="steam-card-footer"><span>{v.materiales.length} materiales · 5 pasos</span><strong>Ver guía completa <ArrowRight size={14}/></strong></div>
     </button>
   );
 }
@@ -1676,7 +1660,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
       style={{ background: "rgba(15,61,58,0.45)", backdropFilter: "blur(4px)" }}
       onClick={onClose}
     >
-      <div className="printable relative w-full max-w-2xl rounded-2xl my-6" style={{ background: C.surface2, border: `1px solid ${C.line}` }} onClick={(e) => e.stopPropagation()}>
+      <div className="printable relative w-full max-w-4xl rounded-2xl my-6" style={{ background: C.surface2, border: `1px solid ${C.line}` }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between px-6 pt-6">
           <div>
             <span className="text-[11px] tracking-widest" style={{ color: subj.color, fontFamily: "'JetBrains Mono', monospace" }}>
@@ -1707,6 +1691,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
         <div className="px-6 py-6 space-y-5">
           <div className="flex flex-wrap gap-4 text-sm" style={{ color: C.muted }}>
             <span className="inline-flex items-center gap-1.5"><GraduationCap size={14} /> {v.nivel}</span>
+            <span className="inline-flex items-center gap-1.5"><Clock size={14} /> {activity.detalle.tiempo}</span>
             <span className="inline-flex items-center gap-1.5"><Layers size={14} /> {v.materiales.length} materiales</span>
           </div>
 
@@ -1729,6 +1714,8 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
             </ul>
           </div>
 
+          <div className="rounded-lg p-4" style={{background:"#F5FAF9",border:`1px solid ${C.line}`}}><p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{color:C.tealDeep}}>Antes de empezar</p><p className="text-sm mb-3" style={{color:C.text}}><strong>Organización:</strong> {activity.detalle.organizacion}</p><ul className="text-sm space-y-1.5" style={{color:C.text}}>{activity.detalle.preparacion.map((item,index)=><li key={index} className="flex gap-2"><CheckCircle2 size={14} className="shrink-0 mt-0.5" color={C.tealDeep}/>{item}</li>)}</ul></div>
+
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: C.muted }}>Pasos guiados</p>
             <ol className="space-y-2.5">
@@ -1747,6 +1734,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
           </div>
           <div className="rounded-lg p-4" style={{ background: "#FFF8E2", borderLeft:`3px solid ${C.amber}` }}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:"#A87900"}}>Variación — más difícil</p><p className="text-sm leading-relaxed" style={{color:C.text}}>{v.variacion}</p></div>
           <div className="rounded-lg p-4" style={{ background: "#E7F8F5", borderLeft:`3px solid ${C.tealDeep}` }}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.tealDeep}}>Pregunta para reflexionar</p><p className="text-sm leading-relaxed" style={{color:C.text}}>{v.reflexion}</p></div>
+          <div className="grid md:grid-cols-2 gap-3"><div className="rounded-lg p-4" style={{background:"#F5FAF9",border:`1px solid ${C.line}`}}><p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{color:C.tealDeep}}>Preguntas para acompañar</p><ul className="text-sm space-y-2" style={{color:C.text}}>{activity.detalle.acompanamiento.map((item,index)=><li key={index}>• {item}</li>)}</ul></div><div className="rounded-lg p-4" style={{background:"#F5FAF9",border:`1px solid ${C.line}`}}><p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{color:C.tealDeep}}>Evidencias que debe recoger</p><ul className="text-sm space-y-2" style={{color:C.text}}>{activity.detalle.evidencias.map((item,index)=><li key={index}>• {item}</li>)}</ul></div></div>
         </div>
 
         <div className="no-print flex gap-3 px-6 pb-6">
@@ -1757,7 +1745,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
             onClick={() =>
               downloadWord(
                 `${activity.id}-${grade}.docx`,
-                `Nivel: ${v.nivel}\n\nCompetencia CNEB:\n${activity.competencia}\n\nEl reto:\n${v.objetivo}\n\nMateriales:\n${v.materiales.map((m) => "- " + m).join("\n")}\n\n¿Cómo se juega?\n${v.pasos.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n\nCondición de éxito:\n${v.condicion}\n\nVariación — más difícil:\n${v.variacion}\n\nPregunta para reflexionar:\n${v.reflexion}`,
+                `Nivel: ${v.nivel}\nTiempo sugerido: ${activity.detalle.tiempo}\nOrganización: ${activity.detalle.organizacion}\n\nCompetencia CNEB:\n${activity.competencia}\n\nEl reto:\n${v.objetivo}\n\nAntes de empezar:\n${activity.detalle.preparacion.map((p,i)=>`${i+1}. ${p}`).join("\n")}\n\nMateriales:\n${v.materiales.map((m) => "- " + m).join("\n")}\n\n¿Cómo se juega?\n${v.pasos.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n\nPreguntas para acompañar:\n${activity.detalle.acompanamiento.map(p=>`- ${p}`).join("\n")}\n\nCondición de éxito:\n${v.condicion}\n\nEvidencias que debe recoger:\n${activity.detalle.evidencias.map(p=>`- ${p}`).join("\n")}\n\nVariación — más difícil:\n${v.variacion}\n\nPregunta para reflexionar:\n${v.reflexion}`,
                 activity.title
               )
             }
@@ -1982,75 +1970,12 @@ function SciVerseApp({ profile, onLogout }) {
         <div id="planes-docente" className="dashboard-plan"><div><span><Sparkles size={17} /></span><div><strong>Obtén más generaciones y descargas en Word</strong><p>Actualiza tu plan desde S/10 y activa tu acceso mediante Plin o Yape.</p></div></div><a href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer">Ver planes <ArrowRight size={15} /></a></div>
       </section>}
 
-      {activeSection === "actividades" && <><header className="px-6 md:px-10 pt-14 pb-16 max-w-5xl mx-auto text-center">
-        <span
-          className="inline-flex items-center gap-1.5 text-xs font-semibold tracking-widest uppercase px-3 py-1.5 rounded-full mb-6"
-          style={{ color: heroAccent, background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, fontFamily: "'JetBrains Mono', monospace" }}
-        >
-          <Sparkles size={13} /> Recursos STEAM · Alineados al CNEB
-        </span>
-        <h1 className="text-4xl md:text-5xl font-semibold leading-tight mb-5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-          Recursos STEAM para transformar tu aula
-        </h1>
-        <p className="text-lg max-w-2xl mx-auto mb-3" style={{ color: C.muted }}>
-          Fichas guiadas, retos grupales y un generador de sesiones con IA — en las cinco áreas STEAM: <strong style={{ color: C.text }}>Ciencia, Tecnología, Ingeniería, Arte y Matemática</strong>.
-        </p>
-        <p className="text-sm max-w-2xl mx-auto mb-8" style={{ color: C.muted }}>
-          Todo adaptado al grado de tus estudiantes.
-        </p>
-
-        <div className="inline-flex items-center gap-1 p-1 rounded-full mb-10" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
-          {["primaria", "secundaria"].map((g) => (
-            <button
-              key={g}
-              onClick={() => setHeroGrade(g)}
-              className="flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors"
-              style={{ background: heroGrade === g ? (g === "primaria" ? C.amber : C.cyan) : "transparent", color: heroGrade === g ? "#0B2B29" : C.muted }}
-            >
-              <School size={15} /> {g === "primaria" ? "Primaria" : "Secundaria"}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-3 gap-6 max-w-lg mx-auto text-center">
-          <div>
-            <p className="text-2xl font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{ACTIVITIES.length}</p>
-            <p className="text-xs mt-1" style={{ color: C.muted }}>Actividades STEAM</p>
-          </div>
-          <div>
-            <p className="text-2xl font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{RETOS.length}</p>
-            <p className="text-xs mt-1" style={{ color: C.muted }}>Retos grupales</p>
-          </div>
-          <div>
-            <p className="text-2xl font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{TEMPLATES.length}</p>
-            <p className="text-xs mt-1" style={{ color: C.muted }}>Plantillas CNEB</p>
-          </div>
-        </div>
-      </header>
-
-      {/* ACTIVIDADES */}
-      <section id="actividades" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-8">
-          <div>
-            <span className="text-xs tracking-widest uppercase" style={{ color: C.teal, fontFamily: "'JetBrains Mono', monospace" }}>Bitácora de actividades</span>
-            <h2 className="text-2xl md:text-3xl font-semibold mt-1" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Actividades en las cinco áreas STEAM</h2>
-          </div>
-          <div className="flex gap-2 flex-wrap">
-            <button onClick={() => setSubjectFilter("todos")} className="px-3 py-1.5 rounded-full text-sm font-medium" style={{ background: subjectFilter === "todos" ? C.teal : "transparent", color: subjectFilter === "todos" ? "#0B2B29" : C.muted, border: `1px solid ${C.line}` }}>
-              Todas
-            </button>
-            {Object.entries(SUBJECTS).filter(([key])=>ACTIVITIES.some(activity=>activity.subject===key&&activity.versions[heroGrade])).map(([key, s]) => (
-              <button key={key} onClick={() => setSubjectFilter(key)} className="px-3 py-1.5 rounded-full text-sm font-medium" style={{ background: subjectFilter === key ? s.color : "transparent", color: subjectFilter === key ? "#0B2B29" : C.muted, border: `1px solid ${C.line}` }}>
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filtered.map((a) => <ActivityCard key={a.id} activity={a} onOpen={openActivity} grade={heroGrade} />)}
-        </div>
-      </section></>}
+      {activeSection === "actividades" && <section id="actividades" className="steam-catalog-page">
+        <header className="steam-catalog-header"><div><span><Sparkles size={14}/> BANCO DE EXPERIENCIAS STEAM</span><h1>Actividades listas para llevar al aula</h1><p>Elige el nivel y encuentra una guía completa con preparación, pasos, preguntas de acompañamiento y evidencias para evaluar.</p></div><div className="steam-level-switch"><small>NIVEL DE TUS ESTUDIANTES</small><div>{["primaria","secundaria"].map(g=><button key={g} className={heroGrade===g?"active":""} onClick={()=>{setHeroGrade(g);setSubjectFilter("todos");}}><School size={15}/>{g==="primaria"?"Primaria":"Secundaria"}</button>)}</div></div></header>
+        <div className="steam-catalog-summary"><div><strong>{ACTIVITIES.filter(item=>item.versions[heroGrade]).length}</strong><span>actividades disponibles para {heroGrade}</span></div><p><CheckCircle2 size={15}/> Todas incluyen competencia CNEB, condición de éxito y evidencias observables.</p></div>
+        <div className="steam-filter-bar"><div><small>FILTRAR POR ÁREA</small><div><button className={subjectFilter==="todos"?"active":""} onClick={()=>setSubjectFilter("todos")}>Todas</button>{Object.entries(SUBJECTS).filter(([key])=>ACTIVITIES.some(activity=>activity.subject===key&&activity.versions[heroGrade])).map(([key,s])=><button key={key} className={subjectFilter===key?"active":""} onClick={()=>setSubjectFilter(key)}>{s.label}<span>{ACTIVITIES.filter(item=>item.subject===key&&item.versions[heroGrade]).length}</span></button>)}</div></div><span>{filtered.length} {filtered.length===1?"resultado":"resultados"}</span></div>
+        <div className="steam-catalog-grid">{filtered.map(a=><ActivityCard key={a.id} activity={a} onOpen={openActivity} grade={heroGrade}/>)}</div>
+      </section>}
 
       {/* RETOS GRUPALES */}
       {activeSection === "retos" && <section id="retos" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
