@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient.js";
 import AuthGate from "./AuthGate.jsx";
+import { GUIDE_ACTIVITIES } from "./steamGuideActivities.js";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
   FlaskConical,
@@ -251,6 +252,7 @@ async function downloadSessionWord({ form, result, documentName="sesión de apre
 /* ---------------------------------------------------------------------- */
 
 const SUBJECTS = {
+  ciencia: { label: "Ciencia", icon: Microscope, color: "#1F9E98" },
   fisica: { label: "Física", icon: Zap, color: C.teal },
   quimica: { label: "Química", icon: FlaskConical, color: C.violet },
   biologia: { label: "Biología", icon: Dna, color: "#6FE6A8" },
@@ -260,7 +262,7 @@ const SUBJECTS = {
   matematica: { label: "Matemática", icon: Calculator, color: "#FFD166" },
 };
 
-const ACTIVITIES = [
+const LEGACY_ACTIVITIES = [
   {
     id: "caida-libre",
     subject: "fisica",
@@ -597,6 +599,8 @@ const ACTIVITIES = [
     },
   },
 ];
+
+const ACTIVITIES = GUIDE_ACTIVITIES;
 
 const RETOS = [
   {
@@ -1647,7 +1651,7 @@ function ActivityCard({ activity, onOpen, grade }) {
         {activity.title}
       </h3>
       <p className="text-sm mb-4" style={{ color: C.muted }}>
-        {subj.label} · Ambos niveles disponibles
+        {subj.label} · {activity.versions.primaria&&activity.versions.secundaria?"Primaria y Secundaria":activity.versions.primaria?"Primaria":"Secundaria"}
       </p>
       <div className="flex items-center gap-2">
         <GradeTag grade={grade} />
@@ -1688,7 +1692,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
         </div>
 
         <div className="no-print flex gap-2 px-6 mt-4">
-          {["primaria", "secundaria"].map((g) => (
+          {["primaria", "secundaria"].filter(g=>activity.versions[g]).map((g) => (
             <button
               key={g}
               onClick={() => setGrade(g)}
@@ -1702,7 +1706,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
 
         <div className="px-6 py-6 space-y-5">
           <div className="flex flex-wrap gap-4 text-sm" style={{ color: C.muted }}>
-            <span className="inline-flex items-center gap-1.5"><Clock size={14} /> {v.duracion}</span>
+            <span className="inline-flex items-center gap-1.5"><GraduationCap size={14} /> {v.nivel}</span>
             <span className="inline-flex items-center gap-1.5"><Layers size={14} /> {v.materiales.length} materiales</span>
           </div>
 
@@ -1712,7 +1716,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
           </div>
 
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: C.muted }}>Objetivo de la sesión</p>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1.5" style={{ color: C.muted }}>El reto</p>
             <p className="text-sm leading-relaxed" style={{ color: C.text }}>{v.objetivo}</p>
           </div>
 
@@ -1738,9 +1742,11 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
           </div>
 
           <div className="rounded-lg p-4" style={{ background: "rgba(15,61,58,0.03)" }}>
-            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Cierre</p>
-            <p className="text-sm leading-relaxed" style={{ color: C.text }}>{v.cierre}</p>
+            <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.tealDeep }}>Condición de éxito</p>
+            <p className="text-sm leading-relaxed" style={{ color: C.text }}>{v.condicion}</p>
           </div>
+          <div className="rounded-lg p-4" style={{ background: "#FFF8E2", borderLeft:`3px solid ${C.amber}` }}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:"#A87900"}}>Variación — más difícil</p><p className="text-sm leading-relaxed" style={{color:C.text}}>{v.variacion}</p></div>
+          <div className="rounded-lg p-4" style={{ background: "#E7F8F5", borderLeft:`3px solid ${C.tealDeep}` }}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.tealDeep}}>Pregunta para reflexionar</p><p className="text-sm leading-relaxed" style={{color:C.text}}>{v.reflexion}</p></div>
         </div>
 
         <div className="no-print flex gap-3 px-6 pb-6">
@@ -1751,7 +1757,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
             onClick={() =>
               downloadWord(
                 `${activity.id}-${grade}.docx`,
-                `Nivel: ${grade === "primaria" ? "Primaria" : "Secundaria"}\n\nCompetencia CNEB:\n${activity.competencia}\n\nObjetivo:\n${v.objetivo}\n\nDuración:\n${v.duracion}\n\nMateriales:\n${v.materiales.map((m) => "- " + m).join("\n")}\n\nPasos:\n${v.pasos.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n\nCierre:\n${v.cierre}`,
+                `Nivel: ${v.nivel}\n\nCompetencia CNEB:\n${activity.competencia}\n\nEl reto:\n${v.objetivo}\n\nMateriales:\n${v.materiales.map((m) => "- " + m).join("\n")}\n\n¿Cómo se juega?\n${v.pasos.map((p, i) => `${i + 1}. ${p}`).join("\n")}\n\nCondición de éxito:\n${v.condicion}\n\nVariación — más difícil:\n${v.variacion}\n\nPregunta para reflexionar:\n${v.reflexion}`,
                 activity.title
               )
             }
@@ -1872,7 +1878,7 @@ function SciVerseApp({ profile, onLogout }) {
   const materialTypeLabel={session:"Sesión de aprendizaje",project:"Proyecto STEAM",rubric:"Rúbrica",checklist:"Lista de cotejo"};
   const formatMaterialDate=value=>new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(value));
 
-  const filtered = ACTIVITIES.filter((a) => subjectFilter === "todos" || a.subject === subjectFilter);
+  const filtered = ACTIVITIES.filter((a) => a.versions[heroGrade] && (subjectFilter === "todos" || a.subject === subjectFilter));
   const filteredRetos = RETOS.filter((r) => gradeFilter === "todos" || r.grades.includes(gradeFilter));
 
   const openActivity = (a) => {
@@ -2033,7 +2039,7 @@ function SciVerseApp({ profile, onLogout }) {
             <button onClick={() => setSubjectFilter("todos")} className="px-3 py-1.5 rounded-full text-sm font-medium" style={{ background: subjectFilter === "todos" ? C.teal : "transparent", color: subjectFilter === "todos" ? "#0B2B29" : C.muted, border: `1px solid ${C.line}` }}>
               Todas
             </button>
-            {Object.entries(SUBJECTS).map(([key, s]) => (
+            {Object.entries(SUBJECTS).filter(([key])=>ACTIVITIES.some(activity=>activity.subject===key&&activity.versions[heroGrade])).map(([key, s]) => (
               <button key={key} onClick={() => setSubjectFilter(key)} className="px-3 py-1.5 rounded-full text-sm font-medium" style={{ background: subjectFilter === key ? s.color : "transparent", color: subjectFilter === key ? "#0B2B29" : C.muted, border: `1px solid ${C.line}` }}>
                 {s.label}
               </button>
