@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient.js";
 import AuthGate from "./AuthGate.jsx";
 import { GUIDE_ACTIVITIES } from "./steamGuideActivities.js";
+import "./library.css";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
   FlaskConical,
@@ -52,6 +53,11 @@ import {
   Copy,
   HardDrive,
   Pencil,
+  Search,
+  Trash2,
+  Eye,
+  Star,
+  Plus,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -818,33 +824,26 @@ Docente responsable: __________________________
 — SciVerse
 
 Generado desde SciVerse para Docentes.`,
+  "sesion-blanco": `PLANTILLA DE SESIÓN DE APRENDIZAJE\n\nI. DATOS INFORMATIVOS\nDocente: ____________________  I.E.: ____________________\nNivel y grado: ______________  Área: ___________________\nFecha: ______________________  Duración: _______________\n\nII. TÍTULO\n________________________________________________________\n\nIII. PROPÓSITOS DE APRENDIZAJE\nCompetencia: ___________________________________________\nCapacidades: ___________________________________________\nPropósito: _____________________________________________\nEvidencia: _____________________________________________\nCriterios observables: _________________________________\n\nIV. SECUENCIA DIDÁCTICA\nInicio: ________________________________________________\nDesarrollo y procesos didácticos: ______________________\nCierre: ________________________________________________\n\nV. MATERIALES Y APOYOS DUA\n________________________________________________________`,
+  "roles-equipo": `REGISTRO DE EQUIPOS Y ROLES\n\nActividad o reto: ______________________________________\nGrado y sección: ______________ Fecha: _________________\n\nEQUIPO 1\nIntegrantes: ___________________________________________\nCoordinador/a: _________________________________________\nResponsable de materiales: _____________________________\nRegistrador/a: _________________________________________\nPortavoz: ______________________________________________\nAcuerdos del equipo: ___________________________________\n\nRepite este bloque para cada equipo.`,
+  "reflexion-docente": `REFLEXIONES DEL DOCENTE\n\nSesión o actividad: ____________________________________\nFecha: __________________ Grado: ________________________\n\n¿Qué avances observé en mis estudiantes?\n________________________________________________________\n\n¿Qué dificultades se presentaron?\n________________________________________________________\n\n¿Qué estrategias y apoyos funcionaron mejor?\n________________________________________________________\n\n¿Qué debo ajustar en la siguiente experiencia?\n________________________________________________________`,
+  "lista-estudiantes": `REGISTRO DE ESTUDIANTES\n\nGrado y sección: ______________ Docente: _______________\n\nN.º | APELLIDOS Y NOMBRES | OBSERVACIONES\n01  |                      |\n02  |                      |\n03  |                      |\n04  |                      |\n05  |                      |\n\nContinúa hasta completar la nómina del aula.`,
+  "registro-evidencias": `REGISTRO DE EVIDENCIAS DE APRENDIZAJE\n\nTema: _____________________ Grado: ______________________\nCompetencia: ___________________________________________\nEvidencia esperada: ____________________________________\n\nESTUDIANTE / EQUIPO: ___________________________________\nEvidencia observada: ___________________________________\nCriterio relacionado: __________________________________\nRetroalimentación brindada: _____________________________\nSiguiente acción: _______________________________________`,
 };
 
 const TEMPLATES = [
+  { id:"sesion-blanco",title:"Plantilla de sesión de aprendizaje",desc:"Formato editable para organizar datos, propósito, criterios y los tres momentos de la sesión.",icon:FileText },
   {
     id: "ficha-blanco",
     title: "Ficha de experiencia STEAM",
     desc: "Plantilla de planificación para preparar cualquier experimento o reto STEAM con tus estudiantes.",
     icon: ClipboardList,
   },
-  {
-    id: "rubrica-cneb",
-    title: "Rúbrica de evaluación CNEB",
-    desc: "Rúbrica lista para calificar el trabajo de indagación y creación STEAM de tus estudiantes.",
-    icon: Target,
-  },
-  {
-    id: "guia-docente",
-    title: "Guía rápida para el docente",
-    desc: "Cómo usar SciVerse en clase, paso a paso, en una sola página.",
-    icon: BookOpen,
-  },
-  {
-    id: "certificado",
-    title: "Certificado 'Científico/a SciVerse'",
-    desc: "Reconocimiento imprimible para entregar a tus estudiantes al cerrar una unidad.",
-    icon: Award,
-  },
+  {id:"roles-equipo",title:"Registro de equipos y roles",desc:"Organiza integrantes, responsabilidades y acuerdos para actividades colaborativas.",icon:Users},
+  {id:"reflexion-docente",title:"Reflexiones del docente",desc:"Registra avances, dificultades, apoyos efectivos y decisiones para la siguiente clase.",icon:Pencil},
+  {id:"lista-estudiantes",title:"Lista de estudiantes",desc:"Nómina editable para instrumentos, seguimiento y observaciones del aula.",icon:ClipboardList},
+  {id:"registro-evidencias",title:"Registro de evidencias",desc:"Relaciona evidencias observadas, criterios, retroalimentación y siguientes acciones.",icon:Target},
+  {id:"certificado",title:"Reconocimiento para estudiantes",desc:"Certificado editable para reconocer participación, curiosidad y trabajo colaborativo.",icon:Award},
 ];
 
 /* ---------------------------------------------------------------------- */
@@ -1697,7 +1696,7 @@ function ActivityCard({ activity, onOpen, grade }) {
   );
 }
 
-function ActivityModal({ activity, grade, setGrade, onClose }) {
+function ActivityModal({ activity, grade, setGrade, onClose, onSave, isSaved }) {
   if (!activity) return null;
   const subj = SUBJECTS[activity.subject];
   const v = activity.versions[grade];
@@ -1788,6 +1787,7 @@ function ActivityModal({ activity, grade, setGrade, onClose }) {
         </div>
 
         <div className="no-print flex gap-3 px-6 pb-6">
+          <button onClick={()=>onSave?.({kind:"activity",id:`${activity.id}-${grade}`,title:activity.title,subtitle:`${grade} · ${SUBJECTS[activity.subject].label}`,payload:{activity,grade}})} className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold" style={{background:isSaved?"#E3F7F4":"#fff",color:C.tealDeep,border:`1px solid ${C.line}`}}><Star size={16}/>{isSaved?"Guardado":"Guardar"}</button>
           <button onClick={handlePrint} className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold" style={{ background: "rgba(15,61,58,0.06)", color: C.text, border: `1px solid ${C.line}` }}>
             <Printer size={16} /> Imprimir / guardar como PDF
           </button>
@@ -1809,6 +1809,13 @@ function challengeText(reto){
   return `MISIÓN\n${reto.mision}\n\nOBJETIVO DE APRENDIZAJE\n${reto.objetivo||reto.competencia}\n\nCOMPETENCIA CNEB\n${reto.competencia}\n\nORGANIZACIÓN\nDuración: ${reto.duracion}\nEquipo: ${reto.equipo||reto.teamSize}${list("Roles",reto.roles)}${list("Materiales",reto.materiales)}${list("Preparación del docente",reto.preparacion)}${list("Desarrollo paso a paso",reto.pasos)}${list("Reglas",reto.reglas)}\n\nPRODUCTO O EVIDENCIA\n${reto.producto}${list("Criterios observables",reto.criterios)}${list("Preguntas de reflexión",reto.preguntas)}${reto.adaptacionesDUA?list("Apoyos DUA",reto.adaptacionesDUA):""}`;
 }
 
+function materialContentText(value, depth=0){
+  if(value===null||value===undefined) return "";
+  if(typeof value==="string"||typeof value==="number"||typeof value==="boolean") return String(value);
+  if(Array.isArray(value)) return value.map((item,index)=>`${index+1}. ${materialContentText(item,depth+1)}`).join("\n");
+  return Object.entries(value).filter(([,item])=>item!==null&&item!==""&&!(Array.isArray(item)&&!item.length)).map(([key,item])=>{const title=key.replace(/([A-Z])/g," $1").replace(/^./,letter=>letter.toUpperCase());return `${depth?title:title.toUpperCase()}\n${materialContentText(item,depth+1)}`;}).join("\n\n");
+}
+
 function RetoCard({ reto, onOpen }) {
   const subj = SUBJECTS[reto.subject];
   const Icon = reto.icon;
@@ -1827,7 +1834,7 @@ function RetoCard({ reto, onOpen }) {
   );
 }
 
-function RetoModal({reto,onClose,onCreateInstrument}){
+function RetoModal({reto,onClose,onCreateInstrument,onSave,isSaved}){
   const Icon=reto.icon||Users;
   return <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><div className="challenge-modal">
     <header><button onClick={onClose} aria-label="Cerrar"><X size={19}/></button><span><Icon size={20}/></span><div><small>RETO COLABORATIVO · {reto.area||"Área curricular"}</small><h2>{reto.title||reto.titulo}</h2><p><Clock size={13}/> {reto.duracion} <Users size={13}/> {reto.equipo||reto.teamSize}</p></div></header>
@@ -1840,7 +1847,7 @@ function RetoModal({reto,onClose,onCreateInstrument}){
       <section className="challenge-reflection"><h3>Preguntas para reflexionar</h3>{(reto.preguntas||[]).map((x,i)=><p key={i}>“{x}”</p>)}</section>
       {reto.adaptacionesDUA?.length>0&&<section className="challenge-detail"><h3>Apoyos para la diversidad</h3><ul>{reto.adaptacionesDUA.map((x,i)=><li key={i}>{x}</li>)}</ul></section>}
     </main>
-    <footer><button onClick={()=>downloadWord(`reto-${(reto.id||reto.titulo||"grupal").toString().toLowerCase().replace(/[^a-z0-9]+/g,"-")}.docx`,challengeText(reto),reto.title||reto.titulo)}><Download size={15}/> Descargar en Word</button><button onClick={onCreateInstrument}><ClipboardList size={15}/> Crear instrumento de evaluación</button></footer>
+    <footer><button onClick={()=>onSave?.({kind:"challenge",id:reto.id||reto.titulo,title:reto.title||reto.titulo,subtitle:`${reto.area||"Reto grupal"} · ${reto.duracion}`,payload:reto})}><Star size={15}/>{isSaved?"Guardado":"Guardar"}</button><button onClick={()=>downloadWord(`reto-${(reto.id||reto.titulo||"grupal").toString().toLowerCase().replace(/[^a-z0-9]+/g,"-")}.docx`,challengeText(reto),reto.title||reto.titulo)}><Download size={15}/> Descargar en Word</button><button onClick={onCreateInstrument}><ClipboardList size={15}/> Crear instrumento de evaluación</button></footer>
   </div></div>;
 }
 
@@ -1858,6 +1865,21 @@ function ChallengeCreator({profile,preferredGrade,onCreated}){
     <label className="wide">Tema, problema o aprendizaje que deseas trabajar *<textarea value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Reducir el desperdicio de agua en nuestra escuela"/></label><label>Región o contexto<input value={form.region} onChange={e=>update("region",e.target.value)} placeholder="Ej.: Áncash, contexto rural"/></label><label>Duración (minutos)<input type="number" min="20" value={form.duracion} onChange={e=>update("duracion",e.target.value)}/></label><label>N.º de estudiantes<input type="number" min="4" value={form.estudiantes} onChange={e=>update("estudiantes",e.target.value)}/></label><label>Integrantes por equipo<input type="number" min="2" max="8" value={form.integrantes} onChange={e=>update("integrantes",e.target.value)}/></label><label className="wide">Materiales disponibles<textarea value={form.materiales} onChange={e=>update("materiales",e.target.value)}/></label><label className="wide">Competencia CNEB <small>Opcional: Kantu puede sugerirla</small><input value={form.competencia} onChange={e=>update("competencia",e.target.value)} placeholder="Déjalo vacío para recibir una sugerencia"/></label>
     {error&&<p className="challenge-error">{error}</p>}<button className="challenge-generate" onClick={generate} disabled={loading}><Sparkles size={17}/>{loading?"Kantu está construyendo el reto…":"Crear reto con Kantu"}</button>
   </div>{loading&&<div className="kantu-generation-overlay"><div className="kantu-working kantu-working--overlay"><div className="kantu-working__visual"><img src="/mascot/kantu-material.png" alt="Kantu trabajando"/><span className="kantu-orbit"><Sparkles size={17}/></span></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando la misión y los equipos…</h4><p>También estoy alineando el reto al CNEB y redactando criterios que puedas observar durante la actividad.</p><div className="kantu-progress"><i/><i/><i/></div></div></div></div>}</div>;
+}
+
+function LibraryEmpty({onCreate,onChallenges,onActivities}){return <div className="library-empty-state library-empty-kantu"><img src="/mascot/kantu-material.png" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Tu biblioteca está lista para empezar</h2><p>Crea una sesión, un reto grupal o un instrumento. Todo lo que prepares con Kantu se guardará automáticamente aquí.</p><div><button onClick={onCreate}>Crear sesión</button><button onClick={onChallenges}>Crear reto grupal</button><button onClick={onActivities}>Explorar actividades</button></div></div></div>}
+
+function MaterialContentView({value,level=0}){
+  if(value===null||value===undefined||value==="")return null;
+  if(typeof value!=="object")return <p>{String(value)}</p>;
+  if(Array.isArray(value))return <ul>{value.map((item,index)=><li key={index}>{typeof item==="object"?<MaterialContentView value={item} level={level+1}/>:String(item)}</li>)}</ul>;
+  return <div className={`material-structured level-${level}`}>{Object.entries(value).filter(([,item])=>item!==null&&item!==""&&!(Array.isArray(item)&&!item.length)).map(([key,item])=><section key={key}><h4>{key.replace(/([A-Z])/g," $1").replace(/^./,letter=>letter.toUpperCase())}</h4><MaterialContentView value={item} level={level+1}/></section>)}</div>;
+}
+
+function MaterialViewerModal({item,typeLabel,onClose,onDownload,onDuplicate,onDelete}){
+  const [editing,setEditing]=useState(false);const [draft,setDraft]=useState(materialContentText(item.contenido));const [saving,setSaving]=useState(false);const [notice,setNotice]=useState("");
+  async function save(){setSaving(true);const {error}=await supabase.from("materiales_docente").update({contenido:{textoEditado:draft}}).eq("id",item.id);setSaving(false);if(error)return setNotice("No se pudieron guardar los cambios.");item.contenido={textoEditado:draft};setEditing(false);setNotice("Cambios guardados correctamente.");window.dispatchEvent(new Event("sciverse:material-created"));}
+  return <div className="modal-backdrop" onMouseDown={e=>e.target===e.currentTarget&&onClose()}><div className="material-viewer"><header><div><small>{typeLabel}</small><h2>{item.titulo}</h2><p>{item.grado||item.nivel} · {item.area||"Área curricular"}</p></div><button onClick={onClose}><X size={19}/></button></header><nav><button className={!editing?"active":""} onClick={()=>setEditing(false)}><Eye size={14}/> Vista previa</button><button className={editing?"active":""} onClick={()=>setEditing(true)}><Pencil size={14}/> Editar contenido</button></nav><main>{notice&&<p className="material-notice">{notice}</p>}{editing?<div className="material-editor"><p>Edita el contenido en formato de documento. Al guardar, esta versión reemplazará el contenido anterior.</p><textarea value={draft} onChange={e=>setDraft(e.target.value)}/><button onClick={save} disabled={saving}>{saving?"Guardando…":"Guardar cambios"}</button></div>:<div className="material-preview"><MaterialContentView value={item.contenido}/></div>}</main><footer><button onClick={onDownload}><Download size={14}/> Descargar Word</button><button onClick={onDuplicate}><Copy size={14}/> Duplicar</button><button className="danger" onClick={onDelete}><Trash2 size={14}/> Eliminar</button></footer></div></div>;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1929,6 +1951,13 @@ function SciVerseApp({ profile, onLogout }) {
   const [activeSection, setActiveSection] = useState("inicio");
   const [teacherMaterials, setTeacherMaterials] = useState([]);
   const [materialsLoading, setMaterialsLoading] = useState(true);
+  const [libraryTab,setLibraryTab]=useState("creaciones");
+  const [librarySearch,setLibrarySearch]=useState("");
+  const [libraryType,setLibraryType]=useState("todos");
+  const [libraryLevel,setLibraryLevel]=useState("todos");
+  const [librarySort,setLibrarySort]=useState("recientes");
+  const [selectedMaterial,setSelectedMaterial]=useState(null);
+  const [savedResources,setSavedResources]=useState(()=>{try{return JSON.parse(localStorage.getItem("sciverse-saved-resources")||"[]");}catch{return[];}});
 
   const loadTeacherMaterials=useCallback(async()=>{
     setMaterialsLoading(true);
@@ -1947,6 +1976,11 @@ function SciVerseApp({ profile, onLogout }) {
 
   const materialTypeLabel={session:"Sesión de aprendizaje",project:"Proyecto STEAM",rubric:"Rúbrica",checklist:"Lista de cotejo",challenge:"Reto grupal"};
   const formatMaterialDate=value=>new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(value));
+  const visibleMaterials=teacherMaterials.filter(item=>(libraryType==="todos"||item.tipo===libraryType||(libraryType==="instrumentos"&&["rubric","checklist"].includes(item.tipo)))&&(libraryLevel==="todos"||(item.nivel||"").toLowerCase()===libraryLevel)&&`${item.titulo} ${item.tema} ${item.area}`.toLowerCase().includes(librarySearch.toLowerCase())).sort((a,b)=>librarySort==="antiguos"?new Date(a.created_at)-new Date(b.created_at):new Date(b.created_at)-new Date(a.created_at));
+
+  function toggleSaved(resource){setSavedResources(prev=>{const exists=prev.some(item=>item.id===resource.id);const next=exists?prev.filter(item=>item.id!==resource.id):[{...resource,savedAt:new Date().toISOString()},...prev];localStorage.setItem("sciverse-saved-resources",JSON.stringify(next));return next;});}
+  async function deleteMaterial(item){if(!window.confirm(`¿Eliminar “${item.titulo}”? Esta acción no se puede deshacer.`))return;const {error}=await supabase.from("materiales_docente").delete().eq("id",item.id);if(error){window.alert("No se pudo eliminar el material.");return;}setSelectedMaterial(null);loadTeacherMaterials();}
+  async function duplicateMaterial(item){const form={nivel:item.nivel,grado:item.grado,area:item.area,tema:item.tema};try{await saveTeacherMaterial({tipo:item.tipo,titulo:`Copia de ${item.titulo}`,form,contenido:item.contenido});loadTeacherMaterials();}catch{window.alert("No se pudo duplicar el material.");}}
 
   const filtered = ACTIVITIES.filter((a) => a.versions[heroGrade] && (subjectFilter === "todos" || a.subject === subjectFilter));
   const filteredRetos = RETOS.filter((r) => gradeFilter === "todos" || r.grades.includes(gradeFilter));
@@ -2073,33 +2107,18 @@ function SciVerseApp({ profile, onLogout }) {
         <CreateStudio preferredGrade={preferredGrade} profile={profile} />
       </section>}
 
-      {/* PLANTILLAS */}
-      {activeSection === "biblioteca" && <section id="plantillas" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
-        <span className="text-xs tracking-widest uppercase" style={{ color: C.tealDeep, fontFamily: "'JetBrains Mono', monospace" }}>Tu espacio docente</span>
-        <h2 className="text-2xl md:text-3xl font-semibold mt-1 mb-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Mi biblioteca</h2>
-        <p className="text-sm mb-7" style={{color:C.muted}}>Aquí aparecen las sesiones, proyectos e instrumentos que creaste con Kantu.</p>
-        {materialsLoading?<div className="library-loading"><Loader2 className="animate-spin" size={22}/> Cargando materiales…</div>:teacherMaterials.length?<div className="generated-library-grid">{teacherMaterials.map(item=><article key={item.id}><span><FileText size={19}/></span><div><small>{materialTypeLabel[item.tipo]||"Material"}</small><h3>{item.titulo}</h3><p>{item.grado} · {item.area}</p><time>{formatMaterialDate(item.created_at)}</time></div></article>)}</div>:<div className="library-empty"><FolderOpen size={25}/><div><strong>Tu biblioteca todavía está vacía</strong><p>Cuando Kantu termine un material, se guardará automáticamente aquí.</p></div><button onClick={()=>setActiveSection("crear")}>Crear material</button></div>}
+      {/* BIBLIOTECA */}
+      {activeSection === "biblioteca" && <section id="biblioteca" className="library-page">
+        <header className="library-hero"><div><span><FolderOpen size={14}/> TU ESPACIO DOCENTE</span><h1>Mi biblioteca</h1><p>Encuentra, revisa y descarga todo lo que creaste o guardaste en SciVerse.</p></div><button onClick={()=>setActiveSection("crear")}><Plus size={16}/> Crear nuevo material</button></header>
+        <nav className="library-tabs">{[["creaciones",FileText,"Mis creaciones",teacherMaterials.length],["guardados",Star,"Guardados",savedResources.length],["plantillas",Download,"Plantillas",TEMPLATES.length]].map(([key,Icon,label,count])=><button key={key} className={libraryTab===key?"active":""} onClick={()=>setLibraryTab(key)}><Icon size={16}/>{label}<b>{count}</b></button>)}</nav>
 
-        <span className="text-xs tracking-widest uppercase" style={{ color: C.amber, fontFamily: "'JetBrains Mono', monospace" }}>Recursos adicionales</span>
-        <h2 className="text-2xl md:text-3xl font-semibold mt-1 mb-8" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Plantillas descargables alineadas al CNEB</h2>
+        {libraryTab==="creaciones"&&<>
+          <div className="library-toolbar"><label><Search size={15}/><input value={librarySearch} onChange={e=>setLibrarySearch(e.target.value)} placeholder="Buscar por título, tema o área"/></label><select value={libraryType} onChange={e=>setLibraryType(e.target.value)}><option value="todos">Todos los tipos</option><option value="session">Sesiones</option><option value="project">Proyectos STEAM</option><option value="instrumentos">Instrumentos</option><option value="challenge">Retos grupales</option></select><select value={libraryLevel} onChange={e=>setLibraryLevel(e.target.value)}><option value="todos">Todos los niveles</option><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select><select value={librarySort} onChange={e=>setLibrarySort(e.target.value)}><option value="recientes">Más recientes</option><option value="antiguos">Más antiguos</option></select></div>
+          {materialsLoading?<div className="library-loading"><Loader2 className="animate-spin" size={22}/> Cargando tus creaciones…</div>:visibleMaterials.length?<div className="library-material-grid">{visibleMaterials.map(item=><article key={item.id}><header><span className={`library-type ${item.tipo}`}><FileText size={18}/></span><small>{materialTypeLabel[item.tipo]||"Material"}</small></header><h3>{item.titulo}</h3><p>{item.grado||item.nivel} · {item.area||"Área curricular"}</p><time>Creado {formatMaterialDate(item.created_at)}</time><footer><button className="primary" onClick={()=>setSelectedMaterial(item)}><Eye size={14}/> Abrir</button><button onClick={()=>downloadWord(`${item.tipo}-${item.id}.docx`,materialContentText(item.contenido),item.titulo)} title="Descargar Word"><Download size={14}/></button><button onClick={()=>duplicateMaterial(item)} title="Duplicar"><Copy size={14}/></button><button className="danger" onClick={()=>deleteMaterial(item)} title="Eliminar"><Trash2 size={14}/></button></footer></article>)}</div>:teacherMaterials.length?<div className="library-no-results"><Search size={23}/><strong>No encontramos materiales con esos filtros</strong><p>Prueba cambiando el tipo, nivel o palabras de búsqueda.</p><button onClick={()=>{setLibrarySearch("");setLibraryType("todos");setLibraryLevel("todos");}}>Limpiar filtros</button></div>:<LibraryEmpty onCreate={()=>setActiveSection("crear")} onChallenges={()=>{setActiveSection("retos");setRetoView("crear");}} onActivities={()=>setActiveSection("actividades")}/>}</>}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {TEMPLATES.map((t) => {
-            const Icon = t.icon;
-            return (
-              <div key={t.id} className="rounded-xl p-5 flex flex-col" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-3" style={{ background: "rgba(15,61,58,0.05)" }}>
-                  <Icon size={17} color={C.teal} />
-                </div>
-                <h4 className="text-base font-semibold mb-1.5" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>{t.title}</h4>
-                <p className="text-sm mb-4 flex-1" style={{ color: C.muted }}>{t.desc}</p>
-                <button onClick={() => downloadWord(`${t.id}.docx`, TEMPLATE_CONTENT[t.id], t.title)} className="inline-flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold" style={{ background: "rgba(15,61,58,0.06)", color: C.text, border: `1px solid ${C.line}` }}>
-                  <Download size={14} /> Descargar en Word
-                </button>
-              </div>
-            );
-          })}
-        </div>
+        {libraryTab==="guardados"&&(savedResources.length?<div className="library-saved-grid">{savedResources.map(item=><article key={item.id}><span><Star size={18}/></span><div><small>{item.kind==="activity"?"ACTIVIDAD STEAM":"RETO GRUPAL"}</small><h3>{item.title}</h3><p>{item.subtitle}</p></div><button onClick={()=>{if(item.kind==="activity"){setSelected(item.payload.activity);setModalGrade(item.payload.grade);}else setSelectedReto(item.payload);}}><Eye size={14}/> Abrir</button><button onClick={()=>toggleSaved(item)} title="Quitar de guardados"><Trash2 size={14}/></button></article>)}</div>:<div className="library-empty-state"><Star size={27}/><h2>Aún no guardaste recursos</h2><p>En Actividades y Retos encontrarás el botón Guardar para reunir aquí lo que quieras aplicar después.</p><div><button onClick={()=>setActiveSection("actividades")}>Explorar actividades</button><button onClick={()=>setActiveSection("retos")}>Explorar retos</button></div></div>)}
+
+        {libraryTab==="plantillas"&&<><div className="library-template-heading"><div><small>RECURSOS DESCARGABLES</small><h2>Plantillas para organizar tu trabajo docente</h2><p>Formatos editables con la identidad de SciVerse. Los instrumentos de evaluación personalizados se crean desde Kantu.</p></div></div><div className="library-template-grid">{TEMPLATES.map(t=>{const Icon=t.icon;return <article key={t.id}><span><Icon size={19}/></span><small>PLANTILLA WORD</small><h3>{t.title}</h3><p>{t.desc}</p><button onClick={()=>downloadWord(`${t.id}.docx`,TEMPLATE_CONTENT[t.id],t.title)}><Download size={14}/> Descargar Word</button></article>})}</div></>}
       </section>}
 
       {activeSection === "crear" && <section className="px-6 md:px-10 pb-20 max-w-4xl mx-auto text-center">
@@ -2117,8 +2136,9 @@ function SciVerseApp({ profile, onLogout }) {
         SciVerse para Docentes — un espacio de Frida García Rurush, IA educativa.
       </footer>
 
-      {selected && <ActivityModal activity={selected} grade={modalGrade} setGrade={setModalGrade} onClose={() => setSelected(null)} />}
-      {selectedReto && <RetoModal reto={selectedReto} profile={profile} onClose={()=>setSelectedReto(null)} onCreateInstrument={()=>{setSelectedReto(null);setActiveSection("crear");}} />}
+      {selected && <ActivityModal activity={selected} grade={modalGrade} setGrade={setModalGrade} onClose={() => setSelected(null)} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===`${selected.id}-${modalGrade}`)} />}
+      {selectedReto && <RetoModal reto={selectedReto} profile={profile} onClose={()=>setSelectedReto(null)} onCreateInstrument={()=>{setSelectedReto(null);setActiveSection("crear");}} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===(selectedReto.id||selectedReto.titulo))} />}
+      {selectedMaterial&&<MaterialViewerModal item={selectedMaterial} typeLabel={materialTypeLabel[selectedMaterial.tipo]||"Material"} onClose={()=>setSelectedMaterial(null)} onDownload={()=>downloadWord(`${selectedMaterial.tipo}-${selectedMaterial.id}.docx`,materialContentText(selectedMaterial.contenido),selectedMaterial.titulo)} onDuplicate={()=>duplicateMaterial(selectedMaterial)} onDelete={()=>deleteMaterial(selectedMaterial)}/>} 
       {accountOpen && <TeacherAccountModal profile={profile} onClose={() => setAccountOpen(false)} />}
     </div>
   );
