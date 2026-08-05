@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient.js";
 import AuthGate from "./AuthGate.jsx";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat } from "docx";
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
   FlaskConical,
   Atom,
@@ -113,15 +113,92 @@ async function downloadWord(filename, content, title="Documento SciVerse") {
   await triggerWordDownload(doc,filename);
 }
 
+const RUBRIC_WORD = { green:"0F625D", pale:"E4F6F3", pale2:"F3FBF9", border:"8DB9B3", ink:"172F2D", muted:"557370", white:"FFFFFF" };
+const RUBRIC_WIDTH = 15736;
+const rubricBorders = { top:{style:BorderStyle.SINGLE,size:5,color:RUBRIC_WORD.border}, bottom:{style:BorderStyle.SINGLE,size:5,color:RUBRIC_WORD.border}, left:{style:BorderStyle.SINGLE,size:5,color:RUBRIC_WORD.border}, right:{style:BorderStyle.SINGLE,size:5,color:RUBRIC_WORD.border}, insideHorizontal:{style:BorderStyle.SINGLE,size:4,color:RUBRIC_WORD.border}, insideVertical:{style:BorderStyle.SINGLE,size:4,color:RUBRIC_WORD.border} };
+function rubricParagraph(text="", {bold=false,color=RUBRIC_WORD.ink,size=15,alignment,after=40,italics=false}={}) { return new Paragraph({alignment,spacing:{after,line:220},children:[new TextRun({text:String(text??""),bold,color,size,italics,font:"Arial"})]}); }
+function rubricCell(children,width,{fill,color,bold=false,alignment,verticalMerge}={}) { const normalized=(Array.isArray(children)?children:[children]).map(item=>item instanceof Paragraph?item:rubricParagraph(item,{bold,color,alignment})); return new TableCell({width:{size:width,type:WidthType.DXA},verticalAlign:VerticalAlign.CENTER,verticalMerge,shading:fill?{type:ShadingType.CLEAR,fill}:undefined,margins:{top:70,bottom:70,left:85,right:85},children:normalized}); }
+function rubricTable(rows,widths=[]) { return new Table({width:{size:RUBRIC_WIDTH,type:WidthType.DXA},columnWidths:widths,layout:TableLayoutType.FIXED,borders:rubricBorders,rows}); }
+
+async function downloadRubricWord({form,instrument,profile={}}) {
+  const widths=[2400,3300,2509,2509,2509,2509];
+  const groups=[];
+  (instrument.criterios||[]).forEach(item=>{ const capacity=item.capacidad||"Capacidad seleccionada"; let group=groups.find(entry=>entry.capacity===capacity); if(!group){group={capacity,items:[]};groups.push(group);} group.items.push(item); });
+  const rubricRows=[new TableRow({tableHeader:true,children:[rubricCell("CAPACIDAD",widths[0],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("CRITERIO DE EVALUACIÓN",widths[1],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("LOGRO DESTACADO (AD)",widths[2],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("LOGRO ESPERADO (A)",widths[3],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("EN PROCESO (B)",widths[4],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("EN INICIO (C)",widths[5],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER})]})];
+  groups.forEach(group=>group.items.forEach((item,index)=>rubricRows.push(new TableRow({children:[rubricCell(index===0?group.capacity:"",widths[0],{fill:RUBRIC_WORD.pale,bold:true,verticalMerge:index===0?VerticalMergeType.RESTART:VerticalMergeType.CONTINUE}),rubricCell(item.criterio,widths[1],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white,bold:true}),rubricCell(item.logroDestacado,widths[2],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white}),rubricCell(item.logroEsperado,widths[3],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white}),rubricCell(item.enProceso,widths[4],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white}),rubricCell(item.inicio,widths[5],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white})]}))));
+  const teacher=[profile.nombres,profile.apellidos].filter(Boolean).join(" ")||profile.nombre||form.docente||"";
+  const institution=profile.ie||profile.institucion||form.institucion||"";
+  const capacities=(instrument.capacidades||form.capacidades||[]).join(" · ");
+  const children=[rubricParagraph("RÚBRICA DE EVALUACIÓN",{bold:true,size:25,color:RUBRIC_WORD.green,alignment:AlignmentType.CENTER,after:140}),rubricTable([new TableRow({children:[rubricCell("DOCENTE",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(teacher,6300),rubricCell("I.E.",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(institution,6586)]}),new TableRow({children:[rubricCell("ÁREA",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.area,6300),rubricCell("NIVEL Y GRADO",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(`${form.nivel} · ${form.grado}${form.seccion?` · ${form.seccion}`:""}`,6586)]}),new TableRow({children:[rubricCell("FECHA",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.fecha||"",6300),rubricCell("DURACIÓN",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.duracion?`${form.duracion} minutos`:"",6586)]})],[1550,6300,1300,6586]),rubricParagraph("TÍTULO DE LA SESIÓN",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),rubricParagraph(form.tema||instrument.titulo,{size:16,after:90}),rubricParagraph("PROPÓSITO DE APRENDIZAJE",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),rubricParagraph(`Competencia: ${instrument.competencia||form.competencia}`,{bold:true,size:15,after:25}),rubricParagraph(`Capacidades: ${capacities}`,{size:15,after:25}),...(form.proposito?[rubricParagraph(`Propósito: ${form.proposito}`,{size:15,after:25})]:[]),rubricParagraph(`Evidencia: ${instrument.evidencia||form.evidencia}`,{size:15,after:100}),rubricTable(rubricRows,widths)];
+  const doc=new Document({creator:"Teaching TIC Consultorías S.A.C.",title:instrument.titulo||"Rúbrica de evaluación",styles:{default:{document:{run:{font:"Arial",size:15,color:RUBRIC_WORD.ink},paragraph:{spacing:{after:40,line:220}}}}},sections:[{properties:{page:{size:{width:16838,height:11906,orientation:PageOrientation.LANDSCAPE},margin:{top:520,right:550,bottom:520,left:550}}},headers:{default:new Header({children:[rubricParagraph("Teaching TIC · Kantu",{size:13,color:RUBRIC_WORD.muted,alignment:AlignmentType.RIGHT,after:0})]})},footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"SciVerse para docentes · Página ",font:"Arial",size:13,color:RUBRIC_WORD.muted}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:13,color:RUBRIC_WORD.muted})]})]})},children}]});
+  const slug=(form.tema||instrument.titulo||"rubrica-de-evaluacion").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,55);
+  await triggerWordDownload(doc,`rubrica-${slug}.docx`);
+}
+
+async function downloadChecklistWord({form,instrument,profile={}}) {
+  const criteria=(instrument.criterios||[]).slice(0,8);
+  const teacher=[profile.nombres,profile.apellidos].filter(Boolean).join(" ")||profile.nombre||form.docente||"";
+  const institution=profile.ie||profile.institucion||form.institucion||"";
+  const fixedWidth=760;
+  const namesWidth=3500;
+  const observationsWidth=2100;
+  const criterionWidth=Math.floor((RUBRIC_WIDTH-fixedWidth-namesWidth-observationsWidth)/Math.max(criteria.length,1));
+  const widths=[fixedWidth,namesWidth,...criteria.map(()=>criterionWidth),observationsWidth];
+  const adjustedTotal=widths.reduce((sum,value)=>sum+value,0);
+  widths[widths.length-1]+=RUBRIC_WIDTH-adjustedTotal;
+  const headerCells=[rubricCell("N.º",widths[0],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("APELLIDOS Y NOMBRES",widths[1],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),...criteria.map((item,index)=>rubricCell([rubricParagraph(`CRITERIO ${index+1}`,{bold:true,color:RUBRIC_WORD.white,size:14,alignment:AlignmentType.CENTER,after:30}),rubricParagraph(item.criterio,{color:RUBRIC_WORD.white,size:12,alignment:AlignmentType.CENTER,after:0})],criterionWidth,{fill:RUBRIC_WORD.green,alignment:AlignmentType.CENTER})),rubricCell("OBSERVACIONES",widths.at(-1),{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER})];
+  const scaleRow=new TableRow({children:[rubricCell("",widths[0],{fill:RUBRIC_WORD.pale}),rubricCell("Escala de valoración",widths[1],{fill:RUBRIC_WORD.pale,bold:true,alignment:AlignmentType.RIGHT}),...criteria.map(()=>rubricCell("Sí / No",criterionWidth,{fill:RUBRIC_WORD.pale,bold:true,alignment:AlignmentType.CENTER})),rubricCell("",widths.at(-1),{fill:RUBRIC_WORD.pale})]});
+  const studentRows=Array.from({length:30},(_,index)=>new TableRow({children:[rubricCell(String(index+1).padStart(2,"0"),widths[0],{alignment:AlignmentType.CENTER}),rubricCell("",widths[1]),...criteria.map(()=>rubricCell("☐ Sí    ☐ No",criterionWidth,{alignment:AlignmentType.CENTER})),rubricCell("",widths.at(-1))]}));
+  const capacities=(instrument.capacidades||form.capacidades||[]).join(" · ");
+  const children=[rubricParagraph("LISTA DE COTEJO",{bold:true,size:25,color:RUBRIC_WORD.green,alignment:AlignmentType.CENTER,after:140}),rubricTable([new TableRow({children:[rubricCell("DOCENTE",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(teacher,6300),rubricCell("I.E.",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(institution,6586)]}),new TableRow({children:[rubricCell("ÁREA",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.area,6300),rubricCell("NIVEL Y GRADO",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(`${form.nivel} · ${form.grado}${form.seccion?` · ${form.seccion}`:""}`,6586)]}),new TableRow({children:[rubricCell("FECHA",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.fecha||"",6300),rubricCell("DURACIÓN",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.duracion?`${form.duracion} minutos`:"",6586)]})],[1550,6300,1300,6586]),rubricParagraph("TÍTULO DE LA SESIÓN",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),rubricParagraph(form.tema||instrument.titulo,{size:16,after:80}),rubricParagraph("PROPÓSITO DE APRENDIZAJE",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),rubricParagraph(`Competencia: ${instrument.competencia||form.competencia}`,{bold:true,size:15,after:25}),rubricParagraph(`Capacidades: ${capacities}`,{size:15,after:25}),...(form.proposito?[rubricParagraph(`Propósito: ${form.proposito}`,{size:15,after:25})]:[]),rubricParagraph(`Evidencia: ${instrument.evidencia||form.evidencia}`,{size:15,after:80}),rubricParagraph("CRITERIOS DE EVALUACIÓN",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),...criteria.map((item,index)=>rubricParagraph(`${index+1}. ${item.criterio}`,{size:14,after:25})),rubricParagraph("REGISTRO DE ESTUDIANTES",{bold:true,size:17,color:RUBRIC_WORD.green,after:60}),rubricTable([new TableRow({tableHeader:true,children:headerCells}),scaleRow,...studentRows],widths)];
+  const doc=new Document({creator:"Teaching TIC Consultorías S.A.C.",title:instrument.titulo||"Lista de cotejo",styles:{default:{document:{run:{font:"Arial",size:15,color:RUBRIC_WORD.ink},paragraph:{spacing:{after:40,line:220}}}}},sections:[{properties:{page:{size:{width:16838,height:11906,orientation:PageOrientation.LANDSCAPE},margin:{top:520,right:550,bottom:520,left:550}}},headers:{default:new Header({children:[rubricParagraph("Teaching TIC · Kantu",{size:13,color:RUBRIC_WORD.muted,alignment:AlignmentType.RIGHT,after:0})]})},footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"SciVerse para docentes · Página ",font:"Arial",size:13,color:RUBRIC_WORD.muted}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:13,color:RUBRIC_WORD.muted})]})]})},children}]});
+  const slug=(form.tema||instrument.titulo||"lista-de-cotejo").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,55);
+  await triggerWordDownload(doc,`lista-de-cotejo-${slug}.docx`);
+}
+
+function wordMomentSubsection(title, item, {development=false}={}) {
+  if (!item) return [];
+  const paragraphs=[wordParagraph(title,{bold:true,color:development?"2865CC":WORD.purpleDark,size:19,before:80,after:55})];
+  const description=item.descripcion||item.actividad||"";
+  if(description) paragraphs.push(wordParagraph(description,{size:18,after:55}));
+  const questions=item.preguntas||item.preguntasMediacion||[];
+  if(questions.length) paragraphs.push(wordParagraph(development?"Preguntas de mediación":"Preguntas orientadoras",{bold:true,color:WORD.purple,size:17,before:40,after:35}),...wordBulletList(questions));
+  if(item.criteriosCompartidos?.length) paragraphs.push(wordParagraph("Criterios compartidos",{bold:true,color:WORD.purple,size:17,before:40,after:35}),...wordBulletList(item.criteriosCompartidos));
+  if(item.acompanamiento) paragraphs.push(wordRichParagraph([wordRun("Acompañamiento: ",{bold:true,color:"2865CC",size:17}),wordRun(item.acompanamiento,{size:17})]));
+  if(item.evaluacionFormativa) paragraphs.push(wordRichParagraph([wordRun("Evaluación formativa: ",{bold:true,color:"2865CC",size:17}),wordRun(item.evaluacionFormativa,{size:17})]));
+  if(item.mensajeLogro) paragraphs.push(wordRichParagraph([wordRun("Mensaje de logro: ",{bold:true,color:WORD.purple,size:17}),wordRun(item.mensajeLogro,{italics:true,size:17})]));
+  if(item.consigna) paragraphs.push(wordRichParagraph([wordRun("Consigna: ",{bold:true,color:WORD.purple,size:17}),wordRun(item.consigna,{italics:true,size:17})]));
+  return paragraphs;
+}
+
+function wordMomentContent(momentName, data) {
+  if (!data || typeof data === "string") return [wordParagraph(data||"",{size:18})];
+  if(momentName==="INICIO") return [
+    ...wordMomentSubsection("Motivación",data.motivacion),
+    ...wordMomentSubsection("Saberes previos",data.saberesPrevios),
+    ...wordMomentSubsection("Problematización",data.problematizacion),
+    ...wordMomentSubsection("Propósito y organización",data.propositoOrganizacion),
+  ];
+  if(momentName==="DESARROLLO") return [
+    ...(data.metodologia?[wordRichParagraph([wordRun("Metodología: ",{bold:true,color:"2865CC",size:18}),wordRun(data.metodologia,{italics:true,size:18})])]:[]),
+    ...(data.procesos||[]).flatMap(item=>wordMomentSubsection(item.subtitulo,item,{development:true})),
+  ];
+  return [
+    ...wordMomentSubsection("Metacognición",data.metacognicion),
+    ...wordMomentSubsection("Evaluación",data.evaluacion),
+    ...wordMomentSubsection("Cierre y transferencia",data.transferencia),
+  ];
+}
+
 async function downloadSessionWord({ form, result, documentName="sesión de aprendizaje", documentType="session", profile={} }) {
   const criteria=(result.criteriosDetallados||result.criteriosEvaluacion?.map(criterio=>({criterio,evidenciaObservable:result.evidencia}))||[]);
   const capacities=result.capacidadesCNEB||form.capacidades||[];
   const performances=result.desempenosPrecisados||[];
   const approaches=result.enfoquesTransversales||[];
   const moments=[
-    {name:"INICIO",minutes:result.tiempos?.inicio||"",text:result.inicio,fill:WORD.yellow},
-    {name:"DESARROLLO",minutes:result.tiempos?.desarrollo||"",text:result.desarrollo,fill:"FFFFFF"},
-    {name:"CIERRE",minutes:result.tiempos?.cierre||"",text:result.cierre,fill:"FFFFFF"},
+    {name:"INICIO",minutes:result.inicio?.minutos||result.tiempos?.inicio||"",content:wordMomentContent("INICIO",result.inicio),fill:WORD.yellow},
+    {name:"DESARROLLO",minutes:result.desarrollo?.minutos||result.tiempos?.desarrollo||"",content:wordMomentContent("DESARROLLO",result.desarrollo),fill:"FFFFFF"},
+    {name:"CIERRE",minutes:result.cierre?.minutos||result.tiempos?.cierre||"",content:wordMomentContent("CIERRE",result.cierre),fill:"FFFFFF"},
   ];
   const children=[
     wordParagraph(documentType==="project"?"PROYECTO STEAM":"SESIÓN DE APRENDIZAJE",{bold:true,size:30,color:WORD.ink,alignment:AlignmentType.CENTER,after:220}),
@@ -145,14 +222,13 @@ async function downloadSessionWord({ form, result, documentName="sesión de apre
   if(performances.length){ children.push(wordTable([new TableRow({children:[wordCell("DESEMPEÑOS PRECISADOS",WORD_WIDTH,{fill:WORD.purple,color:WORD.white,bold:true})]}),new TableRow({children:[wordCell(performances.map(item=>wordRichParagraph([wordRun(`${item.capacidad}: `,{bold:true,size:18}),wordRun(item.desempeno,{size:18})])),WORD_WIDTH)]})],[WORD_WIDTH])); }
   if(approaches.length){ children.push(wordSectionHeading("IV","Enfoques transversales"),wordTable([new TableRow({tableHeader:true,children:[wordCell("ENFOQUE",2200,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("VALOR",1900,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("ACTITUD OBSERVABLE",5538,{fill:WORD.purple,color:WORD.white,bold:true})]}),...approaches.map(item=>new TableRow({children:[wordCell(item.enfoque,2200),wordCell(item.valor,1900),wordCell(item.actitudObservable,5538)]}))],[2200,1900,5538])); }
   children.push(
-    wordSectionHeading("V","Procesos pedagógicos considerados"),...wordBulletList(result.procesosPedagogicos||["Problematización","Propósito y organización","Motivación o interés","Saberes previos","Gestión y acompañamiento del desarrollo de competencias","Evaluación formativa"]),
-    wordSectionHeading("VI","Situación significativa"),wordParagraph(form.contexto,{size:20}),
-    wordSectionHeading("VII","Momentos de la sesión"),
-    wordTable([new TableRow({tableHeader:true,children:[wordCell("MOMENTO",1400,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("ESTRATEGIAS DIDÁCTICAS",6338,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("RECURSOS Y MATERIALES",1900,{fill:WORD.purple,color:WORD.white,bold:true})]}),...moments.map(moment=>new TableRow({children:[wordCell([wordParagraph(moment.name,{bold:true,size:19}),wordParagraph(moment.minutes?`${moment.minutes} min`:"",{italics:true,size:17})],1400,{fill:moment.fill}),wordCell(String(moment.text||"").split(/\n+/).map(line=>wordParagraph(line,{size:18})),6338),wordCell(wordBulletList(result.materiales||[]),1900)]}))],[1400,6338,1900]),
-    wordSectionHeading("VIII","Evaluación"),
+    wordSectionHeading("V","Situación significativa"),wordParagraph(form.contexto,{size:20}),
+    wordSectionHeading("VI","Momentos de la sesión"),
+    wordTable([new TableRow({tableHeader:true,children:[wordCell("MOMENTO",1400,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("ESTRATEGIAS DIDÁCTICAS",6338,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("RECURSOS Y MATERIALES",1900,{fill:WORD.purple,color:WORD.white,bold:true})]}),...moments.map(moment=>new TableRow({children:[wordCell([wordParagraph(moment.name,{bold:true,size:19}),wordParagraph(moment.minutes?`${moment.minutes} min`:"",{italics:true,size:17})],1400,{fill:moment.fill}),wordCell(moment.content,6338),wordCell(wordBulletList(result.materiales||[]),1900)]}))],[1400,6338,1900]),
+    wordSectionHeading("VII","Evaluación"),
     wordTable([new TableRow({tableHeader:true,children:[wordCell("CAPACIDAD",2300,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("CRITERIO OBSERVABLE",4438,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("EVIDENCIA OBSERVABLE",2900,{fill:WORD.purple,color:WORD.white,bold:true})]}),...criteria.map(item=>new TableRow({children:[wordCell(item.capacidad||"Capacidades seleccionadas",2300),wordCell(item.criterio||item,4438),wordCell(item.evidenciaObservable||result.evidencia,2900)]}))],[2300,4438,2900]),
-    wordSectionHeading("IX","Orientaciones DUA"),...wordBulletList(result.orientacionesDUA||[]),
-    wordSectionHeading("X","Reflexiones del docente"),
+    wordSectionHeading("VIII","Orientaciones DUA"),...wordBulletList(result.orientacionesDUA||[]),
+    wordSectionHeading("IX","Reflexiones del docente"),
     wordTable((result.reflexionesDocente||["¿Qué avances tuvieron los estudiantes?","¿Qué dificultades se presentaron?","¿Qué debo reforzar en la próxima sesión?"]).map(question=>new TableRow({children:[wordCell(question,5000,{fill:WORD.purpleLight,bold:true}),wordCell("",4638)]})),[5000,4638]),
   );
   (result.anexos||[]).forEach((annex,index)=>children.push(new Paragraph({children:[new PageBreak()]}),wordSectionHeading(`ANEXO ${index+1}`,annex.titulo),wordRichParagraph([wordRun("Propósito: ",{bold:true,color:WORD.purple,size:20}),wordRun(annex.proposito,{size:20})]),wordParagraph(annex.contenido,{size:20}),wordRichParagraph([wordRun("Indicaciones: ",{bold:true,color:WORD.purple,size:20}),wordRun(annex.instrucciones,{size:20})])));
@@ -758,6 +834,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
   const [activeModule, setActiveModule] = useState(null);
   const [completedModules, setCompletedModules] = useState([]);
   const [downloading, setDownloading] = useState(false);
+  const [evaluationFlow, setEvaluationFlow] = useState(null);
   const moduleLabels = { alignment: "Alineación curricular", sequence: "Secuencia didáctica", assessment: "Evaluación formativa", annexes: "Anexos para la clase" };
   const loadingMessages = activeModule ? [`Kantu está trabajando en: ${moduleLabels[activeModule]}`, activeModule === "alignment" ? "Está relacionando capacidades, desempeños y criterios" : activeModule === "sequence" ? "Está organizando los procesos pedagógicos y didácticos" : activeModule === "assessment" ? "Está verificando criterios y evidencias observables" : "Está preparando recursos listos para usar"] : [`Kantu está analizando la información curricular`, `Está organizando la ${documentName}`];
 
@@ -798,6 +875,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
     setLoading(true);
     setError(null);
     setResult(null);
+    setEvaluationFlow(null);
     setCompletedModules([]);
     try {
       const { data: sessionData } = await supabase.auth.getSession();
@@ -832,12 +910,10 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
         evidencia: alignment.evidencia,
         enfoquesTransversales: alignment.enfoquesTransversales,
         preparacionDocente: sequence.preparacionDocente,
-        procesosPedagogicos: sequence.procesosPedagogicos,
-        procesosDidacticos: sequence.procesosDidacticos,
         materiales: sequence.materiales,
-        inicio: sequence.inicio.actividades,
-        desarrollo: sequence.desarrollo.actividades,
-        cierre: sequence.cierre.actividades,
+        inicio: sequence.inicio,
+        desarrollo: sequence.desarrollo,
+        cierre: sequence.cierre,
         tiempos: { inicio: sequence.inicio.minutos, desarrollo: sequence.desarrollo.minutos, cierre: sequence.cierre.minutos },
         orientacionesDUA: sequence.orientacionesDUA,
         instrumentoSugerido: assessment.instrumentoSugerido,
@@ -941,8 +1017,6 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Evidencia</p>
           <p className="text-sm mb-4 leading-relaxed" style={{ color: C.text }}>{result.evidencia}</p>
           {!!result.enfoquesTransversales?.length&&<><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Enfoques transversales</p><div className="modular-table">{result.enfoquesTransversales.map((item,i)=><div key={i}><small>{item.enfoque} · {item.valor}</small><p>{item.actitudObservable}</p></div>)}</div></>}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4"><div className="rounded-lg p-3" style={{background:"#F1F8F7"}}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Procesos pedagógicos</p><ul className="text-sm space-y-1">{(result.procesosPedagogicos||[]).map((p,i)=><li key={i}>· {p}</li>)}</ul></div><div className="rounded-lg p-3" style={{background:"#F1F8F7"}}><p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{color:C.muted}}>Procesos didácticos</p><ul className="text-sm space-y-1">{(result.procesosDidacticos||[]).map((p,i)=><li key={i}>· {p}</li>)}</ul></div></div>
-
           <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>Materiales</p>
           <ul className="text-sm mb-4 space-y-1" style={{ color: C.text }}>
             {(result.materiales || []).map((m, i) => (
@@ -950,19 +1024,19 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
             ))}
           </ul>
 
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[0]} {result.tiempos&&`· ${result.tiempos.inicio} min`}</p>
-              <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.inicio}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[1]} {result.tiempos&&`· ${result.tiempos.desarrollo} min`}</p>
-              <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.desarrollo}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide mb-1" style={{ color: C.muted }}>{sectionLabels[2]} {result.tiempos&&`· ${result.tiempos.cierre} min`}</p>
-              <p className="text-sm leading-relaxed" style={{ color: C.text }}>{result.cierre}</p>
-            </div>
+          <div className="session-moments">
+            <section className="session-moment session-moment--start"><header><strong>INICIO</strong><span>{result.inicio?.minutos||result.tiempos?.inicio} min</span></header>{[
+              ["Motivación",result.inicio?.motivacion],
+              ["Saberes previos",result.inicio?.saberesPrevios],
+              ["Problematización",result.inicio?.problematizacion],
+              ["Propósito y organización",result.inicio?.propositoOrganizacion],
+            ].map(([title,item])=>item&&<div className="moment-subsection" key={title}><h5>{title}</h5><p>{item.descripcion}</p>{!!item.preguntas?.length&&<ul>{item.preguntas.map((q,i)=><li key={i}>{q}</li>)}</ul>}{!!item.criteriosCompartidos?.length&&<><small>CRITERIOS COMPARTIDOS</small><ul>{item.criteriosCompartidos.map((q,i)=><li key={i}>{q}</li>)}</ul></>}</div>)}</section>
+            <section className="session-moment session-moment--development"><header><strong>DESARROLLO</strong><span>{result.desarrollo?.minutos||result.tiempos?.desarrollo} min</span></header>{result.desarrollo?.metodologia&&<div className="moment-method"><strong>Metodología</strong><p>{result.desarrollo.metodologia}</p></div>}{(result.desarrollo?.procesos||[]).map((item,index)=><div className="moment-subsection" key={index}><h5>{item.subtitulo}</h5><p>{item.actividad}</p>{!!item.preguntasMediacion?.length&&<><small>PREGUNTAS DE MEDIACIÓN</small><ul>{item.preguntasMediacion.map((q,i)=><li key={i}>{q}</li>)}</ul></>}<div className="moment-support"><p><strong>Acompañamiento:</strong> {item.acompanamiento}</p><p><strong>Evaluación formativa:</strong> {item.evaluacionFormativa}</p></div></div>)}</section>
+            <section className="session-moment session-moment--close"><header><strong>CIERRE</strong><span>{result.cierre?.minutos||result.tiempos?.cierre} min</span></header>{[
+              ["Metacognición",result.cierre?.metacognicion],
+              ["Evaluación",result.cierre?.evaluacion],
+              ["Cierre y transferencia",result.cierre?.transferencia],
+            ].map(([title,item])=>item&&<div className="moment-subsection" key={title}><h5>{title}</h5><p>{item.descripcion}</p>{!!item.preguntas?.length&&<ul>{item.preguntas.map((q,i)=><li key={i}>{q}</li>)}</ul>}{item.mensajeLogro&&<blockquote>{item.mensajeLogro}</blockquote>}{item.consigna&&<blockquote>{item.consigna}</blockquote>}</div>)}</section>
           </div>
 
           {!!result.orientacionesDUA?.length&&<div className="modular-section"><h5>Orientaciones DUA</h5><ul>{result.orientacionesDUA.map((item,i)=><li key={i}>{item}</li>)}</ul></div>}
@@ -981,21 +1055,30 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
           >
             {downloading?<Loader2 size={14} className="animate-spin"/>:<Download size={14} />} {downloading?"Preparando Word...":`Descargar ${documentName} en Word`}
           </button>
+          {!evaluationFlow&&<button onClick={()=>setEvaluationFlow("choose")} className="session-next-step"><span><ClipboardList size={18}/><i><strong>Siguiente paso</strong><small>Crear el instrumento con los criterios y la evidencia de esta sesión</small></i></span>Continuar con evaluación <ArrowRight size={16}/></button>}
+          {evaluationFlow==="choose"&&<div className="evaluation-flow-picker"><div className="evaluation-flow-head"><div><small>PASO 3 DE 4</small><h3>Instrumento de evaluación</h3><p>El contexto de la sesión ya está cargado. Elige el instrumento que utilizarás.</p></div><button onClick={()=>setEvaluationFlow(null)}>Cerrar</button></div><div className="evaluation-type-grid">
+            <button className="available" onClick={()=>setEvaluationFlow("rubric")}><span><ClipboardList size={22}/></span><strong>Rúbrica analítica</strong><small>Sugerida para valorar niveles de logro</small><b>Crear rúbrica <ArrowRight size={14}/></b></button>
+            <button className="available" onClick={()=>setEvaluationFlow("checklist")}><span><CheckCircle2 size={22}/></span><strong>Lista de cotejo</strong><small>Verificación rápida con Sí, No y observaciones</small><b>Crear lista <ArrowRight size={14}/></b></button>
+            <button disabled><span><BookOpen size={22}/></span><strong>Guía de observación</strong><small>Próximamente</small></button>
+            <button disabled><span><Target size={22}/></span><strong>Escala de valoración</strong><small>Próximamente</small></button>
+          </div></div>}
+          {(evaluationFlow==="rubric"||evaluationFlow==="checklist")&&<div className="linked-instrument-flow"><div className="linked-instrument-head"><div><small>INSTRUMENTO VINCULADO A LA SESIÓN</small><h3>{evaluationFlow==="rubric"?"Rúbrica analítica":"Lista de cotejo"}</h3><p>{form.area} · {form.grado} · {result.titulo}</p></div><button onClick={()=>setEvaluationFlow("choose")}>Cambiar instrumento</button></div><EvaluationInstrumentGenerator profile={profile} initialGrade={initialGrade} instrumentType={evaluationFlow} initialContext={{nivel:form.nivel,grado:form.grado,area:form.area,region:form.region,tema:result.titulo||form.tema,competencia:form.competencia,capacidades:form.capacidades,evidencia:result.evidencia,proposito:result.proposito,fecha:form.fecha,duracion:form.duracion,seccion:form.seccion,criteriosBase:result.criteriosDetallados||[],numeroCriterios:String(result.criteriosDetallados?.length||6)}} /></div>}
         </div>
       )}
     </div>
   );
 }
 
-function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentType = "checklist" }) {
+function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentType = "checklist", initialContext = null, profile = {} }) {
   const isRubric = instrumentType === "rubric";
   const instrumentName = isRubric ? "rúbrica" : "lista de cotejo";
   const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ nivel: initialLevel, grado: initialLevel === "Primaria" ? "3.º" : "1.º", area: "Ciencia y Tecnología", region: "", tema: "", competencia: CNEB.indaga, capacidades: GENERATOR_CAPACITIES[CNEB.indaga], evidencia: "", numeroCriterios: "6" });
+  const [step, setStep] = useState(initialContext ? 3 : 1);
+  const [form, setForm] = useState(initialContext || { nivel: initialLevel, grado: initialLevel === "Primaria" ? "3.º" : "1.º", area: "Ciencia y Tecnología", region: "", tema: "", competencia: CNEB.indaga, capacidades: GENERATOR_CAPACITIES[CNEB.indaga], evidencia: "", numeroCriterios: "6" });
   const [instrument, setInstrument] = useState(null);
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [downloading, setDownloading] = useState(false);
   const [suggesting, setSuggesting] = useState(false);
   const [error, setError] = useState(null);
   const grades = form.nivel === "Primaria" ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"] : ["1.º", "2.º", "3.º", "4.º", "5.º"];
@@ -1022,9 +1105,12 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
     try { const token=await getToken(); const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({mode:"instrument",instrumentType,form})}); const data=await response.json(); if(!response.ok) throw new Error(data.error||`No se pudo generar la ${instrumentName}`); if(!data.instrument) throw new Error("El instrumento no llegó completo. Intenta nuevamente."); setInstrument(data.instrument); setEditing(false); } catch(e){setError(e.message);} finally{setLoading(false);}
   }
   function updateCriterion(index, key, value) { setInstrument((current) => ({ ...current, criterios: current.criterios.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item) })); }
-  function downloadInstrument() {
-    const criteriaText = instrument.criterios.map((item,index) => isRubric ? `${index+1}. ${item.criterio}\n- Inicio: ${item.inicio}\n- En proceso: ${item.enProceso}\n- Logro esperado: ${item.logroEsperado}\n- Logro destacado: ${item.logroDestacado}` : `${index+1}. ${item.criterio}\n- Sí: ☐   No: ☐   Observaciones: ____________________`).join("\n\n");
-    downloadWord(`${instrumentType}-${form.tema.toLowerCase().replace(/\s+/g,"-").slice(0,30)}.docx`, `Nivel y grado: ${form.nivel} ${form.grado}\nÁrea: ${form.area}\nTema: ${form.tema}\n\nCompetencia evaluada:\n${instrument.competencia}\n\nCapacidades:\n${instrument.capacidades.map((item)=>`- ${item}`).join("\n")}\n\nEvidencia de aprendizaje:\n${instrument.evidencia}\n\nCriterios de evaluación:\n${criteriaText}`, instrument.titulo);
+  async function downloadInstrument() {
+    setDownloading(true); setError(null);
+    try {
+      if(isRubric){ await downloadRubricWord({form,instrument,profile}); return; }
+      await downloadChecklistWord({form,instrument,profile}); return;
+    } catch(e){ setError(`No se pudo preparar el Word: ${e.message}`); } finally { setDownloading(false); }
   }
 
   return <div className="instrument-builder">
@@ -1036,9 +1122,9 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
       <fieldset className="wide capacity-picker"><legend>Capacidades que serán evaluadas *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
     </div></div>}
     {step===2&&<div className="wizard-card"><div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Evidencia de aprendizaje</h4><p>Indica qué producirá o realizará el estudiante para demostrar lo aprendido.</p></div></div><div className="evidence-editor"><div><strong>{form.competencia}</strong><small>{form.capacidades.length} capacidades seleccionadas</small></div><button onClick={suggestEvidence} disabled={suggesting}>{suggesting?<Loader2 size={15} className="animate-spin"/>:<Sparkles size={15}/>} Sugerir con Kantu</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Describe el producto, actuación o desempeño observable..."/></div><label className="criteria-count">Cantidad de criterios<select value={form.numeroCriterios} onChange={e=>update("numeroCriterios",e.target.value)}>{[4,5,6,7,8,9,10].map(n=><option key={n}>{n}</option>)}</select></label></div>}
-    {step===3&&!instrument&&<div className="wizard-card instrument-review"><div className="wizard-card__title"><span><ClipboardList size={18}/></span><div><h4>Revisa el contexto</h4><p>Puedes volver y editar cualquier dato antes de generar.</p></div></div><div className="context-summary"><div><small>Contexto</small><strong>{form.area} · {form.grado} · {form.region}</strong><p>{form.tema}</p></div><button onClick={()=>setStep(1)}>Editar contexto</button></div><div className="context-summary"><div><small>Evidencia</small><p>{form.evidencia}</p></div><button onClick={()=>setStep(2)}>Editar evidencia</button></div></div>}
+    {step===3&&!instrument&&<div className="wizard-card instrument-review"><div className="wizard-card__title"><span><ClipboardList size={18}/></span><div><h4>{initialContext?"Contexto recuperado de la sesión":"Revisa el contexto"}</h4><p>{initialContext?"Kantu utilizará la competencia, capacidades, criterios y evidencia ya generados.":"Puedes volver y editar cualquier dato antes de generar."}</p></div></div><div className="context-summary"><div><small>Contexto</small><strong>{form.area} · {form.grado} · {form.region}</strong><p>{form.tema}</p></div>{!initialContext&&<button onClick={()=>setStep(1)}>Editar contexto</button>}</div><div className="context-summary"><div><small>Evidencia</small><p>{form.evidencia}</p></div>{!initialContext&&<button onClick={()=>setStep(2)}>Editar evidencia</button>}</div></div>}
     {error&&<p className="wizard-error">{error}</p>}
-    {!instrument&&<div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<3?<button className="wizard-next" onClick={continueFlow}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={generateInstrument} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está trabajando...":`Generar ${instrumentName}`}</button>}</div>}
+    {!instrument&&<div className="wizard-actions">{step>1&&!initialContext&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<3?<button className="wizard-next" onClick={continueFlow}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={generateInstrument} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está trabajando...":`Generar ${instrumentName}`}</button>}</div>}
     {loading&&<div className="kantu-working"><div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img src="/mascot/kantu-material.png" alt="Kantu creando el instrumento"/></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Está construyendo criterios observables y alineados…</h4><p>Está revisando la competencia, las capacidades y la evidencia de aprendizaje.</p><div className="kantu-progress"><i/><i/><i/></div></div></div>}
     {instrument&&<div className="instrument-result"><div className="instrument-result__actions"><div><small>INSTRUMENTO GENERADO</small><h3>{instrument.titulo}</h3></div><div><button onClick={()=>setEditing(!editing)}><Pencil size={14}/>{editing?"Terminar edición":"Editar"}</button><button onClick={generateInstrument}><RotateCw size={14}/>Regenerar</button><button className="primary" onClick={downloadInstrument}><Download size={14}/>Word</button></div></div><div className="instrument-meta"><strong>Competencia evaluada</strong><p>{instrument.competencia}</p><strong>Capacidades</strong><ul>{instrument.capacidades.map((item,index)=><li key={index}>{item}</li>)}</ul><strong>Evidencia de aprendizaje</strong>{editing?<textarea value={instrument.evidencia} onChange={e=>setInstrument(current=>({...current,evidencia:e.target.value}))}/>:<p>{instrument.evidencia}</p>}</div><div className="instrument-table-wrap"><table className={isRubric?"rubric-table":"checklist-table"}><thead><tr><th>N.º</th><th>Criterio de evaluación</th>{isRubric?<><th>Inicio</th><th>En proceso</th><th>Logro esperado</th><th>Logro destacado</th></>:<><th>Sí</th><th>No</th><th>Observaciones</th></>}</tr></thead><tbody>{instrument.criterios.map((item,index)=><tr key={index}><td>{index+1}</td><td>{editing?<textarea value={item.criterio} onChange={e=>updateCriterion(index,"criterio",e.target.value)}/>:<><small>{item.capacidad}</small>{item.criterio}</>}</td>{isRubric?<>{["inicio","enProceso","logroEsperado","logroDestacado"].map(key=><td key={key}>{editing?<textarea value={item[key]} onChange={e=>updateCriterion(index,key,e.target.value)}/>:item[key]}</td>)}</>:<><td><i className="empty-check"/></td><td><i className="empty-check"/></td><td><span className="observation-line"/></td></>}</tr>)}</tbody></table></div></div>}
   </div>;
@@ -1069,7 +1155,7 @@ function CreateStudio({ preferredGrade = "primaria", profile = {} }) {
 
       {creation && <div className="create-generator-wrap">
         <div className="create-generator-head"><div><span>CREANDO CON KANTU</span><h3>{selectedType?.label}</h3><p>{selectedType?.desc}</p></div><button onClick={()=>setCreation(null)}>← Elegir otro producto</button></div>
-        {(creation === "rubric" || creation === "checklist") ? <EvaluationInstrumentGenerator initialGrade={preferredGrade} instrumentType={creation} /> : <SteamGenerator initialGrade={preferredGrade} documentType={creation} profile={profile} />}
+        {(creation === "rubric" || creation === "checklist") ? <EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={creation} /> : <SteamGenerator initialGrade={preferredGrade} documentType={creation} profile={profile} />}
       </div>}
     </div>
   );

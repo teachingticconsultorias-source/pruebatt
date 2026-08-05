@@ -79,14 +79,26 @@ const MODULE_SCHEMAS = {
     properties: {
       preparacionDocente: { type: "array", items: { type: "string" } },
       materiales: { type: "array", items: { type: "string" } },
-      procesosPedagogicos: { type: "array", items: { type: "string" } },
-      procesosDidacticos: { type: "array", items: { type: "string" } },
-      inicio: { type: "object", properties: { minutos: { type: "integer" }, actividades: { type: "string" } }, required: ["minutos", "actividades"] },
-      desarrollo: { type: "object", properties: { minutos: { type: "integer" }, actividades: { type: "string" } }, required: ["minutos", "actividades"] },
-      cierre: { type: "object", properties: { minutos: { type: "integer" }, actividades: { type: "string" } }, required: ["minutos", "actividades"] },
+      inicio: { type: "object", properties: {
+        minutos: { type: "integer" },
+        motivacion: { type: "object", properties: { descripcion: { type: "string" }, preguntas: { type: "array", items: { type: "string" } } }, required: ["descripcion", "preguntas"] },
+        saberesPrevios: { type: "object", properties: { descripcion: { type: "string" }, preguntas: { type: "array", items: { type: "string" } } }, required: ["descripcion", "preguntas"] },
+        problematizacion: { type: "object", properties: { descripcion: { type: "string" }, preguntas: { type: "array", items: { type: "string" } } }, required: ["descripcion", "preguntas"] },
+        propositoOrganizacion: { type: "object", properties: { descripcion: { type: "string" }, criteriosCompartidos: { type: "array", items: { type: "string" } } }, required: ["descripcion", "criteriosCompartidos"] },
+      }, required: ["minutos", "motivacion", "saberesPrevios", "problematizacion", "propositoOrganizacion"] },
+      desarrollo: { type: "object", properties: {
+        minutos: { type: "integer" }, metodologia: { type: "string" },
+        procesos: { type: "array", items: { type: "object", properties: { subtitulo: { type: "string" }, actividad: { type: "string" }, preguntasMediacion: { type: "array", items: { type: "string" } }, acompanamiento: { type: "string" }, evaluacionFormativa: { type: "string" } }, required: ["subtitulo", "actividad", "preguntasMediacion", "acompanamiento", "evaluacionFormativa"] } },
+      }, required: ["minutos", "metodologia", "procesos"] },
+      cierre: { type: "object", properties: {
+        minutos: { type: "integer" },
+        metacognicion: { type: "object", properties: { descripcion: { type: "string" }, preguntas: { type: "array", items: { type: "string" } } }, required: ["descripcion", "preguntas"] },
+        evaluacion: { type: "object", properties: { descripcion: { type: "string" }, mensajeLogro: { type: "string" } }, required: ["descripcion", "mensajeLogro"] },
+        transferencia: { type: "object", properties: { descripcion: { type: "string" }, consigna: { type: "string" } }, required: ["descripcion", "consigna"] },
+      }, required: ["minutos", "metacognicion", "evaluacion", "transferencia"] },
       orientacionesDUA: { type: "array", items: { type: "string" } },
     },
-    required: ["preparacionDocente", "materiales", "procesosPedagogicos", "procesosDidacticos", "inicio", "desarrollo", "cierre", "orientacionesDUA"],
+    required: ["preparacionDocente", "materiales", "inicio", "desarrollo", "cierre", "orientacionesDUA"],
   },
   assessment: {
     type: "object",
@@ -106,6 +118,33 @@ const MODULE_SCHEMAS = {
   },
 };
 
+const DIDACTIC_PROCESSES = {
+  "Ciencia y Tecnología": {
+    indaga: ["Planteamiento del problema", "Planteamiento de hipótesis", "Elaboración del plan de acción", "Recojo de datos y análisis de resultados", "Estructuración del saber construido como respuesta al problema", "Evaluación y comunicación"],
+    explica: ["Planteamiento del problema", "Planteamiento de explicaciones preliminares", "Elaboración del plan de acción", "Recojo y análisis de información", "Estructuración del saber construido", "Evaluación y comunicación"],
+    disena: ["Planteamiento del problema tecnológico", "Diseño de la alternativa de solución", "Construcción e implementación", "Validación de la solución", "Evaluación y comunicación"],
+  },
+  Comunicación: {
+    lee: ["Antes de la lectura", "Durante la lectura", "Después de la lectura"],
+    escribe: ["Planificación", "Textualización", "Revisión y publicación"],
+    oral: ["Antes del discurso", "Durante el discurso", "Después del discurso"],
+  },
+  Matemática: ["Familiarización con el problema", "Búsqueda y ejecución de estrategias", "Socialización de representaciones", "Reflexión y formalización", "Planteamiento de otros problemas"],
+  "Personal Social": ["Problematización", "Análisis de información", "Toma de decisiones"],
+  "Arte y Cultura": ["Exploración y experimentación", "Aplicación de procesos creativos", "Socialización", "Evaluación y comunicación"],
+  "Educación para el Trabajo": ["Problematización", "Diseño de la propuesta de valor", "Aplicación de habilidades técnicas", "Trabajo cooperativo", "Evaluación de resultados"],
+};
+
+function didacticProcessList(form) {
+  const area=DIDACTIC_PROCESSES[form.area];
+  if (!area) return ["Exploración del reto", "Construcción del aprendizaje", "Aplicación", "Evaluación y comunicación"];
+  if (Array.isArray(area)) return area;
+  const competence=(form.competencia||"").toLowerCase();
+  if (form.area === "Ciencia y Tecnología") return competence.includes("indaga")?area.indaga:competence.includes("diseña")?area.disena:area.explica;
+  if (form.area === "Comunicación") return competence.includes("lee ")?area.lee:competence.includes("escribe")?area.escribe:area.oral;
+  return Object.values(area)[0];
+}
+
 function formContext(form) {
   const capacities = Array.isArray(form.capacidades) ? form.capacidades.join("; ") : "";
   return `Nivel: ${form.nivel}. Grado: ${form.grado}. Área: ${form.area}. Región: ${form.region}.
@@ -118,7 +157,11 @@ Recursos disponibles: ${form.recursos || "materiales accesibles del entorno"}. D
 function modulePrompt(moduleName, form, previous = {}) {
   const context = formContext(form);
   if (moduleName === "alignment") return `${context}\nConstruye únicamente la alineación curricular. Conserva literalmente la competencia y las capacidades entregadas. Precisa un desempeño por cada capacidad seleccionada y formula criterios observables derivados de capacidad, tema, propósito y evidencia. Incluye solo enfoques transversales verdaderamente pertinentes. No inventes referentes locales.`;
-  if (moduleName === "sequence") return `${context}\nAlineación aprobada: ${JSON.stringify(previous.alignment || {})}\nDiseña únicamente la preparación y secuencia de la sesión. Distribuye exactamente ${form.duracion} minutos entre inicio, desarrollo y cierre. Integra los procesos pedagógicos y los procesos didácticos específicos del área de manera natural. Describe acciones concretas del docente y estudiantes, retroalimentación formativa y orientaciones DUA aplicables.`;
+  if (moduleName === "sequence") return `${context}\nAlineación aprobada: ${JSON.stringify(previous.alignment || {})}\nDiseña únicamente la preparación y secuencia de la sesión. Distribuye exactamente ${form.duracion} minutos entre inicio, desarrollo y cierre.
+El Inicio debe mostrar obligatoriamente, como subtítulos separados: Motivación; Saberes previos; Problematización; Propósito y organización. Incluye preguntas auténticas y criterios comunicados a los estudiantes.
+El Desarrollo debe utilizar exactamente estos procesos didácticos, en este orden y como subtítulos: ${didacticProcessList(form).join(" | ")}. Crea un objeto por cada proceso. En cada uno describe actividad, preguntas de mediación, acompañamiento docente y evaluación formativa; evita repetir la misma acción.
+El Cierre debe mostrar como subtítulos separados: Metacognición; Evaluación; Cierre y transferencia.
+No crees un apartado independiente llamado procesos pedagógicos o procesos didácticos. Estos deben evidenciarse dentro de los tres momentos. Describe acciones concretas del docente y estudiantes y orientaciones DUA aplicables.`;
   if (moduleName === "assessment") return `${context}\nAlineación: ${JSON.stringify(previous.alignment || {})}\nSecuencia: ${JSON.stringify(previous.sequence || {})}\nDiseña únicamente la evaluación. Cada criterio debe conservar la relación con una capacidad, ser observable y poder verificarse en una evidencia. Evita criterios genéricos, adjetivos subjetivos y duplicados. Sugiere el instrumento más pertinente y preguntas de reflexión para completar después de la clase.`;
   return `${context}\nAlineación: ${JSON.stringify(previous.alignment || {})}\nSecuencia: ${JSON.stringify(previous.sequence || {})}\nEvaluación: ${JSON.stringify(previous.assessment || {})}\nPropón exactamente tres anexos textuales utilizables en clase y coherentes con la evidencia: una ficha o texto base, una actividad para estudiantes y un recurso de apoyo. No afirmes que incluyes imágenes que no fueron generadas. El contenido debe estar listo para copiar a Word y adecuado al grado.`;
 }
@@ -184,7 +227,8 @@ Responde únicamente con una sugerencia lista para pegar en el formulario, en es
 Nivel: ${form.nivel}. Grado: ${form.grado}. Área: ${form.area}. Región: ${form.region || "No indicada"}.
 Tema: ${form.tema}. Competencia: ${form.competencia}. Capacidades seleccionadas: ${capacities}.
 Evidencia de aprendizaje: ${form.evidencia}. Cantidad de criterios: ${form.numeroCriterios || 6}.
-Cada criterio debe derivarse de una capacidad y del tema, empezar con un verbo observable, indicar el contenido y una condición de calidad. No repitas criterios.
+Criterios ya aprobados en la sesión: ${JSON.stringify(form.criteriosBase || [])}.
+Cuando existan criterios aprobados, consérvalos y conviértelos en el instrumento sin sustituirlos por criterios distintos. Cada criterio debe mantener su capacidad relacionada, empezar con un verbo observable, indicar el contenido y una condición de calidad. No repitas criterios.
 ${instrumentType === "rubric" ? "Para cada criterio redacta descriptores progresivos y coherentes para Inicio, En proceso, Logro esperado y Logro destacado. Evita limitarte a adjetivos como bueno o excelente." : "Para la lista de cotejo deja inicio, enProceso, logroEsperado y logroDestacado como cadenas vacías; los criterios se evaluarán con Sí, No y Observaciones."}`;
     const promptText = suggestionMode ? suggestionPrompt : instrumentMode ? instrumentPrompt : moduleMode ? modulePrompt(moduleName, form, previous) : (messages?.[0]?.content || "");
 
