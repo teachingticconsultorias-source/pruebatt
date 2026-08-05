@@ -105,8 +105,7 @@ Responde únicamente con una sugerencia lista para pegar en el formulario, en es
           contents: [{ parts: [{ text: promptText }] }],
           systemInstruction: { parts: [{ text: "Eres un especialista peruano en planificación curricular y CNEB. Respeta la competencia y capacidades seleccionadas. Formula criterios de evaluación como acciones observables derivadas de las capacidades, el propósito y el tema. Organiza inicio, desarrollo y cierre con procesos pedagógicos y los procesos didácticos pertinentes al área, sin convertirlos en una lista mecánica. Adapta el contexto a la región sin inventar datos locales. Entrega siempre JSON válido." }] },
           generationConfig: {
-            maxOutputTokens: 2500,
-            temperature: 0.7,
+            maxOutputTokens: suggestionMode ? 800 : 8192,
             responseMimeType: "application/json",
             responseSchema: suggestionMode ? SUGGESTION_SCHEMA : SESSION_SCHEMA,
           },
@@ -121,9 +120,15 @@ Responde únicamente con una sugerencia lista para pegar en el formulario, en es
       return;
     }
 
-    const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text).join("") || "";
+    const candidate = data.candidates?.[0];
+    const text = candidate?.content?.parts?.map((p) => p.text).join("") || "";
     if (!text) {
       res.status(500).json({ error: "Gemini no devolvió contenido" });
+      return;
+    }
+
+    if (candidate?.finishReason === "MAX_TOKENS") {
+      res.status(502).json({ error: "La sesión fue demasiado extensa y quedó incompleta. Intenta generarla nuevamente." });
       return;
     }
 
@@ -133,10 +138,9 @@ Responde únicamente con una sugerencia lista para pegar en el formulario, en es
       return;
     }
 
-    // Normalizamos a la misma forma que usaba el cliente para Anthropic,
-    // así el código de React no necesita cambios.
-    res.status(200).json({ content: [{ type: "text", text }] });
+    const session = JSON.parse(text);
+    res.status(200).json({ session });
   } catch (err) {
-    res.status(500).json({ error: "Error interno al generar la sesión" });
+    res.status(500).json({ error: err instanceof SyntaxError ? "Gemini devolvió una respuesta incompleta. Intenta generarla nuevamente." : "Error interno al generar la sesión" });
   }
 }
