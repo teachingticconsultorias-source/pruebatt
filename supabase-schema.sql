@@ -73,3 +73,44 @@ drop trigger if exists al_crear_usuario on auth.users;
 create trigger al_crear_usuario
   after insert on auth.users
   for each row execute procedure public.crear_perfil_docente();
+
+-- Biblioteca personal: guarda las sesiones, proyectos e instrumentos creados.
+create table if not exists public.materiales_docente (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  tipo text not null check (tipo in ('session', 'project', 'rubric', 'checklist')),
+  titulo text not null,
+  nivel text,
+  grado text,
+  area text,
+  tema text,
+  contenido jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists materiales_docente_user_created_idx
+  on public.materiales_docente(user_id, created_at desc);
+
+alter table public.materiales_docente enable row level security;
+
+drop policy if exists "Docente lee sus materiales" on public.materiales_docente;
+drop policy if exists "Docente crea sus materiales" on public.materiales_docente;
+drop policy if exists "Docente actualiza sus materiales" on public.materiales_docente;
+drop policy if exists "Docente elimina sus materiales" on public.materiales_docente;
+
+create policy "Docente lee sus materiales"
+  on public.materiales_docente for select to authenticated
+  using (auth.uid() = user_id);
+
+create policy "Docente crea sus materiales"
+  on public.materiales_docente for insert to authenticated
+  with check (auth.uid() = user_id);
+
+create policy "Docente actualiza sus materiales"
+  on public.materiales_docente for update to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "Docente elimina sus materiales"
+  on public.materiales_docente for delete to authenticated
+  using (auth.uid() = user_id);

@@ -107,6 +107,15 @@ async function triggerWordDownload(doc, filename) {
   window.setTimeout(()=>URL.revokeObjectURL(url),30000);
 }
 
+async function saveTeacherMaterial({tipo,titulo,form,contenido}) {
+  const {data:{user}}=await supabase.auth.getUser();
+  if(!user) throw new Error("No se encontró la sesión del docente");
+  const {data,error}=await supabase.from("materiales_docente").insert({user_id:user.id,tipo,titulo,nivel:form.nivel,grado:form.grado,area:form.area,tema:form.tema,contenido}).select("id").single();
+  if(error) throw error;
+  window.dispatchEvent(new CustomEvent("sciverse:material-created",{detail:{id:data.id}}));
+  return data;
+}
+
 async function downloadWord(filename, content, title="Documento SciVerse") {
   const paragraphs=String(content||"").split(/\n/).map(line=>line.trim()?wordParagraph(line,{size:20}):wordParagraph("",{after:40}));
   const doc=new Document({ creator:"Teaching TIC Consultorías S.A.C.", title, styles:{ default:{ document:{ run:{font:"Arial",size:20,color:WORD.ink}, paragraph:{spacing:{after:90,line:276}} } } }, sections:[{ properties:{page:{size:{width:11906,height:16838},margin:{top:1134,right:1134,bottom:1134,left:1134}}}, children:[wordParagraph(title,{bold:true,size:30,color:WORD.purpleDark,alignment:AlignmentType.CENTER,after:220}),...paragraphs] }] });
@@ -898,7 +907,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
       const alignment = generated.alignment;
       const sequence = generated.sequence;
       const assessment = generated.assessment;
-      setResult({
+      const finalResult={
         titulo: alignment.titulo,
         areasSTEAM: form.steam ? [form.area, "Enfoque STEAM"] : [form.area],
         competenciasCNEB: [form.competencia],
@@ -920,7 +929,10 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
         reflexionesDocente: assessment.reflexionesDocente,
         anexos: generated.annexes.anexos,
         productoSTEAM: alignment.evidencia,
-      });
+      };
+      setResult(finalResult);
+      try { await saveTeacherMaterial({tipo:documentType,titulo:finalResult.titulo||form.tema,form,contenido:finalResult}); }
+      catch(saveError) { console.error("No se pudo guardar el material",saveError); }
     } catch (e) {
       setError(e.message || `No se pudo generar la ${documentName}. Intenta de nuevo en unos segundos.`);
     } finally {
@@ -1102,7 +1114,16 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
   }
   async function generateInstrument() {
     setLoading(true); setError(null); setInstrument(null);
-    try { const token=await getToken(); const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({mode:"instrument",instrumentType,form})}); const data=await response.json(); if(!response.ok) throw new Error(data.error||`No se pudo generar la ${instrumentName}`); if(!data.instrument) throw new Error("El instrumento no llegó completo. Intenta nuevamente."); setInstrument(data.instrument); setEditing(false); } catch(e){setError(e.message);} finally{setLoading(false);}
+    try {
+      const token=await getToken();
+      const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({mode:"instrument",instrumentType,form})});
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.error||`No se pudo generar la ${instrumentName}`);
+      if(!data.instrument) throw new Error("El instrumento no llegó completo. Intenta nuevamente.");
+      setInstrument(data.instrument); setEditing(false);
+      try { await saveTeacherMaterial({tipo:instrumentType,titulo:data.instrument.titulo||form.tema,form,contenido:data.instrument}); }
+      catch(saveError) { console.error("No se pudo guardar el instrumento",saveError); }
+    } catch(e){setError(e.message);} finally{setLoading(false);}
   }
   function updateCriterion(index, key, value) { setInstrument((current) => ({ ...current, criterios: current.criterios.map((item, itemIndex) => itemIndex === index ? { ...item, [key]: value } : item) })); }
   async function downloadInstrument() {
@@ -1830,6 +1851,26 @@ function SciVerseApp({ profile, onLogout }) {
   const [modalGrade, setModalGrade] = useState(preferredGrade);
   const [accountOpen, setAccountOpen] = useState(false);
   const [activeSection, setActiveSection] = useState("inicio");
+  const [teacherMaterials, setTeacherMaterials] = useState([]);
+  const [materialsLoading, setMaterialsLoading] = useState(true);
+
+  const loadTeacherMaterials=useCallback(async()=>{
+    setMaterialsLoading(true);
+    const {data,error}=await supabase.from("materiales_docente").select("id,tipo,titulo,nivel,grado,area,tema,contenido,created_at").order("created_at",{ascending:false}).limit(100);
+    if(!error) setTeacherMaterials(data||[]);
+    else console.error("No se pudo cargar la biblioteca",error);
+    setMaterialsLoading(false);
+  },[]);
+
+  useEffect(()=>{
+    loadTeacherMaterials();
+    const refresh=()=>loadTeacherMaterials();
+    window.addEventListener("sciverse:material-created",refresh);
+    return()=>window.removeEventListener("sciverse:material-created",refresh);
+  },[loadTeacherMaterials]);
+
+  const materialTypeLabel={session:"Sesión de aprendizaje",project:"Proyecto STEAM",rubric:"Rúbrica",checklist:"Lista de cotejo"};
+  const formatMaterialDate=value=>new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(value));
 
   const filtered = ACTIVITIES.filter((a) => subjectFilter === "todos" || a.subject === subjectFilter);
   const filteredRetos = RETOS.filter((r) => gradeFilter === "todos" || r.grades.includes(gradeFilter));
@@ -1910,8 +1951,8 @@ function SciVerseApp({ profile, onLogout }) {
         </div>
 
         <div className="dashboard-stats">
-          <article><span className="stat-icon teal"><Sparkles size={19} /></span><div><small>Generaciones disponibles</small><strong>1</strong><p>Plan gratuito</p></div></article>
-          <article><span className="stat-icon coral"><FolderOpen size={19} /></span><div><small>Mis materiales</small><strong>0</strong><p>Empieza creando una sesión</p></div></article>
+          <article><span className="stat-icon teal"><Sparkles size={19} /></span><div><small>Creaciones realizadas</small><strong>{teacherMaterials.length}</strong><p>Sesiones e instrumentos</p></div></article>
+          <article><span className="stat-icon coral"><FolderOpen size={19} /></span><div><small>Mis materiales</small><strong>{teacherMaterials.length}</strong><p>{teacherMaterials.length?"Guardados en tu biblioteca":"Empieza creando una sesión"}</p></div></article>
           <article><span className="stat-icon yellow"><School size={19} /></span><div><small>Nivel seleccionado</small><strong className="stat-word">{preferredGrade}</strong><p>Contenido personalizado</p></div></article>
           <article><span className="stat-icon violet"><CreditCard size={19} /></span><div><small>Mi plan</small><strong className="stat-word">Gratuito</strong><p><a href="#planes-docente">Ver opciones</a></p></div></article>
         </div>
@@ -1928,7 +1969,7 @@ function SciVerseApp({ profile, onLogout }) {
           </div>
           <aside className="dashboard-panel recent-panel">
             <div className="panel-heading"><div><small>Tu espacio</small><h2>Materiales recientes</h2></div><Clock size={20} /></div>
-            <div className="empty-materials"><span><FolderOpen size={27} /></span><strong>Aún no tienes materiales</strong><p>Las sesiones que generes aparecerán aquí para que puedas retomarlas y descargarlas.</p><button onClick={()=>setActiveSection("crear")}>Crear mi primer recurso <ArrowRight size={14} /></button></div>
+            {materialsLoading?<div className="empty-materials"><Loader2 className="animate-spin" size={25}/><p>Cargando tus materiales…</p></div>:teacherMaterials.length?<div className="recent-material-list">{teacherMaterials.slice(0,5).map(item=><button key={item.id} onClick={()=>setActiveSection("biblioteca")}><span><FileText size={17}/></span><div><strong>{item.titulo}</strong><small>{materialTypeLabel[item.tipo]||"Material"} · {item.grado} · {item.area}</small></div><time>{formatMaterialDate(item.created_at)}</time></button>)}<button className="view-library" onClick={()=>setActiveSection("biblioteca")}>Ver toda mi biblioteca <ArrowRight size={14}/></button></div>:<div className="empty-materials"><span><FolderOpen size={27} /></span><strong>Aún no tienes materiales</strong><p>Las sesiones que generes aparecerán aquí para que puedas retomarlas y descargarlas.</p><button onClick={()=>setActiveSection("crear")}>Crear mi primer recurso <ArrowRight size={14} /></button></div>}
           </aside>
         </div>
 
@@ -2033,7 +2074,12 @@ function SciVerseApp({ profile, onLogout }) {
 
       {/* PLANTILLAS */}
       {activeSection === "biblioteca" && <section id="plantillas" className="px-6 md:px-10 py-14 max-w-6xl mx-auto">
-        <span className="text-xs tracking-widest uppercase" style={{ color: C.amber, fontFamily: "'JetBrains Mono', monospace" }}>Listas para imprimir</span>
+        <span className="text-xs tracking-widest uppercase" style={{ color: C.tealDeep, fontFamily: "'JetBrains Mono', monospace" }}>Tu espacio docente</span>
+        <h2 className="text-2xl md:text-3xl font-semibold mt-1 mb-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Mi biblioteca</h2>
+        <p className="text-sm mb-7" style={{color:C.muted}}>Aquí aparecen las sesiones, proyectos e instrumentos que creaste con Kantu.</p>
+        {materialsLoading?<div className="library-loading"><Loader2 className="animate-spin" size={22}/> Cargando materiales…</div>:teacherMaterials.length?<div className="generated-library-grid">{teacherMaterials.map(item=><article key={item.id}><span><FileText size={19}/></span><div><small>{materialTypeLabel[item.tipo]||"Material"}</small><h3>{item.titulo}</h3><p>{item.grado} · {item.area}</p><time>{formatMaterialDate(item.created_at)}</time></div></article>)}</div>:<div className="library-empty"><FolderOpen size={25}/><div><strong>Tu biblioteca todavía está vacía</strong><p>Cuando Kantu termine un material, se guardará automáticamente aquí.</p></div><button onClick={()=>setActiveSection("crear")}>Crear material</button></div>}
+
+        <span className="text-xs tracking-widest uppercase" style={{ color: C.amber, fontFamily: "'JetBrains Mono', monospace" }}>Recursos adicionales</span>
         <h2 className="text-2xl md:text-3xl font-semibold mt-1 mb-8" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>Plantillas descargables alineadas al CNEB</h2>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
