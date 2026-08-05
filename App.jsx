@@ -58,6 +58,8 @@ import {
   Eye,
   Star,
   Plus,
+  ChevronLeft,
+  Quote,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -1239,6 +1241,71 @@ function CreateStudio({ preferredGrade = "primaria", profile = {} }) {
 /* REGISTRO DE DOCENTES (INTRANET)                                         */
 /* ---------------------------------------------------------------------- */
 
+/* Fuente única de verdad para los planes: se usa en el landing (sección
+   #planes) y en el perfil del docente (TeacherAccountModal), para que
+   ambos siempre muestren los mismos precios y beneficios. */
+const PLANS = [
+  { name: "Gratuito", price: "0", period: "para conocer SciVerse", saving: "Sin tarjeta", featured: false, benefits: ["Actividades de muestra", "1 generación con IA", "Recursos de demostración"] },
+  { name: "Mensual", price: "10", period: "por 1 mes", saving: "Ideal para empezar", featured: false, benefits: ["30 generaciones con IA", "Actividades STEAM", "Fichas y plantillas", "Soporte por WhatsApp"] },
+  { name: "Semestral", price: "30", period: "por 6 meses", saving: "Equivale a S/5 al mes", featured: true, benefits: ["60 generaciones mensuales", "Actividades STEAM", "Descargas en Word", "Nuevos recursos", "Soporte prioritario"] },
+  { name: "Anual", price: "50", period: "por 12 meses", saving: "Equivale a S/4.17 al mes", featured: false, benefits: ["100 generaciones mensuales", "Acceso completo anual", "Primaria o secundaria", "Descargas en Word", "Nuevos recursos", "Soporte prioritario"] },
+];
+
+const TESTIMONIALS = [
+  { name: "Patricia Quispe", role: "Docente de Primaria", initials: "PQ", quote: "Al inicio no le tenía fe, pero cuando vi que la sesión salía alineada al CNEB, me pareció que es lo que todo docente necesita." },
+  { name: "Jorge Salinas", role: "Docente de Matemática", initials: "JS", quote: "Mis colegas me preguntan cómo hago para entregar todo tan rápido y de dónde saco esas evidencias tan creativas. Es como tener un colega que te ayuda." },
+  { name: "Carmen Vargas", role: "Docente de Comunicación", initials: "CV", quote: "Antes me quedaba hasta tarde armando sesiones. Con SciVerse lo hago en el recreo y me queda tiempo para avanzar otras cosas." },
+  { name: "Luis Mendoza", role: "Docente de Secundaria", initials: "LM", quote: "Lo que más me gusta es que no tengo que explicarle qué competencia o desempeño necesito: SciVerse ya lo sabe y conoce el contexto del CNEB." },
+  { name: "Rosa Fernández", role: "Docente de Ciencia y Tecnología", initials: "RF", quote: "Las rúbricas y listas de cotejo se generan alineadas a lo que ya planifiqué en la sesión. Me ahorra horas cada semana." },
+  { name: "Miguel Torres", role: "Docente de Primaria", initials: "MT", quote: "Mis estudiantes notaron el cambio: las actividades STEAM son más dinámicas y fáciles de aplicar en el aula." },
+];
+
+function TestimonialsCarousel() {
+  const trackRef = useRef(null);
+  const [paused, setPaused] = useState(false);
+
+  useEffect(() => {
+    if (paused) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = setInterval(() => {
+      const track = trackRef.current;
+      if (!track) return;
+      const card = track.querySelector(".testimonial-card");
+      const step = card ? card.offsetWidth + 20 : track.clientWidth;
+      const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 4;
+      track.scrollTo({ left: atEnd ? 0 : track.scrollLeft + step, behavior: "smooth" });
+    }, 4200);
+    return () => clearInterval(id);
+  }, [paused]);
+
+  const scrollByCard = (dir) => {
+    const track = trackRef.current;
+    if (!track) return;
+    const card = track.querySelector(".testimonial-card");
+    const step = card ? card.offsetWidth + 20 : track.clientWidth;
+    track.scrollBy({ left: dir * step, behavior: "smooth" });
+  };
+
+  return (
+    <section id="testimonios" className="testimonials-section" aria-label="Testimonios de docentes">
+      <div className="section-heading"><span className="eyebrow"><Star size={13} /> Experiencias reales</span><h2>Docentes que ya están usando SciVerse</h2><p>Profesores de primaria y secundaria que ahorran tiempo de planificación cada semana.</p></div>
+      <div className="testimonial-carousel" onMouseEnter={() => setPaused(true)} onMouseLeave={() => setPaused(false)} onFocus={() => setPaused(true)} onBlur={() => setPaused(false)}>
+        <button type="button" className="testimonial-arrow prev" aria-label="Testimonio anterior" onClick={() => scrollByCard(-1)}><ChevronLeft size={18} /></button>
+        <div className="testimonial-track" ref={trackRef}>
+          {TESTIMONIALS.map((testimonial) => (
+            <article className="testimonial-card" key={testimonial.name}>
+              <Quote size={26} className="testimonial-quote-icon" />
+              <p>{testimonial.quote}</p>
+              <div className="testimonial-author"><span>{testimonial.initials}</span><div><strong>{testimonial.name}</strong><small>{testimonial.role}</small></div></div>
+            </article>
+          ))}
+        </div>
+        <button type="button" className="testimonial-arrow next" aria-label="Siguiente testimonio" onClick={() => scrollByCard(1)}><ChevronRight size={18} /></button>
+      </div>
+    </section>
+  );
+}
+
 function ImprovedLanding({ onRegister, onLogin }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoGrade, setDemoGrade] = useState("primaria");
@@ -1251,12 +1318,6 @@ function ImprovedLanding({ onRegister, onLogin }) {
     { icon: Award, title: "Plantillas CNEB", desc: "Rúbricas, fichas y recursos editables para acompañar el aprendizaje.", color: "#8B5CF6" },
     { icon: Users, title: "Retos colaborativos", desc: "Propuestas para aprender haciendo, dialogando y creando en equipo.", color: "#FB7185" },
     { icon: BookOpen, title: "Cinco áreas STEAM", desc: "Ciencia, Tecnología, Ingeniería, Arte y Matemática conectadas.", color: "#4FA8FF" },
-  ];
-  const plans = [
-    { name: "Gratuito", price: "0", period: "para conocer SciVerse", saving: "Sin tarjeta", featured: false, benefits: ["Actividades de muestra", "1 generación con IA", "Recursos de demostración"] },
-    { name: "Mensual", price: "10", period: "por 1 mes", saving: "Ideal para empezar", featured: false, benefits: ["30 generaciones con IA", "Actividades STEAM", "Fichas y plantillas", "Soporte por WhatsApp"] },
-    { name: "Semestral", price: "30", period: "por 6 meses", saving: "Equivale a S/5 al mes", featured: true, benefits: ["60 generaciones mensuales", "Actividades STEAM", "Descargas en Word", "Nuevos recursos", "Soporte prioritario"] },
-    { name: "Anual", price: "50", period: "por 12 meses", saving: "Equivale a S/4.17 al mes", featured: false, benefits: ["100 generaciones mensuales", "Acceso completo anual", "Primaria o secundaria", "Descargas en Word", "Nuevos recursos", "Soporte prioritario"] },
   ];
   const faqs = [
     ["¿Qué puedo crear con SciVerse?", "Puedes generar sesiones y actividades STEAM, consultar experiencias guiadas y descargar fichas y plantillas."],
@@ -1285,6 +1346,7 @@ function ImprovedLanding({ onRegister, onLogin }) {
           <a href="#demo" onClick={() => setMenuOpen(false)}>Pruébalo</a>
           <a href="#beneficios" onClick={() => setMenuOpen(false)}>Beneficios</a>
           <a href="#planes" onClick={() => setMenuOpen(false)}>Planes</a>
+          <a href="#testimonios" onClick={() => setMenuOpen(false)}>Testimonios</a>
           <a href="#preguntas" onClick={() => setMenuOpen(false)}>Preguntas</a>
           <a href="#confianza" onClick={() => setMenuOpen(false)}>Para docentes</a>
         </div>
@@ -1347,7 +1409,7 @@ function ImprovedLanding({ onRegister, onLogin }) {
       <section id="planes" className="pricing-section">
         <div className="section-heading"><span className="eyebrow"><Award size={13} /> Precios claros y en soles</span><h2>Un plan para cada etapa docente</h2><p>Empieza gratis y elige más capacidad cuando necesites generar y descargar más materiales.</p></div>
         <div className="pricing-grid">
-          {plans.map((plan) => <article key={plan.name} className={`price-card ${plan.featured ? "featured" : ""}`}>
+          {PLANS.map((plan) => <article key={plan.name} className={`price-card ${plan.featured ? "featured" : ""}`}>
             {plan.featured && <span className="popular-badge"><Sparkles size={12} /> Más conveniente</span>}
             <div className="plan-head"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
             <div className="saving-pill">{plan.saving}</div>
@@ -1363,6 +1425,8 @@ function ImprovedLanding({ onRegister, onLogin }) {
         <div className="quote-card"><span>“</span><p>La tecnología cobra sentido cuando ayuda al docente a crear experiencias más inclusivas, significativas y cercanas a sus estudiantes.</p><small>Teaching TIC · Innovación educativa con propósito</small></div>
       </section>
 
+      <TestimonialsCarousel />
+
       <section id="preguntas" className="faq-section">
         <div className="section-heading"><span className="eyebrow"><HelpCircle size={13} /> Resolvemos tus dudas</span><h2>Preguntas frecuentes</h2><p>Todo lo que necesitas saber antes de crear tu cuenta o elegir un plan.</p></div>
         <div className="faq-list">{faqs.map(([question, answer]) => <details className="faq-item" key={question}><summary>{question}</summary><p>{answer}</p></details>)}</div>
@@ -1372,7 +1436,7 @@ function ImprovedLanding({ onRegister, onLogin }) {
 
       <footer className="landing-footer expanded-footer">
         <div className="footer-column"><div className="brand-lockup"><span className="brand-mark"><Microscope size={20} /></span><span><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></span></div><p>Tecnología educativa para experiencias STEAM accesibles, creativas y contextualizadas.</p><div className="social-row"><a href="https://www.facebook.com/teachingticconsultorias/" target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={17} /></a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer" aria-label="WhatsApp"><MessageCircle size={17} /></a></div></div>
-        <div className="footer-column"><h4>Explora</h4><a href="#beneficios">Herramientas</a><a href="#planes">Planes</a><a href="#preguntas">Preguntas frecuentes</a><button onClick={onRegister}>Crear cuenta</button></div>
+        <div className="footer-column"><h4>Explora</h4><a href="#beneficios">Herramientas</a><a href="#planes">Planes</a><a href="#testimonios">Testimonios</a><a href="#preguntas">Preguntas frecuentes</a><button onClick={onRegister}>Crear cuenta</button></div>
         <div className="footer-column"><h4>Legal y confianza</h4><button onClick={() => setLegalView("terms")}>Términos y condiciones</button><button onClick={() => setLegalView("privacy")}>Política de privacidad</button><button onClick={() => setLegalView("ai")}>Política de uso de IA</button><button onClick={() => setLegalView("complaints")}>Libro de Reclamaciones</button></div>
         <div className="footer-column"><h4>Contacto</h4><p>Teaching TIC Consultorías S.A.C.<br />RUC 20607945331<br />Jr. Cristóbal de Peralta Norte 9 50, Dpto. 210</p><a href="mailto:teachingticconsultorias@gmail.com">teachingticconsultorias@gmail.com</a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer">+51 921 090 875</a><small>© 2026 Teaching TIC. Todos los derechos reservados.</small></div>
       </footer>
@@ -1923,7 +1987,7 @@ function TeacherAccountModal({ profile, onClose }) {
             <div className="profile-summary"><span>{(profile.nombres?.[0] || "D").toUpperCase()}{(profile.apellidos?.[0] || "").toUpperCase()}</span><div><h3>{profile.nombres} {profile.apellidos}</h3><p>{profile.correo}</p><small>DOCENTE · CUENTA PERSONAL</small></div></div>
             {editing ? <div className="profile-form"><label>Nombres<input value={form.nombres} onChange={(e) => setForm({...form,nombres:e.target.value})} /></label><label>Apellidos<input value={form.apellidos} onChange={(e) => setForm({...form,apellidos:e.target.value})} /></label><label className="wide">Institución educativa<input value={form.ie} onChange={(e) => setForm({...form,ie:e.target.value})} /></label><label>Celular<input value={form.celular} onChange={(e) => setForm({...form,celular:e.target.value})} /></label><label>Nivel<select value={form.nivel} onChange={(e) => setForm({...form,nivel:e.target.value})}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><div className="wide account-actions"><button className="secondary-btn compact" onClick={() => setEditing(false)}>Cancelar</button><button className="primary-btn compact" onClick={saveProfile} disabled={saving}>{saving ? "Guardando..." : "Guardar cambios"}</button></div></div> : <div className="profile-rows"><div><span>Nombre completo</span><strong>{profile.nombres} {profile.apellidos}</strong><button onClick={() => setEditing(true)}>Cambiar</button></div><div><span>Correo</span><strong>{profile.correo}</strong></div><div><span>Rol</span><strong>Docente</strong></div><div><span>Nivel</span><strong className="capitalize">{profile.nivel}</strong></div><div><span>Institución</span><strong>{profile.ie || "Sin institución asignada"}</strong></div><div><span>Miembro desde</span><strong>{joined}</strong></div></div>}
           </div>}
-          {tab === "plan" && <div><div className="account-heading"><span><Sparkles size={19} /></span><div><h3>Plan gratuito</h3><p>Tu uso actual en SciVerse</p></div></div><div className="usage-box"><Usage label="Generaciones con IA" current="0" total="1" /><Usage label="Materiales guardados" current="0" total="5" /><Usage label="Descargas" current="0" total="5" /></div><div className="account-plan-grid"><PlanMini name="Mensual" price="10" text="30 generaciones y descargas" /><PlanMini name="Semestral" price="30" text="60 generaciones mensuales" featured /><PlanMini name="Anual" price="50" text="100 generaciones mensuales" /></div></div>}
+          {tab === "plan" && <div><div className="account-heading"><span><Sparkles size={19} /></span><div><h3>Plan gratuito</h3><p>Tu uso actual en SciVerse</p></div></div><div className="usage-box"><Usage label="Generaciones con IA" current="0" total="1" /><Usage label="Materiales guardados" current="0" total="5" /><Usage label="Descargas" current="0" total="5" /></div><div className="account-plan-grid">{PLANS.filter((plan) => plan.name !== "Gratuito").map((plan) => <PlanMini key={plan.name} name={plan.name} price={plan.price} period={plan.period} benefits={plan.benefits} featured={plan.featured} />)}</div></div>}
           {tab === "referidos" && <div><div className="account-heading"><span><Gift size={19} /></span><div><h3>Invita a otro docente</h3><p>Comparte SciVerse con tu comunidad educativa.</p></div></div><label className="referral-link"><input readOnly value={referralUrl} /><button onClick={copyReferral}><Copy size={15} /> Copiar</button></label><a className="whatsapp-share" href={`https://wa.me/?text=${encodeURIComponent(`Te invito a conocer SciVerse de Teaching TIC: ${referralUrl}`)}`} target="_blank" rel="noreferrer"><MessageCircle size={17} /> Compartir por WhatsApp</a><div className="referral-stats"><div><strong>0</strong><span>Invitaciones registradas</span></div><div><strong>0</strong><span>Docentes que se unieron</span></div></div></div>}
           {tab === "capacitacion" && <div><span className="training-benefit"><Sparkles size={14} /> BENEFICIO TEACHING TIC</span><h3 className="training-title">Capacítate en vivo y fortalece tu portafolio docente</h3><p className="training-lead">Participa en sesiones virtuales desarrolladas por especialistas de Teaching TIC y recibe una constancia digital.</p><div className="training-points"><p><span><Video size={17} /></span><b>Capacitación en vivo.</b> Aprende, practica y resuelve tus dudas.</p><p><span><BadgeCheck size={17} /></span><b>Constancia digital.</b> Lista para tu CV y portafolio docente.</p><p><span><BookOpen size={17} /></span><b>Aplicación educativa.</b> IA, STEAM y recursos alineados al CNEB.</p></div><div className="training-card"><small>PRÓXIMA CAPACITACIÓN</small><h4>Inteligencia artificial para crear experiencias STEAM</h4><p>Fecha y horario por confirmar · Modalidad virtual</p><a href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20reservar%20un%20cupo%20en%20la%20pr%C3%B3xima%20capacitaci%C3%B3n%20de%20SciVerse." target="_blank" rel="noreferrer">Reservar mi cupo <ArrowRight size={15} /></a></div></div>}
           {tab === "integraciones" && <div><div className="account-heading"><span><Link2 size={19} /></span><div><h3>Integraciones</h3><p>Próximamente podrás enviar tus materiales a otras plataformas.</p></div></div><Integration icon={HardDrive} name="Google Drive" text="Guarda tus sesiones y fichas en Drive" /><Integration icon={Palette} name="Canva" text="Edita tus recursos con diseños visuales" /></div>}
@@ -1935,7 +1999,7 @@ function TeacherAccountModal({ profile, onClose }) {
 }
 
 function Usage({ label, current, total }) { return <div><p><span>{label}</span><b>{current} / {total}</b></p><span><i style={{width:`${Math.min(100,(Number(current)/Number(total))*100)}%`}} /></span></div>; }
-function PlanMini({ name, price, text, featured }) { return <article className={featured ? "featured" : ""}>{featured && <small>RECOMENDADO</small>}<h4>{name}</h4><strong>S/{price}</strong><p>{text}</p><a href={`https://wa.me/51921090875?text=${encodeURIComponent(`Hola Teaching TIC, deseo adquirir el Plan ${name} de SciVerse por S/${price}.`)}`} target="_blank" rel="noreferrer">Elegir plan</a></article>; }
+function PlanMini({ name, price, period, benefits = [], featured }) { return <article className={featured ? "featured" : ""}>{featured && <small>RECOMENDADO</small>}<h4>{name}</h4><strong>S/{price}</strong><p>{period}</p><ul>{benefits.slice(0, 3).map((benefit) => <li key={benefit}>{benefit}</li>)}</ul><a href={`https://wa.me/51921090875?text=${encodeURIComponent(`Hola Teaching TIC, deseo adquirir el Plan ${name} de SciVerse por S/${price}.`)}`} target="_blank" rel="noreferrer">Elegir plan</a></article>; }
 function Integration({ icon: Icon, name, text }) { return <div className="integration-row"><span><Icon size={20} /></span><div><strong>{name}</strong><p>{text}</p></div><button disabled>Próximamente</button></div>; }
 
 function SciVerseApp({ profile, onLogout }) {
