@@ -1207,31 +1207,44 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
 }
 
 function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
+  const [step, setStep] = useState(1);
   const [form, setForm] = useState({ tema: "", palabras: "", grado: initialGrade, area: "" });
-  const [resultado, setResultado] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleGenerate = () => {
     setLoading(true);
     setTimeout(() => {
-      setResultado({
+      const palabrasList = form.palabras.split(",").map(p => p.trim()).filter(Boolean);
+      setPreview({
         titulo: `Sopa de letras: ${form.tema}`,
-        palabras: form.palabras.split(",").filter(Boolean),
+        palabras: palabrasList,
+        grado: form.grado,
         dificultad: form.grado === "primaria" ? "Media" : "Alta",
       });
+      setStep(2);
       setLoading(false);
-    }, 1200);
+    }, 1500);
+  };
+
+  const handleDownload = () => {
+    downloadWord(
+      `${preview.titulo}.docx`,
+      `${preview.titulo}\n\nPalabras: ${preview.palabras.join(", ")}\n\nDificultad: ${preview.dificultad}\nNivel: ${preview.grado}`,
+      preview.titulo
+    );
   };
 
   return (
     <div className="generator-wrapper">
-      {!resultado ? (
+      {/* STEP 1: Formulario */}
+      {step === 1 && (
         <div className="wizard-card">
           <div className="wizard-card__title">
             <span><Search size={18} /></span>
             <div>
               <h4>Sopa de letras</h4>
-              <p>Define el tema y las palabras que quieres incluir.</p>
+              <p>Define el tema y las palabras que quieres incluir en el juego.</p>
             </div>
           </div>
           <div className="generator-form">
@@ -1241,10 +1254,10 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
             </label>
             <label>
               <span>Palabras (separadas por comas)</span>
-              <textarea value={form.palabras} onChange={(e) => setForm({...form, palabras: e.target.value})} placeholder="jaguar, anaconda, loro, cocodrilo, tapir" rows="4" />
+              <textarea value={form.palabras} onChange={(e) => setForm({...form, palabras: e.target.value})} placeholder="jaguar, anaconda, loro, cocodrilo, tapir" rows="5" />
             </label>
             <label>
-              <span>Grado</span>
+              <span>Nivel educativo</span>
               <select value={form.grado} onChange={(e) => setForm({...form, grado: e.target.value})}>
                 <option value="primaria">Primaria</option>
                 <option value="secundaria">Secundaria</option>
@@ -1252,27 +1265,90 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
             </label>
             <button className="primary" onClick={handleGenerate} disabled={loading || !form.tema || !form.palabras}>
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              {loading ? "Creando..." : "Generar sopa de letras"}
+              {loading ? "Creando..." : "Generar previsualización"}
             </button>
           </div>
         </div>
-      ) : (
-        <div className="instrument-result">
-          <div className="instrument-result__actions">
+      )}
+
+      {/* STEP 2: Previsualización */}
+      {step === 2 && preview && (
+        <div className="preview-result">
+          <div className="preview-header">
             <div>
-              <small>SOPA DE LETRAS LISTA</small>
-              <h3>{resultado.titulo}</h3>
+              <button onClick={() => setStep(1)} className="back-btn">← Editar</button>
             </div>
             <div>
-              <button onClick={() => setResultado(null)}>← Crear otra</button>
-              <button className="primary" onClick={() => downloadWord(`${resultado.titulo}.docx`, `${resultado.titulo}\n\n${resultado.palabras.join(", ")}`, resultado.titulo)}>
-                <Download size={14} /> Descargar
-              </button>
+              <h3>{preview.titulo}</h3>
+              <small>PASO 2 DE 2: PREVISUALIZACIÓN</small>
+            </div>
+            <div></div>
+          </div>
+
+          {/* Cómo usar */}
+          <div className="preview-section how-to-use">
+            <h4>¿Cómo se usa este recurso?</h4>
+            <div className="how-to-steps">
+              <div className="step">
+                <span className="step-number">1</span>
+                <p>Lee la lista de palabras a buscar.</p>
+              </div>
+              <div className="step">
+                <span className="step-number">2</span>
+                <p>Encuentra cada palabra en la sopa de letras (horizontal, vertical o diagonal).</p>
+              </div>
+              <div className="step">
+                <span className="step-number">3</span>
+                <p>Marca la palabra cuando la localices.</p>
+              </div>
+            </div>
+            <div className="tip-box">
+              <Sparkles size={16} /> <strong>Tip para el docente:</strong> Pide que escriban una oración con tres de las palabras encontradas.
             </div>
           </div>
-          <div className="instrument-meta">
-            <strong>Palabras incluidas ({resultado.palabras.length})</strong>
-            <p>{resultado.palabras.join(", ")}</p>
+
+          {/* Vista previa */}
+          <div className="preview-section preview-box">
+            <h4>Vista previa del recurso</h4>
+            <div className="preview-pages">
+              <div className="preview-page page-1">
+                <h5>{preview.titulo}</h5>
+                <p className="page-label">Página 1 - Para el estudiante</p>
+                <div className="wordsearch-preview">
+                  <div className="word-list">
+                    <strong>Palabras a buscar:</strong>
+                    <div className="words">{preview.palabras.slice(0, 5).join(" • ")}</div>
+                    {preview.palabras.length > 5 && <div className="words">{preview.palabras.slice(5).join(" • ")}</div>}
+                  </div>
+                  <div className="grid-preview">
+                    <div style={{fontSize: '10px', fontFamily: 'monospace', lineHeight: '1.4'}}>
+                      M J A G U A R P O L<br/>
+                      E L O R O C O D I L<br/>
+                      T A P I R A N A C O<br/>
+                      ...
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="preview-page page-2">
+                <h5>{preview.titulo}</h5>
+                <p className="page-label">Página 2 - Solucionario (para el docente)</p>
+                <div className="worksearch-solution">
+                  <p className="solution-note">Palabras encontradas (marcadas):</p>
+                  <div className="words-found">{preview.palabras.map((w, i) => <span key={i}>✓ {w}</span>)}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Acciones */}
+          <div className="preview-actions">
+            <button onClick={() => setStep(1)} className="secondary">
+              Editar parámetros
+            </button>
+            <button onClick={handleDownload} className="primary">
+              <Download size={16} /> Descargar sopa de letras
+            </button>
           </div>
         </div>
       )}
