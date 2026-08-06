@@ -1304,7 +1304,7 @@ function TestimonialsCarousel() {
   );
 }
 
-function ImprovedLanding({ onRegister, onLogin }) {
+function ImprovedLanding({ onRegister, onLogin, onForgotPassword }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [demoGrade, setDemoGrade] = useState("primaria");
   const [legalView, setLegalView] = useState(null);
@@ -1440,6 +1440,211 @@ function LegalModal({ view, onClose }) {
   return <div className="legal-backdrop" role="presentation" onMouseDown={onClose}><section className="legal-modal" role="dialog" aria-modal="true" aria-labelledby="legal-title" onMouseDown={(event) => event.stopPropagation()}><button className="legal-close" onClick={onClose} aria-label="Cerrar"><X size={20} /></button><Icon size={26} color={C.teal} /><h2 id="legal-title">{content.title}</h2>{content.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{view === "complaints" && <div className="legal-actions"><a className="primary-btn" href="mailto:teachingticconsultorias@gmail.com?subject=Registro%20en%20el%20Libro%20de%20Reclamaciones&body=Tipo%3A%20Reclamo%20o%20queja%0ANombres%20y%20apellidos%3A%0ADNI%20o%20CE%3A%0ACorreo%3A%0ATel%C3%A9fono%3A%0AServicio%20contratado%3A%0ADetalle%3A%0APedido%20concreto%3A">Registrar por correo <Mail size={15} /></a><a className="secondary-btn" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20necesito%20orientaci%C3%B3n%20para%20presentar%20un%20reclamo." target="_blank" rel="noreferrer">Orientación por WhatsApp <MessageCircle size={15} /></a></div>}<small>Última actualización: agosto de 2026.</small></section></div>;
 }
 
+function ResetPasswordPage({ onSubmit, loading, error, token }) {
+  const [contrasena, setContrasena] = useState("");
+  const [confirmarContrasena, setConfirmarContrasena] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit({ contrasena, confirmarContrasena });
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#F7FCFB", padding: "20px" }}>
+      <div style={{ maxWidth: "420px", width: "100%", background: "white", borderRadius: "16px", padding: "40px", boxShadow: "0 4px 12px rgba(15,61,58,0.1)" }}>
+        <h2 style={{ fontSize: "24px", fontWeight: "700", marginBottom: "8px", color: "#0F2E2C" }}>Restablecer contraseña</h2>
+        <p style={{ color: "#607B79", fontSize: "14px", marginBottom: "24px" }}>Ingresa tu nueva contraseña</p>
+
+        <form onSubmit={handleSubmit}>
+          <label style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "16px" }}>
+            <span style={{ fontWeight: "600", color: "#0F2E2C", fontSize: "13px" }}>Nueva contraseña</span>
+            <input
+              type="password"
+              value={contrasena}
+              onChange={(e) => setContrasena(e.target.value)}
+              placeholder="Mínimo 6 caracteres"
+              style={{
+                padding: "12px",
+                border: "1px solid rgba(15,61,58,.15)",
+                borderRadius: "10px",
+                fontSize: "14px",
+                fontFamily: "'Inter', sans-serif",
+              }}
+              required
+            />
+          </label>
+
+          <label style={{ display: "flex", flexDirection: "column", gap: "6px", marginBottom: "20px" }}>
+            <span style={{ fontWeight: "600", color: "#0F2E2C", fontSize: "13px" }}>Confirmar contraseña</span>
+            <input
+              type="password"
+              value={confirmarContrasena}
+              onChange={(e) => setConfirmarContrasena(e.target.value)}
+              placeholder="Repite tu contraseña"
+              style={{
+                padding: "12px",
+                border: "1px solid rgba(15,61,58,.15)",
+                borderRadius: "10px",
+                fontSize: "14px",
+                fontFamily: "'Inter', sans-serif",
+              }}
+              required
+            />
+          </label>
+
+          {error && <p style={{ color: "#FF8A5B", fontSize: "12px", marginBottom: "16px" }}>❌ {error}</p>}
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              width: "100%",
+              padding: "12px",
+              background: "#1F9E98",
+              color: "white",
+              border: "none",
+              borderRadius: "10px",
+              fontSize: "14px",
+              fontWeight: "600",
+              cursor: "pointer",
+              opacity: loading ? 0.7 : 1,
+            }}
+          >
+            {loading ? "Actualizando..." : "Guardar nueva contraseña"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function LoginModal({ onClose, onSubmit, loading, error }) {
+  const [correo, setCorreo] = useState("");
+  const [contrasena, setContrasena] = useState("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    onSubmit({ correo, contrasena });
+  };
+
+  return (
+    <div className="legal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="legal-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+        <button className="legal-close" onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+        <h2>Iniciar sesión</h2>
+
+        <form onSubmit={handleSubmit}>
+          <label style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "16px" }}>
+            <span style={{ fontWeight: "600", color: "#0F2E2C" }}>Correo electrónico</span>
+            <input
+              type="email"
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+              placeholder="tu-correo@ejemplo.com"
+              style={{
+                padding: "12px",
+                border: "1px solid rgba(15,61,58,.15)",
+                borderRadius: "12px",
+                fontSize: "14px",
+                fontFamily: "'Inter', sans-serif",
+              }}
+              required
+            />
+          </label>
+
+          <label style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+            <span style={{ fontWeight: "600", color: "#0F2E2C" }}>Contraseña</span>
+            <input
+              type="password"
+              value={contrasena}
+              onChange={(e) => setContrasena(e.target.value)}
+              placeholder="Tu contraseña"
+              style={{
+                padding: "12px",
+                border: "1px solid rgba(15,61,58,.15)",
+                borderRadius: "12px",
+                fontSize: "14px",
+                fontFamily: "'Inter', sans-serif",
+              }}
+              required
+            />
+          </label>
+
+          {error && <p style={{ color: "#FF8A5B", fontSize: "12px", marginBottom: "16px" }}>❌ {error}</p>}
+
+          <div className="legal-actions">
+            <button type="button" onClick={onClose} className="secondary-btn">Cancelar</button>
+            <button type="submit" disabled={loading} className="primary-btn">
+              {loading ? "Entrando..." : "Iniciar sesión"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
+  );
+}
+
+function PasswordRecoveryModal({ onClose, onSubmit, loading }) {
+  const [email, setEmail] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email.trim()) {
+      alert("Ingresa tu correo electrónico");
+      return;
+    }
+    await onSubmit(email);
+    setSubmitted(true);
+    setTimeout(() => {
+      onClose();
+      setSubmitted(false);
+      setEmail("");
+    }, 2000);
+  };
+
+  return (
+    <div className="legal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="legal-modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
+        <button className="legal-close" onClick={onClose} aria-label="Cerrar"><X size={20} /></button>
+        <h2>Recuperar contraseña</h2>
+        {submitted ? (
+          <div style={{ textAlign: "center", padding: "20px 0" }}>
+            <p style={{ color: "#1F9E98", fontSize: "16px", marginBottom: "10px" }}>✅ Revisa tu correo</p>
+            <p style={{ color: "#607B79", fontSize: "13px" }}>Te enviamos un link para restaurar tu contraseña. Abre tu correo y sigue los pasos.</p>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit}>
+            <p style={{ color: "#607B79", marginBottom: "20px" }}>Ingresa tu correo y te enviaremos un link para recuperar tu contraseña.</p>
+            <label style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "20px" }}>
+              <span style={{ fontWeight: "600", color: "#0F2E2C" }}>Correo electrónico</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="tu-correo@ejemplo.com"
+                style={{
+                  padding: "12px",
+                  border: "1px solid rgba(15,61,58,.15)",
+                  borderRadius: "12px",
+                  fontSize: "14px",
+                  fontFamily: "'Inter', sans-serif",
+                }}
+              />
+            </label>
+            <div className="legal-actions">
+              <button type="button" onClick={onClose} className="secondary-btn">Cancelar</button>
+              <button type="submit" disabled={loading} className="primary-btn">
+                {loading ? "Enviando..." : "Enviar link"}
+              </button>
+            </div>
+          </form>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function PlansModal({ onClose, onChoosePlan }) {
   const handleChoosePlan = (plan) => {
     if (plan.name === "Gratuito") return onChoosePlan("gratuito");
@@ -1476,18 +1681,54 @@ function PlansModal({ onClose, onChoosePlan }) {
 function RegistrationGate({ children }) {
   const [checking, setChecking] = useState(true);
   const [profile, setProfile] = useState(null);
-  const [view, setView] = useState("landing"); // 'landing' | 'form'
-  const [form, setForm] = useState({ nombres: "", apellidos: "", ie: "", celular: "", correo: "" });
+  const [view, setView] = useState("landing"); // 'landing' | 'form' | 'login' | 'reset-password'
+  const [form, setForm] = useState({ nombres: "", apellidos: "", ie: "", celular: "", correo: "", contrasena: "", confirmarContrasena: "" });
+  const [loginForm, setLoginForm] = useState({ correo: "", contrasena: "" });
+  const [resetForm, setResetForm] = useState({ contrasena: "", confirmarContrasena: "" });
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [showPasswordRecovery, setShowPasswordRecovery] = useState(false);
+  const [resetToken, setResetToken] = useState(null);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem("sciverse-docente-perfil");
-      if (raw) setProfile(JSON.parse(raw));
-    } catch (e) {
-      // no hay perfil guardado todavía
-    } finally {
+    // Detectar token de reset en URL
+    const params = new URLSearchParams(window.location.search);
+    const viewParam = params.get("view");
+    const typeParam = params.get("type");
+    const tokenParam = params.get("token");
+
+    if (viewParam === "reset-password" && typeParam === "recovery") {
+      setView("reset-password");
+      setResetToken(tokenParam);
+      // Limpiar URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+
+    // Cargar sesión de Supabase
+    if (supabase) {
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session?.user) {
+          // Cargar perfil del usuario
+          supabase.from("docentes").select("*").eq("id", session.user.id).single().then(({ data }) => {
+            if (data) setProfile({ ...data, id: session.user.id, correo: session.user.email });
+          });
+        } else {
+          try {
+            const raw = localStorage.getItem("sciverse-docente-perfil");
+            if (raw) setProfile(JSON.parse(raw));
+          } catch (e) {
+            // no hay perfil guardado todavía
+          }
+        }
+        setChecking(false);
+      });
+    } else {
+      try {
+        const raw = localStorage.getItem("sciverse-docente-perfil");
+        if (raw) setProfile(JSON.parse(raw));
+      } catch (e) {
+        // no hay perfil guardado todavía
+      }
       setChecking(false);
     }
   }, []);
@@ -1498,31 +1739,142 @@ function RegistrationGate({ children }) {
       setError("Completa nombres, apellidos, institución educativa y correo.");
       return;
     }
+    if (!form.contrasena || form.contrasena.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (form.contrasena !== form.confirmarContrasena) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
-      if (supabase) {
-        const { error: dbError } = await supabase.from("docentes").insert([form]);
-        if (dbError) throw dbError;
-      }
-      localStorage.setItem("sciverse-docente-perfil", JSON.stringify(form));
-      setProfile(form);
+      if (!supabase) throw new Error("Servicio de autenticación no disponible");
+
+      // Registrar en Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: form.correo,
+        password: form.contrasena,
+        options: { data: { nombres: form.nombres, apellidos: form.apellidos } }
+      });
+
+      if (authError) throw authError;
+
+      // Guardar perfil en tabla docentes
+      const { error: dbError } = await supabase.from("docentes").insert([{
+        id: authData.user.id,
+        nombres: form.nombres,
+        apellidos: form.apellidos,
+        correo: form.correo,
+        ie: form.ie,
+        celular: form.celular
+      }]);
+
+      if (dbError) throw dbError;
+
+      setError(null);
+      alert("✅ Registro exitoso. Revisa tu correo para confirmar tu cuenta.");
+      setView("landing");
     } catch (e) {
-      setError("No se pudo guardar tu registro. Intenta de nuevo.");
+      setError(e.message || "No se pudo crear tu cuenta. Intenta de nuevo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleLogin(e) {
+    e.preventDefault();
+    if (!loginForm.correo || !loginForm.contrasena) {
+      setError("Ingresa correo y contraseña.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      if (!supabase) throw new Error("Servicio no disponible");
+
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: loginForm.correo,
+        password: loginForm.contrasena
+      });
+
+      if (authError) throw authError;
+
+      // Cargar perfil
+      const { data: profileData } = await supabase.from("docentes").select("*").eq("id", data.user.id).single();
+      setProfile({ ...profileData, id: data.user.id, correo: data.user.email });
+      setView("landing");
+    } catch (e) {
+      setError(e.message || "Credenciales inválidas.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleResetPassword(e) {
+    e.preventDefault();
+    if (!resetForm.contrasena || resetForm.contrasena.length < 6) {
+      setError("La contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (resetForm.contrasena !== resetForm.confirmarContrasena) {
+      setError("Las contraseñas no coinciden.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      if (!supabase) throw new Error("Servicio no disponible");
+
+      const { error } = await supabase.auth.updateUser({ password: resetForm.contrasena });
+      if (error) throw error;
+
+      alert("✅ Contraseña actualizada correctamente.");
+      setView("landing");
+      setResetForm({ contrasena: "", confirmarContrasena: "" });
+    } catch (e) {
+      setError(e.message || "No se pudo actualizar la contraseña.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleLogout() {
+    if (supabase) {
+      await supabase.auth.signOut();
+    }
     try {
       localStorage.removeItem("sciverse-docente-perfil");
     } catch (e) {
-      // ignorar si ya no existe
+      // ignorar
     }
     setProfile(null);
     setView("landing");
-    setForm({ nombres: "", apellidos: "", ie: "", celular: "", correo: "" });
+    setForm({ nombres: "", apellidos: "", ie: "", celular: "", correo: "", contrasena: "", confirmarContrasena: "" });
+    setLoginForm({ correo: "", contrasena: "" });
+  }
+
+  async function handlePasswordRecovery(email) {
+    if (!supabase) {
+      setError("El servicio de recuperación no está disponible. Contacta a soporte.");
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}?view=reset-password`,
+      });
+      if (resetError) throw resetError;
+      setError(null);
+      alert("✅ Revisa tu correo para el link de recuperación de contraseña.");
+      setShowPasswordRecovery(false);
+    } catch (e) {
+      setError("No se pudo enviar el email de recuperación. Intenta de nuevo.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (checking) {
@@ -1531,6 +1883,11 @@ function RegistrationGate({ children }) {
         <Loader2 size={22} className="animate-spin" color={C.teal} />
       </div>
     );
+  }
+
+  // Si hay un token de reset, mostrar página de reset
+  if (view === "reset-password" && resetToken) {
+    return <ResetPasswordPage onSubmit={handleResetPassword} loading={saving} error={error} token={resetToken} />;
   }
 
   if (profile) return children(profile, handleLogout);
@@ -1542,7 +1899,12 @@ function RegistrationGate({ children }) {
 
   /* ---------- LANDING PÚBLICA ---------- */
   if (view === "landing") {
-    return <ImprovedLanding onRegister={goToForm} />;
+    return (
+      <>
+        <ImprovedLanding onRegister={goToForm} onForgotPassword={() => setShowPasswordRecovery(true)} />
+        {showPasswordRecovery && <PasswordRecoveryModal onClose={() => setShowPasswordRecovery(false)} onSubmit={handlePasswordRecovery} loading={saving} />}
+      </>
+    );
     const FEATURES = [
       { icon: Wand2, title: "Generador de experiencias de aprendizaje con IA", desc: "Crea experiencias STEAM nuevas al instante sobre cualquier tema que necesites.", color: C.coral },
       { icon: ClipboardList, title: "Guías de experiencias", desc: "Fichas paso a paso, listas para llevar directo al aula.", color: C.teal },
@@ -1712,6 +2074,22 @@ function RegistrationGate({ children }) {
             className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
             style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, color: C.text }}
           />
+          <input
+            value={form.contrasena}
+            onChange={(e) => setForm({ ...form, contrasena: e.target.value })}
+            type="password"
+            placeholder="Contraseña (mín. 6 caracteres)"
+            className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
+            style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, color: C.text }}
+          />
+          <input
+            value={form.confirmarContrasena}
+            onChange={(e) => setForm({ ...form, confirmarContrasena: e.target.value })}
+            type="password"
+            placeholder="Confirmar contraseña"
+            className="w-full rounded-lg px-3 py-2.5 text-sm outline-none"
+            style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${C.line}`, color: C.text }}
+          />
 
           {error && <p className="text-xs" style={{ color: "#FF8A5B" }}>{error}</p>}
 
@@ -1725,6 +2103,15 @@ function RegistrationGate({ children }) {
             {saving ? "Guardando..." : "Registrarme y entrar"}
           </button>
         </form>
+
+        <div className="text-center mt-4">
+          <button
+            onClick={onForgotPassword}
+            style={{ background: "none", border: "none", color: C.teal, cursor: "pointer", fontSize: "12px", textDecoration: "underline" }}
+          >
+            ¿Olvidé mi contraseña?
+          </button>
+        </div>
       </div>
     </div>
   );
