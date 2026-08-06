@@ -1206,15 +1206,496 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
   </div>;
 }
 
+function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
+  const [form, setForm] = useState({ tema: "", palabras: "", grado: initialGrade, area: "" });
+  const [resultado, setResultado] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleGenerate = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setResultado({
+        titulo: `Sopa de letras: ${form.tema}`,
+        palabras: form.palabras.split(",").filter(Boolean),
+        dificultad: form.grado === "primaria" ? "Media" : "Alta",
+      });
+      setLoading(false);
+    }, 1200);
+  };
+
+  return (
+    <div className="generator-wrapper">
+      {!resultado ? (
+        <div className="wizard-card">
+          <div className="wizard-card__title">
+            <span><Search size={18} /></span>
+            <div>
+              <h4>Sopa de letras</h4>
+              <p>Define el tema y las palabras que quieres incluir.</p>
+            </div>
+          </div>
+          <div className="generator-form">
+            <label>
+              <span>Tema o título</span>
+              <input value={form.tema} onChange={(e) => setForm({...form, tema: e.target.value})} placeholder="Ej: Animales de la selva" />
+            </label>
+            <label>
+              <span>Palabras (separadas por comas)</span>
+              <textarea value={form.palabras} onChange={(e) => setForm({...form, palabras: e.target.value})} placeholder="jaguar, anaconda, loro, cocodrilo, tapir" rows="4" />
+            </label>
+            <label>
+              <span>Grado</span>
+              <select value={form.grado} onChange={(e) => setForm({...form, grado: e.target.value})}>
+                <option value="primaria">Primaria</option>
+                <option value="secundaria">Secundaria</option>
+              </select>
+            </label>
+            <button className="primary" onClick={handleGenerate} disabled={loading || !form.tema || !form.palabras}>
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {loading ? "Creando..." : "Generar sopa de letras"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="instrument-result">
+          <div className="instrument-result__actions">
+            <div>
+              <small>SOPA DE LETRAS LISTA</small>
+              <h3>{resultado.titulo}</h3>
+            </div>
+            <div>
+              <button onClick={() => setResultado(null)}>← Crear otra</button>
+              <button className="primary" onClick={() => downloadWord(`${resultado.titulo}.docx`, `${resultado.titulo}\n\n${resultado.palabras.join(", ")}`, resultado.titulo)}>
+                <Download size={14} /> Descargar
+              </button>
+            </div>
+          </div>
+          <div className="instrument-meta">
+            <strong>Palabras incluidas ({resultado.palabras.length})</strong>
+            <p>{resultado.palabras.join(", ")}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CrosswordGenerator({ initialGrade = "primaria", profile = {} }) {
+  const [form, setForm] = useState({ tema: "", clues: "", grado: initialGrade, area: "" });
+  const [resultado, setResultado] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleGenerate = () => {
+    setLoading(true);
+    setTimeout(() => {
+      const cluesList = form.clues.split("\n").filter(Boolean);
+      setResultado({
+        titulo: `Crucigrama: ${form.tema}`,
+        clues: cluesList,
+        dificultad: form.grado === "primaria" ? "Media" : "Alta",
+      });
+      setLoading(false);
+    }, 1200);
+  };
+
+  return (
+    <div className="generator-wrapper">
+      {!resultado ? (
+        <div className="wizard-card">
+          <div className="wizard-card__title">
+            <span><Layers size={18} /></span>
+            <div>
+              <h4>Crucigrama</h4>
+              <p>Ingresa el tema y las pistas para generar un crucigrama personalizado.</p>
+            </div>
+          </div>
+          <div className="generator-form">
+            <label>
+              <span>Tema o título</span>
+              <input value={form.tema} onChange={(e) => setForm({...form, tema: e.target.value})} placeholder="Ej: Sistema solar" />
+            </label>
+            <label>
+              <span>Pistas (una por línea)</span>
+              <textarea value={form.clues} onChange={(e) => setForm({...form, clues: e.target.value})} placeholder="Planeta rojo&#10;Satélite natural de la Tierra&#10;Estrella central del sistema" rows="6" />
+            </label>
+            <label>
+              <span>Grado</span>
+              <select value={form.grado} onChange={(e) => setForm({...form, grado: e.target.value})}>
+                <option value="primaria">Primaria</option>
+                <option value="secundaria">Secundaria</option>
+              </select>
+            </label>
+            <button className="primary" onClick={handleGenerate} disabled={loading || !form.tema || !form.clues}>
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {loading ? "Creando..." : "Generar crucigrama"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="instrument-result">
+          <div className="instrument-result__actions">
+            <div>
+              <small>CRUCIGRAMA LISTO</small>
+              <h3>{resultado.titulo}</h3>
+            </div>
+            <div>
+              <button onClick={() => setResultado(null)}>← Crear otro</button>
+              <button className="primary" onClick={() => downloadWord(`${resultado.titulo}.docx`, `${resultado.titulo}\n\nPistas:\n${resultado.clues.join("\n")}`, resultado.titulo)}>
+                <Download size={14} /> Descargar
+              </button>
+            </div>
+          </div>
+          <div className="instrument-meta">
+            <strong>Pistas ({resultado.clues.length})</strong>
+            <ol>
+              {resultado.clues.map((clue, idx) => <li key={idx}>{clue}</li>)}
+            </ol>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LearningUnitGenerator({ initialGrade = "primaria", profile = {} }) {
+  const [form, setForm] = useState({ tema: "", duracion: "4 semanas", grado: initialGrade, area: "" });
+  const [resultado, setResultado] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleGenerate = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setResultado({
+        titulo: `Unidad: ${form.tema}`,
+        duracion: form.duracion,
+        sesiones: 8,
+      });
+      setLoading(false);
+    }, 1200);
+  };
+
+  return (
+    <div className="generator-wrapper">
+      {!resultado ? (
+        <div className="wizard-card">
+          <div className="wizard-card__title">
+            <span><Layers size={18} /></span>
+            <div>
+              <h4>Unidad de aprendizaje</h4>
+              <p>Organiza una secuencia de sesiones articuladas.</p>
+            </div>
+          </div>
+          <div className="generator-form">
+            <label>
+              <span>Tema de la unidad</span>
+              <input value={form.tema} onChange={(e) => setForm({...form, tema: e.target.value})} placeholder="Ej: Los ecosistemas del Perú" />
+            </label>
+            <label>
+              <span>Duración estimada</span>
+              <select value={form.duracion} onChange={(e) => setForm({...form, duracion: e.target.value})}>
+                <option value="2 semanas">2 semanas</option>
+                <option value="3 semanas">3 semanas</option>
+                <option value="4 semanas">4 semanas</option>
+                <option value="6 semanas">6 semanas</option>
+              </select>
+            </label>
+            <label>
+              <span>Grado</span>
+              <select value={form.grado} onChange={(e) => setForm({...form, grado: e.target.value})}>
+                <option value="primaria">Primaria</option>
+                <option value="secundaria">Secundaria</option>
+              </select>
+            </label>
+            <button className="primary" onClick={handleGenerate} disabled={loading || !form.tema}>
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {loading ? "Creando..." : "Generar unidad"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="instrument-result">
+          <div className="instrument-result__actions">
+            <div>
+              <small>UNIDAD GENERADA</small>
+              <h3>{resultado.titulo}</h3>
+            </div>
+            <div>
+              <button onClick={() => setResultado(null)}>← Crear otra</button>
+              <button className="primary" onClick={() => downloadWord(`${resultado.titulo}.docx`, `${resultado.titulo}\nDuración: ${resultado.duracion}`, resultado.titulo)}>
+                <Download size={14} /> Descargar
+              </button>
+            </div>
+          </div>
+          <div className="instrument-meta">
+            <strong>Estructura estimada</strong>
+            <p>Duración: {resultado.duracion}</p>
+            <p>Sesiones: {resultado.sesiones}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WorksheetGenerator({ initialGrade = "primaria", profile = {} }) {
+  const [form, setForm] = useState({ tema: "", actividades: "", grado: initialGrade, area: "" });
+  const [resultado, setResultado] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleGenerate = () => {
+    setLoading(true);
+    setTimeout(() => {
+      const acts = form.actividades.split("\n").filter(Boolean);
+      setResultado({
+        titulo: `Ficha de trabajo: ${form.tema}`,
+        actividades: acts,
+      });
+      setLoading(false);
+    }, 1200);
+  };
+
+  return (
+    <div className="generator-wrapper">
+      {!resultado ? (
+        <div className="wizard-card">
+          <div className="wizard-card__title">
+            <span><FileText size={18} /></span>
+            <div>
+              <h4>Ficha de trabajo</h4>
+              <p>Crea actividades prácticas para estudiantes.</p>
+            </div>
+          </div>
+          <div className="generator-form">
+            <label>
+              <span>Tema</span>
+              <input value={form.tema} onChange={(e) => setForm({...form, tema: e.target.value})} placeholder="Ej: Operaciones con fracciones" />
+            </label>
+            <label>
+              <span>Actividades (una por línea)</span>
+              <textarea value={form.actividades} onChange={(e) => setForm({...form, actividades: e.target.value})} placeholder="Resuelve los siguientes problemas&#10;Dibuja lo que se indica&#10;Completa la tabla" rows="6" />
+            </label>
+            <label>
+              <span>Grado</span>
+              <select value={form.grado} onChange={(e) => setForm({...form, grado: e.target.value})}>
+                <option value="primaria">Primaria</option>
+                <option value="secundaria">Secundaria</option>
+              </select>
+            </label>
+            <button className="primary" onClick={handleGenerate} disabled={loading || !form.tema || !form.actividades}>
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {loading ? "Creando..." : "Generar ficha"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="instrument-result">
+          <div className="instrument-result__actions">
+            <div>
+              <small>FICHA LISTA</small>
+              <h3>{resultado.titulo}</h3>
+            </div>
+            <div>
+              <button onClick={() => setResultado(null)}>← Crear otra</button>
+              <button className="primary" onClick={() => downloadWord(`${resultado.titulo}.docx`, `${resultado.titulo}\n\nActividades:\n${resultado.actividades.join("\n")}`, resultado.titulo)}>
+                <Download size={14} /> Descargar
+              </button>
+            </div>
+          </div>
+          <div className="instrument-meta">
+            <strong>Actividades incluidas ({resultado.actividades.length})</strong>
+            <ol>
+              {resultado.actividades.map((act, idx) => <li key={idx}>{act}</li>)}
+            </ol>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReadingGenerator({ initialGrade = "primaria", profile = {} }) {
+  const [form, setForm] = useState({ tema: "", contexto: "", grado: initialGrade, area: "" });
+  const [resultado, setResultado] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleGenerate = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setResultado({
+        titulo: `Lectura: ${form.tema}`,
+        tema: form.tema,
+        nivel: form.grado === "primaria" ? "Básico" : "Avanzado",
+      });
+      setLoading(false);
+    }, 1200);
+  };
+
+  return (
+    <div className="generator-wrapper">
+      {!resultado ? (
+        <div className="wizard-card">
+          <div className="wizard-card__title">
+            <span><BookOpen size={18} /></span>
+            <div>
+              <h4>Generador de lecturas</h4>
+              <p>Crea textos educativos personalizados.</p>
+            </div>
+          </div>
+          <div className="generator-form">
+            <label>
+              <span>Tema de la lectura</span>
+              <input value={form.tema} onChange={(e) => setForm({...form, tema: e.target.value})} placeholder="Ej: La fotosíntesis" />
+            </label>
+            <label>
+              <span>Contexto o enfoque</span>
+              <textarea value={form.contexto} onChange={(e) => setForm({...form, contexto: e.target.value})} placeholder="Ej: Conectado con la realidad local del estudiante" rows="4" />
+            </label>
+            <label>
+              <span>Grado</span>
+              <select value={form.grado} onChange={(e) => setForm({...form, grado: e.target.value})}>
+                <option value="primaria">Primaria</option>
+                <option value="secundaria">Secundaria</option>
+              </select>
+            </label>
+            <button className="primary" onClick={handleGenerate} disabled={loading || !form.tema}>
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {loading ? "Creando..." : "Generar lectura"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="instrument-result">
+          <div className="instrument-result__actions">
+            <div>
+              <small>LECTURA LISTA</small>
+              <h3>{resultado.titulo}</h3>
+            </div>
+            <div>
+              <button onClick={() => setResultado(null)}>← Crear otra</button>
+              <button className="primary" onClick={() => downloadWord(`${resultado.titulo}.docx`, `${resultado.titulo}\n\nTema: ${resultado.tema}`, resultado.titulo)}>
+                <Download size={14} /> Descargar
+              </button>
+            </div>
+          </div>
+          <div className="instrument-meta">
+            <strong>Información</strong>
+            <p>Tema: {resultado.tema}</p>
+            <p>Nivel: {resultado.nivel}</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EvaluationSheetGenerator({ initialGrade = "primaria", profile = {} }) {
+  const [form, setForm] = useState({ tema: "", criterios: "", grado: initialGrade, area: "" });
+  const [resultado, setResultado] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const handleGenerate = () => {
+    setLoading(true);
+    setTimeout(() => {
+      const crits = form.criterios.split("\n").filter(Boolean);
+      setResultado({
+        titulo: `Ficha de evaluación: ${form.tema}`,
+        criterios: crits,
+      });
+      setLoading(false);
+    }, 1200);
+  };
+
+  return (
+    <div className="generator-wrapper">
+      {!resultado ? (
+        <div className="wizard-card">
+          <div className="wizard-card__title">
+            <span><FileText size={18} /></span>
+            <div>
+              <h4>Ficha de evaluación</h4>
+              <p>Registro de observaciones del desempeño estudiantil.</p>
+            </div>
+          </div>
+          <div className="generator-form">
+            <label>
+              <span>Tema o sesión</span>
+              <input value={form.tema} onChange={(e) => setForm({...form, tema: e.target.value})} placeholder="Ej: Resolución de problemas" />
+            </label>
+            <label>
+              <span>Criterios de observación (uno por línea)</span>
+              <textarea value={form.criterios} onChange={(e) => setForm({...form, criterios: e.target.value})} placeholder="Identifica datos relevantes&#10;Aplica estrategias correctamente&#10;Comunica resultados" rows="6" />
+            </label>
+            <label>
+              <span>Grado</span>
+              <select value={form.grado} onChange={(e) => setForm({...form, grado: e.target.value})}>
+                <option value="primaria">Primaria</option>
+                <option value="secundaria">Secundaria</option>
+              </select>
+            </label>
+            <button className="primary" onClick={handleGenerate} disabled={loading || !form.tema || !form.criterios}>
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+              {loading ? "Creando..." : "Generar ficha"}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="instrument-result">
+          <div className="instrument-result__actions">
+            <div>
+              <small>FICHA DE EVALUACIÓN LISTA</small>
+              <h3>{resultado.titulo}</h3>
+            </div>
+            <div>
+              <button onClick={() => setResultado(null)}>← Crear otra</button>
+              <button className="primary" onClick={() => downloadWord(`${resultado.titulo}.docx`, `${resultado.titulo}\n\nCriterios:\n${resultado.criterios.join("\n")}`, resultado.titulo)}>
+                <Download size={14} /> Descargar
+              </button>
+            </div>
+          </div>
+          <div className="instrument-meta">
+            <strong>Criterios de observación ({resultado.criterios.length})</strong>
+            <ol>
+              {resultado.criterios.map((crit, idx) => <li key={idx}>{crit}</li>)}
+            </ol>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CreateStudio({ preferredGrade = "primaria", profile = {} }) {
   const [creation, setCreation] = useState(null);
-  const creationOptions = [
-    { id: "session", label: "Sesión de aprendizaje", desc: "Planificación completa con propósito, criterios, evidencia y secuencia didáctica.", icon: BookOpen, tone: "teal" },
-    { id: "project", label: "Proyecto STEAM", desc: "Reto, producto final, fases, recursos y evaluación para aprender creando.", icon: Cog, tone: "coral" },
-    { id: "rubric", label: "Rúbrica", desc: "Criterios observables y niveles de logro alineados a las capacidades.", icon: ClipboardList, tone: "violet" },
-    { id: "checklist", label: "Lista de cotejo", desc: "Indicadores claros y verificables para registrar Sí, No o En proceso.", icon: CheckCircle2, tone: "yellow" },
-  ];
-  const selectedType = creationOptions.find((item) => item.id === creation);
+  const creationSections = {
+    planificacion: {
+      title: "Planificación",
+      items: [
+        { id: "session", label: "Sesión de aprendizaje", desc: "Planificación completa con propósito, criterios, evidencia y secuencia didáctica.", icon: BookOpen, tone: "teal" },
+        { id: "project", label: "Proyecto STEAM", desc: "Reto, producto final, fases, recursos y evaluación para aprender creando.", icon: Cog, tone: "coral" },
+        { id: "unit", label: "Unidad de aprendizaje", desc: "Organización secuencial de sesiones articuladas en torno a una situación significativa.", icon: Layers, tone: "violet" },
+        { id: "worksheet", label: "Ficha de trabajo", desc: "Actividades prácticas y ejercicios para que los estudiantes desarrollen en clase o en casa.", icon: FileText, tone: "yellow" },
+        { id: "reading", label: "Generador de lecturas", desc: "Crea textos educativos y materiales de lectura adaptados al nivel y tema requerido.", icon: BookOpen, tone: "amber" },
+      ]
+    },
+    evaluacion: {
+      title: "Evaluación",
+      items: [
+        { id: "evalsheet", label: "Ficha de evaluación", desc: "Registro de observaciones y desempeños para seguimiento continuo del aprendizaje.", icon: FileText, tone: "teal" },
+        { id: "rubric", label: "Rúbrica de evaluación", desc: "Criterios observables y niveles de logro alineados a las capacidades.", icon: ClipboardList, tone: "violet" },
+        { id: "checklist", label: "Lista de cotejo", desc: "Indicadores claros y verificables para registrar Sí, No o En proceso.", icon: CheckCircle2, tone: "yellow" },
+      ]
+    },
+    ludicas: {
+      title: "Actividades lúdicas",
+      items: [
+        { id: "wordsearch", label: "Generador de sopa de letras", desc: "Crea juegos de palabras escondidas para repasar vocabulario y conceptos clave.", icon: Search, tone: "yellow" },
+        { id: "crossword", label: "Generador de crucigramas", desc: "Diseña crucigramas personalizados para afianzar conocimientos de forma divertida.", icon: Layers, tone: "coral" },
+      ]
+    },
+  };
+
+  const allItems = Object.values(creationSections).flatMap(s => s.items);
+  const selectedType = allItems.find((item) => item.id === creation);
 
   return (
     <div className="create-studio">
@@ -1227,11 +1708,30 @@ function CreateStudio({ preferredGrade = "primaria", profile = {} }) {
         <div className="create-studio__nova"><img src="/mascot/kantu-material.png" alt="Kantu, vicuña científica peruana de SciVerse" /><span><strong>¡Hola! Soy Kantu</strong><small>Crearemos paso a paso</small></span></div>
       </div>
 
-      {!creation && <div className="creation-type-grid">{creationOptions.map(({id,label,desc,icon:Icon,tone})=><button key={id} className={`creation-type-card ${tone}`} onClick={()=>setCreation(id)}><span><Icon size={22}/></span><div><small>CREAR CON IA</small><h3>{label}</h3><p>{desc}</p><b>Comenzar <ArrowRight size={15}/></b></div></button>)}</div>}
+      {!creation && <div className="creation-sections">
+        {Object.values(creationSections).map((section) => (
+          <div key={section.title} className="creation-section">
+            <h3 className="section-title">{section.title}</h3>
+            <div className="creation-type-grid">
+              {section.items.map(({id,label,desc,icon:Icon,tone})=>(
+                <button key={id} className={`creation-type-card ${tone}`} onClick={()=>setCreation(id)}>
+                  <span><Icon size={22}/></span>
+                  <div>
+                    <small>CREAR CON IA</small>
+                    <h3>{label}</h3>
+                    <p>{desc}</p>
+                    <b>Comenzar <ArrowRight size={15}/></b>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>}
 
       {creation && <div className="create-generator-wrap">
         <div className="create-generator-head"><div><span>CREANDO CON KANTU</span><h3>{selectedType?.label}</h3><p>{selectedType?.desc}</p></div><button onClick={()=>setCreation(null)}>← Elegir otro producto</button></div>
-        {(creation === "rubric" || creation === "checklist") ? <EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={creation} /> : <SteamGenerator initialGrade={preferredGrade} documentType={creation} profile={profile} />}
+        {(creation === "rubric" || creation === "checklist" || creation === "evalsheet") ? (creation === "evalsheet" ? <EvaluationSheetGenerator profile={profile} initialGrade={preferredGrade} /> : <EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={creation} />) : creation === "wordsearch" ? <WordSearchGenerator initialGrade={preferredGrade} profile={profile} /> : creation === "crossword" ? <CrosswordGenerator initialGrade={preferredGrade} profile={profile} /> : creation === "unit" ? <LearningUnitGenerator initialGrade={preferredGrade} profile={profile} /> : creation === "worksheet" ? <WorksheetGenerator initialGrade={preferredGrade} profile={profile} /> : creation === "reading" ? <ReadingGenerator initialGrade={preferredGrade} profile={profile} /> : <SteamGenerator initialGrade={preferredGrade} documentType={creation} profile={profile} />}
       </div>}
     </div>
   );
