@@ -1245,10 +1245,8 @@ function CreateStudio({ preferredGrade = "primaria", profile = {} }) {
    #planes) y en el perfil del docente (TeacherAccountModal), para que
    ambos siempre muestren los mismos precios y beneficios. */
 const PLANS = [
-  { name: "Gratuito", price: "0", period: "para conocer SciVerse", saving: "Sin tarjeta", featured: false, benefits: ["Actividades de muestra", "1 generación con IA", "Recursos de demostración"] },
-  { name: "Mensual", price: "10", period: "por 1 mes", saving: "Ideal para empezar", featured: false, benefits: ["30 generaciones con IA", "Actividades STEAM", "Fichas y plantillas", "Soporte por WhatsApp"] },
-  { name: "Semestral", price: "30", period: "por 6 meses", saving: "Equivale a S/5 al mes", featured: true, benefits: ["60 generaciones mensuales", "Actividades STEAM", "Descargas en Word", "Nuevos recursos", "Soporte prioritario"] },
-  { name: "Anual", price: "50", period: "por 12 meses", saving: "Equivale a S/4.17 al mes", featured: false, benefits: ["100 generaciones mensuales", "Acceso completo anual", "Primaria o secundaria", "Descargas en Word", "Nuevos recursos", "Soporte prioritario"] },
+  { name: "Gratuito", price: "0", period: "para conocer SciVerse", saving: "Sin tarjeta", featured: false, benefits: ["5 actividades STEAM semanales", "5 instrumentos de evaluación por semana", "5 materiales semanales (fichas, recursos)", "Exportación a Word, PDF y PPT", "Acceso a comunidad WhatsApp"] },
+  { name: "Mensual", price: "20", period: "por 1 mes", saving: "Todo ilimitado", featured: true, benefits: ["Sesiones de aprendizaje ilimitadas", "Actividades STEAM y recursos CNEB ilimitados", "Instrumentos de evaluación ilimitados", "Materiales editables sin límite", "Exportación Word, PDF, PPT sin marca de agua", "Plantillas y fichas personalizables", "Primaria y Secundaria", "Soporte prioritario por WhatsApp"] },
 ];
 
 const TESTIMONIALS = [
