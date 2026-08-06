@@ -1206,9 +1206,203 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
   </div>;
 }
 
+function generateWordSearchGrid(words, difficulty = "media") {
+  const difficultySettings = {
+    facil: { size: 10, directions: ["horizontal", "vertical"] },
+    media: { size: 12, directions: ["horizontal", "vertical", "diagonal"] },
+    dificil: { size: 14, directions: ["horizontal", "vertical", "diagonal", "backwards"] }
+  };
+
+  const settings = difficultySettings[difficulty] || difficultySettings.media;
+  const gridSize = settings.size;
+  const directions = settings.directions;
+
+  const grid = Array(gridSize).fill().map(() => Array(gridSize).fill(""));
+  const placedWords = [];
+  const directionVectors = {
+    horizontal: [0, 1],
+    horizontal_back: [0, -1],
+    vertical: [1, 0],
+    vertical_back: [-1, 0],
+    diagonal: [1, 1],
+    diagonal_back: [-1, -1],
+    diagonal2: [1, -1],
+    diagonal2_back: [-1, 1]
+  };
+
+  const cleanedWords = words
+    .map(w => w.toUpperCase().trim())
+    .filter(w => w.length > 1 && w.length <= gridSize)
+    .sort((a, b) => b.length - a.length);
+
+  for (const word of cleanedWords) {
+    let placed = false;
+    let attempts = 0;
+
+    while (!placed && attempts < 50) {
+      attempts++;
+      const row = Math.floor(Math.random() * gridSize);
+      const col = Math.floor(Math.random() * gridSize);
+
+      let dirKey;
+      if (directions.includes("backwards")) {
+        const allDirs = ["horizontal", "horizontal_back", "vertical", "vertical_back", "diagonal", "diagonal_back", "diagonal2", "diagonal2_back"];
+        dirKey = allDirs[Math.floor(Math.random() * allDirs.length)];
+      } else {
+        const availableDirs = ["horizontal", "vertical", "diagonal", "diagonal2"];
+        dirKey = availableDirs[Math.floor(Math.random() * availableDirs.length)];
+      }
+
+      const [dRow, dCol] = directionVectors[dirKey];
+      let canPlace = true;
+
+      for (let i = 0; i < word.length; i++) {
+        const r = row + i * dRow;
+        const c = col + i * dCol;
+
+        if (r < 0 || r >= gridSize || c < 0 || c >= gridSize) {
+          canPlace = false;
+          break;
+        }
+
+        if (grid[r][c] !== "" && grid[r][c] !== word[i]) {
+          canPlace = false;
+          break;
+        }
+      }
+
+      if (canPlace) {
+        for (let i = 0; i < word.length; i++) {
+          const r = row + i * dRow;
+          const c = col + i * dCol;
+          grid[r][c] = word[i];
+        }
+        placedWords.push({ word, row, col, direction: dirKey });
+        placed = true;
+      }
+    }
+  }
+
+  const letters = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ";
+  for (let i = 0; i < gridSize; i++) {
+    for (let j = 0; j < gridSize; j++) {
+      if (grid[i][j] === "") {
+        grid[i][j] = letters[Math.floor(Math.random() * letters.length)];
+      }
+    }
+  }
+
+  return { grid, placedWords, gridSize };
+}
+
+async function downloadWordSearch({ titulo, palabras, gridData, dificultad, grado }) {
+  const { grid, placedWords, gridSize } = gridData;
+
+  const gridCells = grid.map(row =>
+    new TableRow({
+      children: row.map(letter =>
+        new TableCell({
+          width: { size: 800, type: WidthType.DXA },
+          shading: { type: ShadingType.CLEAR, fill: "FFFFFF" },
+          margins: { top: 30, bottom: 30, left: 30, right: 30 },
+          children: [new Paragraph({
+            text: letter,
+            alignment: AlignmentType.CENTER,
+            spacing: { line: 240 }
+          })]
+        })
+      )
+    })
+  );
+
+  const gridTable = new Table({
+    width: { size: 9000, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+      bottom: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+      left: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+      right: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }
+    },
+    rows: gridCells
+  });
+
+  const solutionCells = grid.map((row, rowIdx) =>
+    new TableRow({
+      children: row.map((letter, colIdx) => {
+        const isPartOfWord = placedWords.some(w => {
+          const directionVectors = {
+            horizontal: [0, 1], horizontal_back: [0, -1], vertical: [1, 0], vertical_back: [-1, 0],
+            diagonal: [1, 1], diagonal_back: [-1, -1], diagonal2: [1, -1], diagonal2_back: [-1, 1]
+          };
+          const [dRow, dCol] = directionVectors[w.direction];
+          for (let i = 0; i < w.word.length; i++) {
+            if (w.row + i * dRow === rowIdx && w.col + i * dCol === colIdx) return true;
+          }
+          return false;
+        });
+
+        return new TableCell({
+          width: { size: 800, type: WidthType.DXA },
+          shading: { type: ShadingType.CLEAR, fill: isPartOfWord ? "FFFFCC" : "FFFFFF" },
+          margins: { top: 30, bottom: 30, left: 30, right: 30 },
+          children: [new Paragraph({
+            text: letter,
+            alignment: AlignmentType.CENTER,
+            spacing: { line: 240 }
+          })]
+        });
+      })
+    })
+  );
+
+  const solutionTable = new Table({
+    width: { size: 9000, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    borders: {
+      top: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+      bottom: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+      left: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+      right: { style: BorderStyle.SINGLE, size: 2, color: "000000" },
+      insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+      insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }
+    },
+    rows: solutionCells
+  });
+
+  const doc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({ text: titulo, heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER, spacing: { after: 100 } }),
+        new Paragraph({ text: `Dificultad: ${dificultad} | Nivel: ${grado}`, alignment: AlignmentType.CENTER, spacing: { after: 200 }, italics: true }),
+
+        new Paragraph({ text: "PARA EL ESTUDIANTE", heading: HeadingLevel.HEADING_2, spacing: { before: 100, after: 150 } }),
+        new Paragraph({ text: "Palabras a buscar:", bold: true, spacing: { after: 80 } }),
+        new Paragraph({ text: palabras.join(" • "), spacing: { after: 150 } }),
+        new Paragraph({ text: "Encuentra todas las palabras en la sopa de letras. Pueden estar horizontales, verticales o diagonales.", spacing: { after: 150 } }),
+        gridTable,
+
+        new PageBreak(),
+
+        new Paragraph({ text: "SOLUCIONARIO (Para el docente)", heading: HeadingLevel.HEADING_2, spacing: { before: 100, after: 150 } }),
+        new Paragraph({ text: "Las palabras están resaltadas en amarillo:", italics: true, spacing: { after: 150 } }),
+        solutionTable,
+
+        new Paragraph({ text: " " }),
+        new Paragraph({ text: "Palabras encontradas:", bold: true, spacing: { before: 150, after: 80 } }),
+        ...palabras.map(p => new Paragraph({ text: `✓ ${p}`, bullet: { level: 0 }, spacing: { after: 40 } }))
+      ]
+    }]
+  });
+
+  await triggerWordDownload(doc, `${titulo.replace(/\s+/g, "-")}.docx`);
+}
+
 function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ tema: "", palabras: "", grado: initialGrade, area: "" });
+  const [form, setForm] = useState({ tema: "", palabras: "", grado: initialGrade, area: "", dificultad: "media" });
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -1216,11 +1410,19 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
     setLoading(true);
     setTimeout(() => {
       const palabrasList = form.palabras.split(",").map(p => p.trim()).filter(Boolean);
+      if (palabrasList.length === 0) {
+        setLoading(false);
+        return;
+      }
+
+      const gridData = generateWordSearchGrid(palabrasList, form.dificultad);
+
       setPreview({
         titulo: `Sopa de letras: ${form.tema}`,
         palabras: palabrasList,
         grado: form.grado,
-        dificultad: form.grado === "primaria" ? "Media" : "Alta",
+        dificultad: form.dificultad.charAt(0).toUpperCase() + form.dificultad.slice(1),
+        gridData: gridData
       });
       setStep(2);
       setLoading(false);
@@ -1228,16 +1430,50 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
   };
 
   const handleDownload = () => {
-    downloadWord(
-      `${preview.titulo}.docx`,
-      `${preview.titulo}\n\nPalabras: ${preview.palabras.join(", ")}\n\nDificultad: ${preview.dificultad}\nNivel: ${preview.grado}`,
-      preview.titulo
+    downloadWordSearch({
+      titulo: preview.titulo,
+      palabras: preview.palabras,
+      gridData: preview.gridData,
+      dificultad: preview.dificultad,
+      grado: preview.grado
+    });
+  };
+
+  const renderGrid = (grid) => {
+    return (
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${grid.length}, 1fr)`,
+        gap: '2px',
+        padding: '10px',
+        backgroundColor: '#f5f5f5',
+        borderRadius: '4px',
+        maxWidth: '400px'
+      }}>
+        {grid.map((row, i) =>
+          row.map((letter, j) => (
+            <div key={`${i}-${j}`} style={{
+              width: '20px',
+              height: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: '#fff',
+              border: '1px solid #ddd',
+              fontSize: '12px',
+              fontFamily: 'monospace',
+              fontWeight: 'bold'
+            }}>
+              {letter}
+            </div>
+          ))
+        )}
+      </div>
     );
   };
 
   return (
     <div className="generator-wrapper">
-      {/* STEP 1: Formulario */}
       {step === 1 && (
         <div className="wizard-card">
           <div className="wizard-card__title">
@@ -1257,6 +1493,14 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
               <textarea value={form.palabras} onChange={(e) => setForm({...form, palabras: e.target.value})} placeholder="jaguar, anaconda, loro, cocodrilo, tapir" rows="5" />
             </label>
             <label>
+              <span>Nivel de dificultad</span>
+              <select value={form.dificultad} onChange={(e) => setForm({...form, dificultad: e.target.value})}>
+                <option value="facil">Fácil (10x10)</option>
+                <option value="media">Medio (12x12)</option>
+                <option value="dificil">Difícil (14x14)</option>
+              </select>
+            </label>
+            <label>
               <span>Nivel educativo</span>
               <select value={form.grado} onChange={(e) => setForm({...form, grado: e.target.value})}>
                 <option value="primaria">Primaria</option>
@@ -1271,7 +1515,6 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
         </div>
       )}
 
-      {/* STEP 2: Previsualización */}
       {step === 2 && preview && (
         <div className="preview-result">
           <div className="preview-header">
@@ -1280,12 +1523,11 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
             </div>
             <div>
               <h3>{preview.titulo}</h3>
-              <small>PASO 2 DE 2: PREVISUALIZACIÓN</small>
+              <small>PASO 2 DE 2: PREVISUALIZACIÓN • DIFICULTAD: {preview.dificultad.toUpperCase()}</small>
             </div>
             <div></div>
           </div>
 
-          {/* Cómo usar */}
           <div className="preview-section how-to-use">
             <h4>¿Cómo se usa este recurso?</h4>
             <div className="how-to-steps">
@@ -1307,7 +1549,6 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
             </div>
           </div>
 
-          {/* Vista previa */}
           <div className="preview-section preview-box">
             <h4>Vista previa del recurso</h4>
             <div className="preview-pages">
@@ -1317,16 +1558,10 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
                 <div className="wordsearch-preview">
                   <div className="word-list">
                     <strong>Palabras a buscar:</strong>
-                    <div className="words">{preview.palabras.slice(0, 5).join(" • ")}</div>
-                    {preview.palabras.length > 5 && <div className="words">{preview.palabras.slice(5).join(" • ")}</div>}
+                    <div className="words">{preview.palabras.join(" • ")}</div>
                   </div>
                   <div className="grid-preview">
-                    <div style={{fontSize: '10px', fontFamily: 'monospace', lineHeight: '1.4'}}>
-                      M J A G U A R P O L<br/>
-                      E L O R O C O D I L<br/>
-                      T A P I R A N A C O<br/>
-                      ...
-                    </div>
+                    {renderGrid(preview.gridData.grid)}
                   </div>
                 </div>
               </div>
@@ -1334,14 +1569,13 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
                 <h5>{preview.titulo}</h5>
                 <p className="page-label">Página 2 - Solucionario (para el docente)</p>
                 <div className="worksearch-solution">
-                  <p className="solution-note">Palabras encontradas (marcadas):</p>
+                  <p className="solution-note">Palabras encontradas (resaltadas en amarillo):</p>
                   <div className="words-found">{preview.palabras.map((w, i) => <span key={i}>✓ {w}</span>)}</div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Acciones */}
           <div className="preview-actions">
             <button onClick={() => setStep(1)} className="secondary">
               Editar parámetros
