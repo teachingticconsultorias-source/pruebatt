@@ -1297,67 +1297,153 @@ function generateWordSearchGrid(words, difficulty = "media") {
 
 async function generateWordSearchImage({ titulo, palabras, gridData, dificultad, grado, type = "student" }) {
   const { grid, placedWords } = gridData;
-  const cellSize = 35;
-  const padding = 40;
-  const titleHeight = 60;
-  const wordsHeight = 80;
+  const cellSize = 40;
+  const padding = 50;
+  const topPadding = 60;
+  const bottomPadding = 40;
+  const sideMargin = 60;
 
-  const canvasWidth = grid.length * cellSize + padding * 2;
-  const canvasHeight = grid.length * cellSize + padding * 2 + titleHeight + (type === "student" ? wordsHeight : 0);
+  // Colores SciVerse
+  const colors = {
+    primary: "#1F9E98",      // Teal principal
+    primaryDark: "#0F817C",  // Teal oscuro
+    secondary: "#FB6542",    // Coral
+    accent: "#FFBB00",       // Amarillo
+    text: "#0F2E2C",         // Texto oscuro
+    textLight: "#607B79",    // Texto claro
+    border: "#C7E8E5",       // Borde teal claro
+    highlight: "#FFBB00",    // Amarillo para resaltar
+    background: "#F5FBFA",   // Fondo teal claro
+    white: "#FFFFFF"
+  };
+
+  const canvasWidth = grid.length * cellSize + padding * 2 + sideMargin * 2;
+  const canvasHeight = grid.length * cellSize + topPadding + bottomPadding + (type === "student" ? 120 : 80) + padding;
 
   const canvas = document.createElement("canvas");
   canvas.width = canvasWidth;
   canvas.height = canvasHeight;
   const ctx = canvas.getContext("2d");
 
-  // Fondo blanco
-  ctx.fillStyle = "#FFFFFF";
+  // Fondo con gradiente SciVerse
+  const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
+  gradient.addColorStop(0, "#F5FBFA");
+  gradient.addColorStop(1, colors.white);
+  ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  let yPos = topPadding;
+
+  // Línea decorativa superior
+  ctx.strokeStyle = colors.primary;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(sideMargin, yPos - 20);
+  ctx.lineTo(canvas.width - sideMargin, yPos - 20);
+  ctx.stroke();
+
   // Título
-  ctx.fillStyle = "#333333";
-  ctx.font = "bold 24px Arial";
+  ctx.fillStyle = colors.primaryDark;
+  ctx.font = "bold 32px 'Space Grotesk', Arial, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(titulo, canvas.width / 2, 35);
+  ctx.fillText(titulo, canvas.width / 2, yPos);
+  yPos += 45;
 
-  // Dificultad y nivel
-  ctx.font = "italic 12px Arial";
-  ctx.fillStyle = "#666666";
-  ctx.fillText(`Dificultad: ${dificultad} | Nivel: ${grado}`, canvas.width / 2, 55);
+  // Dificultad y nivel en badge
+  ctx.font = "12px 'Inter', Arial, sans-serif";
+  ctx.fillStyle = colors.primary;
+  const badgeText = `Dificultad: ${dificultad} | Nivel: ${grado}`;
+  const metrics = ctx.measureText(badgeText);
+  const badgeWidth = metrics.width + 20;
+  const badgeX = (canvas.width - badgeWidth) / 2;
 
-  let yOffset = titleHeight;
+  // Fondo del badge con estilo SciVerse
+  ctx.fillStyle = colors.border + "40";
+  ctx.fillRect(badgeX - 10, yPos - 15, badgeWidth, 24);
+  ctx.strokeStyle = colors.border;
+  ctx.lineWidth = 2;
+  ctx.strokeRect(badgeX - 10, yPos - 15, badgeWidth, 24);
 
-  // Palabras a buscar (solo en version estudiante)
+  ctx.fillStyle = colors.primary;
+  ctx.textAlign = "center";
+  ctx.fillText(badgeText, canvas.width / 2, yPos + 2);
+  yPos += 40;
+
+  // Sección de palabras a buscar
   if (type === "student") {
-    ctx.font = "bold 14px Arial";
-    ctx.fillStyle = "#333333";
+    ctx.fillStyle = colors.primary;
+    ctx.font = "bold 16px 'Space Grotesk', Arial, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText("Palabras a buscar:", padding, yOffset + 20);
+    ctx.fillText("📋 Palabras a buscar:", sideMargin, yPos);
+    yPos += 25;
 
-    ctx.font = "12px Arial";
-    const wordsText = palabras.join(" • ");
-    ctx.fillText(wordsText, padding, yOffset + 45);
-    yOffset += wordsHeight;
-  } else {
-    ctx.font = "bold 14px Arial";
-    ctx.fillStyle = "#333333";
+    // Palabras en cuadrícula colorida
+    ctx.font = "14px 'Inter', Arial, sans-serif";
+    ctx.fillStyle = colors.text;
+    let xPos = sideMargin;
+    let lineHeight = 0;
+
+    palabras.forEach((palabra, idx) => {
+      const wordMetrics = ctx.measureText(palabra + " • ");
+      if (xPos + wordMetrics.width > canvas.width - sideMargin) {
+        xPos = sideMargin;
+        yPos += 28;
+      }
+
+      // Burbuja para cada palabra con colores SciVerse
+      const bubbleColor = idx % 3 === 0 ? colors.primary : idx % 3 === 1 ? colors.secondary : colors.accent;
+      ctx.fillStyle = bubbleColor + "20";
+      ctx.fillRect(xPos - 8, yPos - 14, wordMetrics.width + 16, 22);
+
+      ctx.strokeStyle = bubbleColor;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(xPos - 8, yPos - 14, wordMetrics.width + 16, 22);
+
+      ctx.fillStyle = bubbleColor;
+      ctx.fillText(palabra + (idx < palabras.length - 1 ? " •" : ""), xPos, yPos);
+
+      xPos += wordMetrics.width + 15;
+    });
+    yPos += 50;
+
+    // Instrucciones
+    ctx.font = "12px 'Inter', Arial, sans-serif";
+    ctx.fillStyle = colors.textLight;
     ctx.textAlign = "left";
-    ctx.fillText("Solucionario (palabras resaltadas en amarillo)", padding, yOffset + 20);
-    yOffset += 40;
+    ctx.fillText("Encuentra todas las palabras en la sopa de letras (pueden estar horizontal, vertical o diagonal)", sideMargin, yPos);
+    yPos += 30;
+  } else {
+    ctx.fillStyle = colors.primary;
+    ctx.font = "bold 16px 'Space Grotesk', Arial, sans-serif";
+    ctx.textAlign = "left";
+    ctx.fillText("🔑 Solucionario", sideMargin, yPos);
+    yPos += 25;
+
+    ctx.font = "12px 'Inter', Arial, sans-serif";
+    ctx.fillStyle = colors.textLight;
+    ctx.fillText("Las palabras están resaltadas en amarillo", sideMargin, yPos);
+    yPos += 30;
   }
 
+  // Línea separadora
+  ctx.strokeStyle = colors.border;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(sideMargin, yPos - 10);
+  ctx.lineTo(canvas.width - sideMargin, yPos - 10);
+  ctx.stroke();
+  yPos += 15;
+
   // Dibujar grilla
-  ctx.lineWidth = 1;
-  ctx.font = "bold 14px monospace";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
+  const gridStartX = sideMargin + padding;
+  const gridStartY = yPos;
 
   for (let i = 0; i < grid.length; i++) {
     for (let j = 0; j < grid[i].length; j++) {
-      const x = padding + j * cellSize;
-      const y = yOffset + padding + i * cellSize;
+      const x = gridStartX + j * cellSize;
+      const y = gridStartY + i * cellSize;
 
-      // Verificar si esta celda es parte de una palabra (solo en solucionario)
+      // Verificar si es parte de palabra
       let isPartOfWord = false;
       if (type === "solution") {
         isPartOfWord = placedWords.some(w => {
@@ -1373,23 +1459,52 @@ async function generateWordSearchImage({ titulo, palabras, gridData, dificultad,
         });
       }
 
-      // Fondo de celda
+      // Fondo de celda con sombra sutil
       if (isPartOfWord) {
-        ctx.fillStyle = "#FFFFCC";
+        ctx.fillStyle = colors.highlight;
+        ctx.shadowColor = "rgba(31, 158, 152, 0.2)";
+        ctx.shadowBlur = 3;
+        ctx.shadowOffsetX = 1;
+        ctx.shadowOffsetY = 1;
       } else {
-        ctx.fillStyle = "#FFFFFF";
+        ctx.fillStyle = colors.white;
+        ctx.shadowColor = "rgba(15, 61, 58, 0.08)";
+        ctx.shadowBlur = 2;
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 1;
       }
       ctx.fillRect(x, y, cellSize, cellSize);
+      ctx.shadowColor = "transparent";
 
       // Borde de celda
-      ctx.strokeStyle = "#000000";
+      ctx.strokeStyle = isPartOfWord ? colors.primary : colors.border;
+      ctx.lineWidth = isPartOfWord ? 2 : 1.5;
       ctx.strokeRect(x, y, cellSize, cellSize);
 
       // Letra
-      ctx.fillStyle = "#333333";
+      ctx.fillStyle = colors.text;
+      ctx.font = "bold 16px 'JetBrains Mono', monospace";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       ctx.fillText(grid[i][j], x + cellSize / 2, y + cellSize / 2);
     }
   }
+
+  yPos = gridStartY + grid.length * cellSize + 30;
+
+  // Footer con información
+  ctx.font = "10px 'Inter', Arial, sans-serif";
+  ctx.fillStyle = colors.textLight;
+  ctx.textAlign = "center";
+  ctx.fillText(`SciVerse - Sopa de Letras Interactiva | ${new Date().toLocaleDateString("es-ES")}`, canvas.width / 2, yPos);
+
+  // Línea decorativa inferior
+  ctx.strokeStyle = colors.primary;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(sideMargin, canvas.height - 30);
+  ctx.lineTo(canvas.width - sideMargin, canvas.height - 30);
+  ctx.stroke();
 
   // Convertir a imagen
   return canvas.toDataURL("image/png");
