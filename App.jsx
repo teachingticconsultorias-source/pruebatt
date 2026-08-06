@@ -1297,11 +1297,23 @@ function generateWordSearchGrid(words, difficulty = "media") {
 
 async function generateWordSearchImage({ titulo, palabras, gridData, dificultad, grado, type = "student" }) {
   const { grid, placedWords } = gridData;
-  const cellSize = 40;
-  const padding = 50;
-  const topPadding = 60;
-  const bottomPadding = 40;
-  const sideMargin = 60;
+
+  // Formato A4 a 96 DPI (para pantalla)
+  const A4_WIDTH = 794;
+  const A4_HEIGHT = 1123;
+
+  // Márgenes A4
+  const marginTop = 50;
+  const marginBottom = 40;
+  const marginSides = 40;
+
+  // Dimensiones útiles
+  const usableWidth = A4_WIDTH - marginSides * 2;
+
+  // Calcular tamaño de celda automáticamente
+  const maxGridWidth = usableWidth - 30;
+  const cellSize = Math.floor(maxGridWidth / grid.length);
+  const gridSize = cellSize * grid.length;
 
   // Colores SciVerse
   const colors = {
@@ -1317,8 +1329,8 @@ async function generateWordSearchImage({ titulo, palabras, gridData, dificultad,
     white: "#FFFFFF"
   };
 
-  const canvasWidth = grid.length * cellSize + padding * 2 + sideMargin * 2;
-  const canvasHeight = grid.length * cellSize + topPadding + bottomPadding + (type === "student" ? 120 : 80) + padding;
+  const canvasWidth = A4_WIDTH;
+  const canvasHeight = A4_HEIGHT;
 
   const canvas = document.createElement("canvas");
   canvas.width = canvasWidth;
@@ -1332,110 +1344,96 @@ async function generateWordSearchImage({ titulo, palabras, gridData, dificultad,
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  let yPos = topPadding;
+  let yPos = marginTop;
 
-  // Línea decorativa superior
-  ctx.strokeStyle = colors.primary;
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(sideMargin, yPos - 20);
-  ctx.lineTo(canvas.width - sideMargin, yPos - 20);
-  ctx.stroke();
-
-  // Título
+  // Título (más pequeño para A4)
   ctx.fillStyle = colors.primaryDark;
-  ctx.font = "bold 32px 'Space Grotesk', Arial, sans-serif";
+  ctx.font = "bold 22px 'Space Grotesk', Arial, sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(titulo, canvas.width / 2, yPos);
-  yPos += 45;
+  ctx.fillText(titulo, canvasWidth / 2, yPos);
+  yPos += 28;
 
-  // Dificultad y nivel en badge
-  ctx.font = "12px 'Inter', Arial, sans-serif";
+  // Dificultad y nivel en badge (más compacto)
+  ctx.font = "10px 'Inter', Arial, sans-serif";
   ctx.fillStyle = colors.primary;
   const badgeText = `Dificultad: ${dificultad} | Nivel: ${grado}`;
   const metrics = ctx.measureText(badgeText);
-  const badgeWidth = metrics.width + 20;
-  const badgeX = (canvas.width - badgeWidth) / 2;
+  const badgeWidth = metrics.width + 12;
+  const badgeX = (canvasWidth - badgeWidth) / 2;
 
   // Fondo del badge con estilo SciVerse
   ctx.fillStyle = colors.border + "40";
-  ctx.fillRect(badgeX - 10, yPos - 15, badgeWidth, 24);
+  ctx.fillRect(badgeX - 6, yPos - 12, badgeWidth, 18);
   ctx.strokeStyle = colors.border;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(badgeX - 10, yPos - 15, badgeWidth, 24);
+  ctx.lineWidth = 1;
+  ctx.strokeRect(badgeX - 6, yPos - 12, badgeWidth, 18);
 
   ctx.fillStyle = colors.primary;
   ctx.textAlign = "center";
-  ctx.fillText(badgeText, canvas.width / 2, yPos + 2);
-  yPos += 40;
+  ctx.fillText(badgeText, canvasWidth / 2, yPos);
+  yPos += 24;
 
-  // Sección de palabras a buscar
+  // Sección de palabras a buscar (compacta para A4)
   if (type === "student") {
     ctx.fillStyle = colors.primary;
-    ctx.font = "bold 16px 'Space Grotesk', Arial, sans-serif";
+    ctx.font = "bold 13px 'Space Grotesk', Arial, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText("📋 Palabras a buscar:", sideMargin, yPos);
-    yPos += 25;
+    ctx.fillText("📋 Palabras a buscar:", marginSides, yPos);
+    yPos += 16;
 
-    // Palabras en cuadrícula colorida
-    ctx.font = "14px 'Inter', Arial, sans-serif";
+    // Palabras en línea simple
+    ctx.font = "11px 'Inter', Arial, sans-serif";
     ctx.fillStyle = colors.text;
-    let xPos = sideMargin;
-    let lineHeight = 0;
+    const wordsLine = palabras.join(" • ");
 
-    palabras.forEach((palabra, idx) => {
-      const wordMetrics = ctx.measureText(palabra + " • ");
-      if (xPos + wordMetrics.width > canvas.width - sideMargin) {
-        xPos = sideMargin;
-        yPos += 28;
+    // Ajustar texto a ancho disponible
+    let words = [];
+    let currentLine = "";
+    const wordArray = palabras.split(" • ");
+
+    ctx.font = "11px 'Inter', Arial, sans-serif";
+    for (let word of palabras) {
+      const testLine = currentLine + (currentLine ? " • " : "") + word;
+      const metrics = ctx.measureText(testLine);
+      if (metrics.width > usableWidth - 20) {
+        if (currentLine) words.push(currentLine);
+        currentLine = word;
+      } else {
+        currentLine = testLine;
       }
+    }
+    if (currentLine) words.push(currentLine);
 
-      // Burbuja para cada palabra con colores SciVerse
-      const bubbleColor = idx % 3 === 0 ? colors.primary : idx % 3 === 1 ? colors.secondary : colors.accent;
-      ctx.fillStyle = bubbleColor + "20";
-      ctx.fillRect(xPos - 8, yPos - 14, wordMetrics.width + 16, 22);
-
-      ctx.strokeStyle = bubbleColor;
-      ctx.lineWidth = 1.5;
-      ctx.strokeRect(xPos - 8, yPos - 14, wordMetrics.width + 16, 22);
-
-      ctx.fillStyle = bubbleColor;
-      ctx.fillText(palabra + (idx < palabras.length - 1 ? " •" : ""), xPos, yPos);
-
-      xPos += wordMetrics.width + 15;
+    ctx.fillStyle = colors.text;
+    words.forEach(line => {
+      ctx.fillText(line, marginSides, yPos);
+      yPos += 14;
     });
-    yPos += 50;
-
-    // Instrucciones
-    ctx.font = "12px 'Inter', Arial, sans-serif";
-    ctx.fillStyle = colors.textLight;
-    ctx.textAlign = "left";
-    ctx.fillText("Encuentra todas las palabras en la sopa de letras (pueden estar horizontal, vertical o diagonal)", sideMargin, yPos);
-    yPos += 30;
+    yPos += 8;
   } else {
     ctx.fillStyle = colors.primary;
-    ctx.font = "bold 16px 'Space Grotesk', Arial, sans-serif";
+    ctx.font = "bold 13px 'Space Grotesk', Arial, sans-serif";
     ctx.textAlign = "left";
-    ctx.fillText("🔑 Solucionario", sideMargin, yPos);
-    yPos += 25;
+    ctx.fillText("🔑 Solucionario", marginSides, yPos);
+    yPos += 16;
 
-    ctx.font = "12px 'Inter', Arial, sans-serif";
+    ctx.font = "10px 'Inter', Arial, sans-serif";
     ctx.fillStyle = colors.textLight;
-    ctx.fillText("Las palabras están resaltadas en amarillo", sideMargin, yPos);
-    yPos += 30;
+    ctx.fillText("Las palabras están resaltadas en amarillo", marginSides, yPos);
+    yPos += 14;
   }
 
   // Línea separadora
   ctx.strokeStyle = colors.border;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(sideMargin, yPos - 10);
-  ctx.lineTo(canvas.width - sideMargin, yPos - 10);
+  ctx.moveTo(marginSides, yPos - 5);
+  ctx.lineTo(canvasWidth - marginSides, yPos - 5);
   ctx.stroke();
-  yPos += 15;
+  yPos += 12;
 
-  // Dibujar grilla
-  const gridStartX = sideMargin + padding;
+  // Dibujar grilla centrada
+  const gridStartX = (canvasWidth - gridSize) / 2;
   const gridStartY = yPos;
 
   for (let i = 0; i < grid.length; i++) {
@@ -1490,20 +1488,20 @@ async function generateWordSearchImage({ titulo, palabras, gridData, dificultad,
     }
   }
 
-  yPos = gridStartY + grid.length * cellSize + 30;
+  yPos = gridStartY + gridSize + 15;
 
-  // Footer con información
-  ctx.font = "10px 'Inter', Arial, sans-serif";
+  // Footer con información (compacto)
+  ctx.font = "9px 'Inter', Arial, sans-serif";
   ctx.fillStyle = colors.textLight;
   ctx.textAlign = "center";
-  ctx.fillText(`SciVerse - Sopa de Letras Interactiva | ${new Date().toLocaleDateString("es-ES")}`, canvas.width / 2, yPos);
+  ctx.fillText(`SciVerse - Sopa de Letras Interactiva | ${new Date().toLocaleDateString("es-ES")}`, canvasWidth / 2, yPos);
 
   // Línea decorativa inferior
   ctx.strokeStyle = colors.primary;
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(sideMargin, canvas.height - 30);
-  ctx.lineTo(canvas.width - sideMargin, canvas.height - 30);
+  ctx.moveTo(marginSides, canvasHeight - marginBottom - 5);
+  ctx.lineTo(canvasWidth - marginSides, canvasHeight - marginBottom - 5);
   ctx.stroke();
 
   // Convertir a imagen
