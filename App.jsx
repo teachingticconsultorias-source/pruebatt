@@ -1296,46 +1296,60 @@ function generateWordSearchGrid(words, difficulty = "media") {
 }
 
 async function generateWordSearchImage({ titulo, palabras, gridData, dificultad, grado, type = "student" }) {
-  const { grid, placedWords } = gridData;
+  try {
+    if (!gridData || !gridData.grid) {
+      throw new Error("No hay datos de grilla para generar la imagen");
+    }
 
-  // Formato A4 a 96 DPI (para pantalla)
-  const A4_WIDTH = 794;
-  const A4_HEIGHT = 1123;
+    const { grid, placedWords } = gridData;
 
-  // Márgenes A4
-  const marginTop = 50;
-  const marginBottom = 40;
-  const marginSides = 40;
+    // Validar que grid sea válido
+    if (!Array.isArray(grid) || grid.length === 0) {
+      throw new Error("La grilla no es válida");
+    }
 
-  // Dimensiones útiles
-  const usableWidth = A4_WIDTH - marginSides * 2;
+    // Formato A4 a 96 DPI (para pantalla)
+    const A4_WIDTH = 794;
+    const A4_HEIGHT = 1123;
 
-  // Calcular tamaño de celda automáticamente
-  const maxGridWidth = usableWidth - 30;
-  const cellSize = Math.floor(maxGridWidth / grid.length);
-  const gridSize = cellSize * grid.length;
+    // Márgenes A4
+    const marginTop = 50;
+    const marginBottom = 40;
+    const marginSides = 40;
 
-  // Colores SciVerse
-  const colors = {
-    primary: "#1F9E98",      // Teal principal
-    primaryDark: "#0F817C",  // Teal oscuro
-    secondary: "#FB6542",    // Coral
-    accent: "#FFBB00",       // Amarillo
-    text: "#0F2E2C",         // Texto oscuro
-    textLight: "#607B79",    // Texto claro
-    border: "#C7E8E5",       // Borde teal claro
-    highlight: "#FFBB00",    // Amarillo para resaltar
-    background: "#F5FBFA",   // Fondo teal claro
-    white: "#FFFFFF"
-  };
+    // Dimensiones útiles
+    const usableWidth = A4_WIDTH - marginSides * 2;
 
-  const canvasWidth = A4_WIDTH;
-  const canvasHeight = A4_HEIGHT;
+    // Calcular tamaño de celda automáticamente
+    const maxGridWidth = usableWidth - 30;
+    const cellSize = Math.floor(maxGridWidth / grid.length);
+    const gridSize = cellSize * grid.length;
 
-  const canvas = document.createElement("canvas");
-  canvas.width = canvasWidth;
-  canvas.height = canvasHeight;
-  const ctx = canvas.getContext("2d");
+    // Colores SciVerse
+    const colors = {
+      primary: "#1F9E98",      // Teal principal
+      primaryDark: "#0F817C",  // Teal oscuro
+      secondary: "#FB6542",    // Coral
+      accent: "#FFBB00",       // Amarillo
+      text: "#0F2E2C",         // Texto oscuro
+      textLight: "#607B79",    // Texto claro
+      border: "#C7E8E5",       // Borde teal claro
+      highlight: "#FFBB00",    // Amarillo para resaltar
+      background: "#F5FBFA",   // Fondo teal claro
+      white: "#FFFFFF"
+    };
+
+    const canvasWidth = A4_WIDTH;
+    const canvasHeight = A4_HEIGHT;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = canvasWidth;
+    canvas.height = canvasHeight;
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+      throw new Error("No se pudo obtener el contexto del canvas");
+    }
 
   // Fondo con gradiente SciVerse
   const gradient = ctx.createLinearGradient(0, 0, 0, canvasHeight);
@@ -1504,8 +1518,16 @@ async function generateWordSearchImage({ titulo, palabras, gridData, dificultad,
   ctx.lineTo(canvasWidth - marginSides, canvasHeight - marginBottom - 5);
   ctx.stroke();
 
-  // Convertir a imagen
-  return canvas.toDataURL("image/png");
+    // Convertir a imagen
+    const imageData = canvas.toDataURL("image/png");
+    if (!imageData) {
+      throw new Error("No se pudo convertir el canvas a imagen");
+    }
+    return imageData;
+  } catch (error) {
+    console.error("Error generando imagen de sopa de letras:", error);
+    throw new Error(`Error al generar la imagen: ${error.message}`);
+  }
 }
 
 async function downloadImageFile(dataUrl, filename) {
@@ -1629,19 +1651,43 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
     }
     setSuggesting(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generateContent", {
-        body: {
-          type: "wordsearch_words",
-          tema: form.tema,
-          grado: form.grado,
-          cantidad: 10
-        }
-      });
+      // Palabras sugeridas por tema (base de datos simple)
+      const temaPalabras = {
+        animales: ["jaguar", "anaconda", "loro", "cocodrilo", "tapir", "guacamayo", "caimán", "venado", "armadillo"],
+        frutas: ["manzana", "plátano", "naranja", "uva", "fresa", "piña", "papaya", "mango", "sandía"],
+        colores: ["rojo", "azul", "verde", "amarillo", "naranja", "morado", "rosa", "negro", "blanco"],
+        numeros: ["uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"],
+        cuerpo: ["cabeza", "brazo", "pierna", "mano", "pie", "ojo", "nariz", "boca", "oreja"],
+        escuela: ["libro", "lápiz", "mesa", "silla", "pizarra", "alumno", "maestro", "cuaderno", "tiza"],
+        familia: ["padre", "madre", "hijo", "hija", "abuelo", "hermano", "tía", "tío", "primo"],
+        casa: ["puerta", "ventana", "techo", "piso", "pared", "sala", "cocina", "dormitorio", "baño"],
+        transporte: ["auto", "bicicleta", "avión", "barco", "tren", "bus", "moto", "bote", "carro"],
+        naturaleza: ["árbol", "flor", "hierba", "agua", "montaña", "río", "lago", "mar", "bosque"]
+      };
 
-      if (error) throw error;
-      if (data?.palabras) {
-        setForm({...form, palabras: data.palabras.join(", ")});
+      // Buscar palabras relevantes por tema
+      let palabrasSugeridas = [];
+      const temaBajo = form.tema.toLowerCase();
+
+      for (const [categoria, palabras] of Object.entries(temaPalabras)) {
+        if (temaBajo.includes(categoria)) {
+          palabrasSugeridas = palabras;
+          break;
+        }
       }
+
+      // Si no encuentra coincidencia, usar palabras relacionadas al tema
+      if (palabrasSugeridas.length === 0) {
+        palabrasSugeridas = temaPalabras.naturaleza;
+      }
+
+      // Seleccionar 10 palabras al azar
+      const seleccionadas = palabrasSugeridas
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 10);
+
+      setForm({...form, palabras: seleccionadas.join(", ")});
+      alert(`Kantu sugirió ${seleccionadas.length} palabras para: "${form.tema}"`);
     } catch (err) {
       console.error("Error sugerencia:", err);
       alert("No se pudo generar las palabras. Intenta escribirlas manualmente.");
@@ -1689,6 +1735,10 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
 
   const handleDownloadImage = async () => {
     try {
+      if (!preview || !preview.gridData) {
+        alert("No hay datos para generar la imagen. Intenta generar nuevamente.");
+        return;
+      }
       const imageUrl = await generateWordSearchImage({
         titulo: preview.titulo,
         palabras: preview.palabras,
@@ -1701,13 +1751,17 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
       const slug = preview.titulo.replace(/\s+/g, "-").toLowerCase();
       await downloadImageFile(imageUrl, `${slug}-student.png`);
     } catch (err) {
-      console.error("Error descargando imagen:", err);
-      alert("Error al generar la imagen.");
+      console.error("Error descargando imagen estudiante:", err);
+      alert(`Error al generar la imagen: ${err.message}`);
     }
   };
 
   const handleDownloadSolutionImage = async () => {
     try {
+      if (!preview || !preview.gridData) {
+        alert("No hay datos para generar la imagen. Intenta generar nuevamente.");
+        return;
+      }
       const imageUrl = await generateWordSearchImage({
         titulo: preview.titulo,
         palabras: preview.palabras,
@@ -1720,8 +1774,8 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
       const slug = preview.titulo.replace(/\s+/g, "-").toLowerCase();
       await downloadImageFile(imageUrl, `${slug}-solution.png`);
     } catch (err) {
-      console.error("Error descargando imagen:", err);
-      alert("Error al generar la imagen.");
+      console.error("Error descargando imagen solucionario:", err);
+      alert(`Error al generar la imagen: ${err.message}`);
     }
   };
 
