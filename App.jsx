@@ -1703,9 +1703,16 @@ function CreateStudio({ preferredGrade = "primaria", profile = {} }) {
         <div>
           <span className="create-studio__eyebrow"><Sparkles size={13} /> KANTU TE ACOMPAÑA</span>
           <h2>¿Qué quieres crear hoy?</h2>
-          <p>Empieza un recurso nuevo. Todo lo que generes se guardará próximamente en «Mi biblioteca».</p>
+          <p>Elige un tipo de recurso y empecemos. Todo lo que generes se guardará en tu biblioteca.</p>
         </div>
-        <div className="create-studio__nova"><img src="/mascot/kantu-material.png" alt="Kantu, vicuña científica peruana de SciVerse" /><span><strong>¡Hola! Soy Kantu</strong><small>Crearemos paso a paso</small></span></div>
+        <div className="create-studio__nova">
+          <img src="/mascot/kantu-material.png" alt="Kantu, vicuña científica peruana de SciVerse" />
+          <span>
+            <strong>Hola 👋 Soy Kantu</strong>
+            <small>Tu asistente de IA para crear recursos</small>
+            <p style={{fontSize: '11px', margin: '8px 0 0', color: '#5B7876'}}>Te ayudaré a generar sesiones, evaluaciones y materiales paso a paso.</p>
+          </span>
+        </div>
       </div>
 
       {!creation && <div className="creation-sections">
@@ -3087,17 +3094,6 @@ function SciVerseApp({ profile, onLogout }) {
         {libraryTab==="guardados"&&(savedResources.length?<div className="library-saved-grid">{savedResources.map(item=><article key={item.id}><span><Star size={18}/></span><div><small>{item.kind==="activity"?"ACTIVIDAD STEAM":"RETO GRUPAL"}</small><h3>{item.title}</h3><p>{item.subtitle}</p></div><button onClick={()=>{if(item.kind==="activity"){setSelected(item.payload.activity);setModalGrade(item.payload.grade);}else setSelectedReto(item.payload);}}><Eye size={14}/> Abrir</button><button onClick={()=>toggleSaved(item)} title="Quitar de guardados"><Trash2 size={14}/></button></article>)}</div>:<div className="library-empty-state"><Star size={27}/><h2>Aún no guardaste recursos</h2><p>En Actividades y Retos encontrarás el botón Guardar para reunir aquí lo que quieras aplicar después.</p><div><button onClick={()=>setActiveSection("actividades")}>Explorar actividades</button><button onClick={()=>setActiveSection("retos")}>Explorar retos</button></div></div>)}
 
         {libraryTab==="plantillas"&&<><div className="library-template-heading"><div><small>RECURSOS DESCARGABLES</small><h2>Plantillas para organizar tu trabajo docente</h2><p>Formatos editables con la identidad de SciVerse. Los instrumentos de evaluación personalizados se crean desde Kantu.</p></div></div><div className="library-template-grid">{TEMPLATES.map(t=>{const Icon=t.icon;return <article key={t.id}><span><Icon size={19}/></span><small>PLANTILLA WORD</small><h3>{t.title}</h3><p>{t.desc}</p><button onClick={()=>downloadWord(`${t.id}.docx`,TEMPLATE_CONTENT[t.id],t.title)}><Download size={14}/> Descargar Word</button></article>})}</div></>}
-      </section>}
-
-      {activeSection === "crear" && <section className="px-6 md:px-10 pb-20 max-w-4xl mx-auto text-center">
-        <div className="rounded-2xl p-10" style={{ background: C.surface, border: `1px solid ${C.line}` }}>
-          <GraduationCap size={26} color={C.teal} className="mx-auto mb-4" />
-          <h3 className="text-xl md:text-2xl font-semibold mb-3" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>¿Prefieres que te arme la sesión directamente en el chat?</h3>
-          <p className="text-sm mb-6" style={{ color: C.muted }}>Cuéntame el tema y el grado, y armamos juntos una ficha guiada nueva para tu clase.</p>
-          <button className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-semibold" style={{ background: C.teal, color: "#0B2B29" }} onClick={() => window.scrollTo({top:0,behavior:"smooth"})}>
-            Volver al creador <ArrowRight size={15} />
-          </button>
-        </div>
       </section>}
 
       <footer className="px-6 md:px-10 py-8 text-center text-xs" style={{ color: C.muted, borderTop: `1px solid ${C.lineSoft}` }}>
