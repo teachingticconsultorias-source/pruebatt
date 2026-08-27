@@ -1,0 +1,101 @@
+SCIVERSE V2 — INTEGRACIÓN DEL FLUJO DE SESIÓN
+=============================================
+
+IMPORTANTE:
+Esta versión REEMPLAZA el componente SessionResourcesPanel anterior.
+Ya no muestra todos los recursos debajo de la sesión.
+
+NUEVO FLUJO
+-----------
+1. Docente genera/revisa la sesión.
+2. Pulsa "Siguiente".
+3. Aparece:
+   - Instrumentos de evaluación
+   - Material / Anexos
+4. Si elige Instrumentos:
+   - Rúbrica
+   - Lista de cotejo
+   - Guía de observación
+   - Escala de valoración
+5. Si elige Material:
+   - Ficha de trabajo
+   - Lectura
+   - Cuestionario
+6. Elige uno.
+7. Configura solo lo necesario.
+8. Genera (consume 1 crédito).
+9. Vista previa + Descargar Word + Crear otro recurso.
+
+ARCHIVOS
+--------
+Subir/reemplazar:
+api/generate-session-resource.js
+components/SessionNextFlow.jsx
+session-next-flow.css
+
+Ejecutar en Supabase:
+supabase-session-flow-v2.sql
+
+APP.JSX
+-------
+1. Agrega arriba:
+
+import SessionNextFlow from "./components/SessionNextFlow.jsx";
+
+2. Crea un estado dentro del componente que controla la pantalla de sesión:
+
+const [sessionFlowStep, setSessionFlowStep] = useState("session");
+
+3. En la vista donde muestras la sesión generada, tu botón "Siguiente" debe hacer:
+
+onClick={() => setSessionFlowStep("resources")}
+
+Ejemplo:
+
+<button
+  className="session-next-step"
+  onClick={() => setSessionFlowStep("resources")}
+>
+  Siguiente
+</button>
+
+4. Envuelve la visualización así:
+
+{sessionFlowStep === "session" ? (
+  <>
+    ... AQUÍ DEJAS TU VISTA ACTUAL DE LA SESIÓN ...
+
+    <button
+      className="session-next-step"
+      onClick={() => setSessionFlowStep("resources")}
+    >
+      Siguiente
+    </button>
+  </>
+) : (
+  <SessionNextFlow
+    session={generatedSession}
+    form={form}
+    profile={profile}
+    onBackToSession={() => setSessionFlowStep("session")}
+    onFinish={() => setSessionFlowStep("session")}
+  />
+)}
+
+IMPORTANTE:
+- `generatedSession` debe reemplazarse por el nombre REAL del estado donde guardas la sesión.
+- `form` debe ser el mismo objeto que envías actualmente a Gemini.
+- `profile` es opcional.
+
+NO USES A LA VEZ:
+<SessionResourcesPanel ... />
+
+Elimínalo si lo agregaste antes, porque V2 reemplaza ese flujo.
+
+CRÉDITOS
+--------
+Generar cualquier instrumento/material = 1 crédito.
+Navegar por los pasos = 0.
+Vista previa = 0.
+Descargar Word = 0.
+Volver a la sesión = 0.

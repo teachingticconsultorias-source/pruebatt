@@ -1,85 +1,18 @@
 // api/generate-session-resource.js
-// SciVerse | Teaching TIC
-//
-// Genera recursos complementarios a partir de una sesión:
-//   worksheet    -> ficha de aprendizaje
-//   rubric       -> rúbrica analítica
-//   checklist    -> lista de cotejo
-//   rating_scale -> escala de valoración
-//
-// Cada generación consume 1 crédito semanal.
-// Si Gemini falla, el crédito se devuelve automáticamente.
+// SciVerse V2 — recursos de una sesión con flujo tipo asistente.
+// Tipos:
+// Instrumentos: rubric, checklist, observation_guide, rating_scale
+// Materiales: worksheet, reading, questionnaire
 
-const GEMINI_MODEL =
-  process.env.GEMINI_MAIN_MODEL || "gemini-3.6-flash";
+const GEMINI_MODEL = process.env.GEMINI_MAIN_MODEL || "gemini-3.6-flash";
 
-const schemas = {
-  worksheet: {
-    type: "object",
-    properties: {
-      titulo: { type: "string" },
-      subtitulo: { type: "string" },
-      tipoFicha: { type: "string" },
-      proposito: { type: "string" },
-      indicacionGeneral: { type: "string" },
-      secciones: {
-        type: "array",
-        items: {
-          type: "object",
-          properties: {
-            titulo: { type: "string" },
-            indicacion: { type: "string" },
-            items: {
-              type: "array",
-              items: {
-                type: "object",
-                properties: {
-                  tipo: {
-                    type: "string",
-                    enum: ["texto", "pregunta", "respuesta_larga", "tabla", "pasos", "lista"]
-                  },
-                  texto: { type: "string" },
-                  opciones: { type: "array", items: { type: "string" } },
-                  columnas: { type: "array", items: { type: "string" } },
-                  filas: {
-                    type: "array",
-                    items: { type: "array", items: { type: "string" } }
-                  }
-                },
-                required: ["tipo", "texto", "opciones", "columnas", "filas"]
-              }
-            }
-          },
-          required: ["titulo", "indicacion", "items"]
-        }
-      },
-      cierre: {
-        type: "object",
-        properties: {
-          titulo: { type: "string" },
-          preguntas: { type: "array", items: { type: "string" } }
-        },
-        required: ["titulo", "preguntas"]
-      }
-    },
-    required: [
-      "titulo",
-      "subtitulo",
-      "tipoFicha",
-      "proposito",
-      "indicacionGeneral",
-      "secciones",
-      "cierre"
-    ]
-  },
-
+const SCHEMAS = {
   rubric: {
     type: "object",
     properties: {
       titulo: { type: "string" },
-      evidencia: { type: "string" },
       competencia: { type: "string" },
-      capacidades: { type: "array", items: { type: "string" } },
+      evidencia: { type: "string" },
       criterios: {
         type: "array",
         items: {
@@ -87,31 +20,23 @@ const schemas = {
           properties: {
             capacidad: { type: "string" },
             criterio: { type: "string" },
-            destacado: { type: "string" },
-            esperado: { type: "string" },
-            proceso: { type: "string" },
-            inicio: { type: "string" }
+            ad: { type: "string" },
+            a: { type: "string" },
+            b: { type: "string" },
+            c: { type: "string" }
           },
-          required: [
-            "capacidad",
-            "criterio",
-            "destacado",
-            "esperado",
-            "proceso",
-            "inicio"
-          ]
+          required: ["capacidad","criterio","ad","a","b","c"]
         }
       }
     },
-    required: ["titulo", "evidencia", "competencia", "capacidades", "criterios"]
+    required: ["titulo","competencia","evidencia","criterios"]
   },
-
   checklist: {
     type: "object",
     properties: {
       titulo: { type: "string" },
-      evidencia: { type: "string" },
       competencia: { type: "string" },
+      evidencia: { type: "string" },
       criterios: {
         type: "array",
         items: {
@@ -120,23 +45,40 @@ const schemas = {
             capacidad: { type: "string" },
             criterio: { type: "string" }
           },
-          required: ["capacidad", "criterio"]
+          required: ["capacidad","criterio"]
         }
       }
     },
-    required: ["titulo", "evidencia", "competencia", "criterios"]
+    required: ["titulo","competencia","evidencia","criterios"]
   },
-
+  observation_guide: {
+    type: "object",
+    properties: {
+      titulo: { type: "string" },
+      competencia: { type: "string" },
+      evidencia: { type: "string" },
+      situacionObservacion: { type: "string" },
+      indicadores: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            aspecto: { type: "string" },
+            indicador: { type: "string" }
+          },
+          required: ["aspecto","indicador"]
+        }
+      }
+    },
+    required: ["titulo","competencia","evidencia","situacionObservacion","indicadores"]
+  },
   rating_scale: {
     type: "object",
     properties: {
       titulo: { type: "string" },
-      evidencia: { type: "string" },
       competencia: { type: "string" },
-      tipoEscala: {
-        type: "string",
-        enum: ["frecuencia", "logro"]
-      },
+      evidencia: { type: "string" },
+      tipoEscala: { type: "string", enum: ["logro","frecuencia"] },
       niveles: { type: "array", items: { type: "string" } },
       criterios: {
         type: "array",
@@ -146,335 +88,254 @@ const schemas = {
             capacidad: { type: "string" },
             criterio: { type: "string" }
           },
-          required: ["capacidad", "criterio"]
+          required: ["capacidad","criterio"]
         }
       }
     },
-    required: [
-      "titulo",
-      "evidencia",
-      "competencia",
-      "tipoEscala",
-      "niveles",
-      "criterios"
-    ]
+    required: ["titulo","competencia","evidencia","tipoEscala","niveles","criterios"]
+  },
+  worksheet: {
+    type: "object",
+    properties: {
+      titulo: { type: "string" },
+      tipoFicha: { type: "string" },
+      propositoEstudiante: { type: "string" },
+      instrucciones: { type: "string" },
+      secciones: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            titulo: { type: "string" },
+            indicacion: { type: "string" },
+            actividades: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  tipo: { type: "string", enum: ["pregunta","respuesta_larga","tabla","lista","pasos","texto"] },
+                  texto: { type: "string" },
+                  opciones: { type: "array", items: { type: "string" } },
+                  columnas: { type: "array", items: { type: "string" } }
+                },
+                required: ["tipo","texto","opciones","columnas"]
+              }
+            }
+          },
+          required: ["titulo","indicacion","actividades"]
+        }
+      },
+      metacognicion: { type: "array", items: { type: "string" } }
+    },
+    required: ["titulo","tipoFicha","propositoEstudiante","instrucciones","secciones","metacognicion"]
+  },
+  reading: {
+    type: "object",
+    properties: {
+      titulo: { type: "string" },
+      tipoTexto: { type: "string" },
+      proposito: { type: "string" },
+      texto: { type: "string" },
+      vocabulario: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: { palabra: { type: "string" }, significado: { type: "string" } },
+          required: ["palabra","significado"]
+        }
+      },
+      preguntas: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            nivel: { type: "string", enum: ["literal","inferencial","critico"] },
+            pregunta: { type: "string" }
+          },
+          required: ["nivel","pregunta"]
+        }
+      }
+    },
+    required: ["titulo","tipoTexto","proposito","texto","vocabulario","preguntas"]
+  },
+  questionnaire: {
+    type: "object",
+    properties: {
+      titulo: { type: "string" },
+      instrucciones: { type: "string" },
+      preguntas: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            numero: { type: "integer" },
+            tipo: { type: "string", enum: ["opcion_multiple","verdadero_falso","respuesta_corta","respuesta_abierta"] },
+            pregunta: { type: "string" },
+            opciones: { type: "array", items: { type: "string" } },
+            respuestaEsperada: { type: "string" }
+          },
+          required: ["numero","tipo","pregunta","opciones","respuestaEsperada"]
+        }
+      }
+    },
+    required: ["titulo","instrucciones","preguntas"]
   }
 };
 
-function normalizeArray(value) {
-  return Array.isArray(value) ? value : [];
-}
+function arr(v){ return Array.isArray(v) ? v : []; }
 
-function contextFrom(body) {
+function context(body){
   const form = body.form || {};
-  const session = body.session || {};
-  const profile = body.profile || {};
-
-  const competencia =
-    form.competencia ||
-    session.competencia ||
-    session.competenciasCNEB?.[0] ||
-    "No indicada";
-
-  const capacidades =
-    normalizeArray(form.capacidades).length
-      ? form.capacidades
-      : normalizeArray(session.capacidadesCNEB);
-
-  const criterios =
-    normalizeArray(form.criteriosBase).length
-      ? form.criteriosBase
-      : normalizeArray(session.criteriosEvaluacion);
-
+  const s = body.session || {};
   return {
-    docente:
-      [profile.nombres, profile.apellidos].filter(Boolean).join(" ") ||
-      profile.nombre ||
-      "",
-    ie: profile.ie || profile.institucion || form.institucion || "",
-    nivel: form.nivel || session.nivel || "",
-    grado: form.grado || session.grado || "",
-    area: form.area || session.area || "",
-    tema: form.tema || session.titulo || "",
-    proposito: form.proposito || session.proposito || "",
-    evidencia: form.evidencia || session.evidencia || "",
-    competencia,
-    capacidades,
-    criterios,
-    inicio: session.inicio || session.sequence?.inicio || "",
-    desarrollo: session.desarrollo || session.sequence?.desarrollo || "",
-    cierre: session.cierre || session.sequence?.cierre || "",
-    producto: session.productoSTEAM || "",
-    region: form.region || "",
+    nivel: form.nivel || s.nivel || "",
+    grado: form.grado || s.grado || "",
+    area: form.area || s.area || "",
+    tema: form.tema || s.titulo || "",
+    proposito: form.proposito || s.proposito || "",
+    competencia: form.competencia || s.competencia || arr(s.competenciasCNEB)[0] || "",
+    capacidades: arr(form.capacidades).length ? form.capacidades : arr(s.capacidadesCNEB),
+    evidencia: form.evidencia || s.evidencia || "",
+    criterios: arr(form.criteriosBase).length ? form.criteriosBase : arr(s.criteriosEvaluacion),
+    region: form.region || ""
   };
 }
 
-function promptFor(type, ctx, options = {}) {
+function prompt(type, c, options={}){
+  const n = Math.min(Math.max(Number(options.numeroCriterios || 4), 3), 8);
   const base = `
-Eres especialista en Educación Básica Regular del Perú y CNEB.
-Generarás un recurso pedagógico LISTO PARA USAR, coherente con una sesión ya creada.
+Actúa como especialista peruano en CNEB, evaluación formativa y diseño de materiales.
+El recurso se crea a partir de una sesión YA DISEÑADA.
 
-DATOS DE LA SESIÓN
-Nivel: ${ctx.nivel || "No indicado"}
-Grado: ${ctx.grado || "No indicado"}
-Área: ${ctx.area || "No indicada"}
-Tema/título: ${ctx.tema || "No indicado"}
-Propósito: ${ctx.proposito || "No indicado"}
-Competencia: ${ctx.competencia}
-Capacidades: ${ctx.capacidades.join(" | ") || "No indicadas"}
-Evidencia: ${ctx.evidencia || "No indicada"}
-Criterios previamente definidos: ${JSON.stringify(ctx.criterios)}
-Región/contexto: ${ctx.region || "No indicado"}
+DATOS:
+Nivel: ${c.nivel}
+Grado: ${c.grado}
+Área: ${c.area}
+Tema: ${c.tema}
+Propósito: ${c.proposito}
+Competencia: ${c.competencia}
+Capacidades: ${c.capacidades.join(" | ")}
+Evidencia: ${c.evidencia}
+Criterios de la sesión: ${JSON.stringify(c.criterios)}
+Región/contexto: ${c.region}
 
-REGLAS GENERALES
-- No inventes competencias ni capacidades oficiales.
-- Mantén coherencia estricta con propósito, evidencia y criterios.
-- Redacta en español peruano claro.
-- Adecuar lenguaje y complejidad al grado.
-- No pongas notas para el programador ni explicaciones del proceso.
-- No afirmes que incluyes imágenes.
-- El resultado será convertido a Word, por lo que el contenido debe ser usable tal cual.
+Reglas:
+- No inventes competencias ni capacidades.
+- Mantén coherencia con la sesión.
+- Adecuar lenguaje al grado.
+- No incluyas explicaciones técnicas.
+- Devuelve únicamente JSON válido según el esquema.
 `;
 
-  if (type === "worksheet") {
-    return `${base}
+  if(type==="rubric") return `${base}
+Genera una RÚBRICA ANALÍTICA con exactamente ${n} criterios.
+Cada descriptor AD/A/B/C debe mostrar progresión observable real.
+Evita adjetivos vagos. Conserva los criterios existentes cuando sean pertinentes.`;
 
-Crea una FICHA DE APRENDIZAJE PARA EL ESTUDIANTE, no una ficha para el docente.
-El nombre de la ficha debe adaptarse al área y competencia:
-- Ciencia y Tecnología: ficha de indagación / investigación / diseño, según corresponda.
-- Comunicación: comprensión lectora, producción escrita u oral, según corresponda.
-- Matemática: resolución de problemas.
-- Personal Social: análisis/reflexión.
-- Otras áreas: nombre pedagógicamente pertinente.
+  if(type==="checklist") return `${base}
+Genera una LISTA DE COTEJO con exactamente ${n} criterios observables.
+El criterio debe iniciar con verbo observable y estar ligado a la evidencia.
+El documento final añadirá Sí / No / Observaciones.`;
 
-Debe incluir:
-1. Título atractivo y subtítulo.
-2. Propósito en lenguaje comprensible para el estudiante.
-3. Espacio implícito para Nombre, grado y fecha (el Word ya agregará esos campos).
-4. Activación/situación inicial.
-5. Desarrollo con preguntas y actividades reales.
-6. Espacios de respuesta.
-7. Cuando sea pertinente, una tabla de registro o análisis.
-8. Cierre con metacognición.
-9. Entre 3 y 5 secciones, sin sobrecargar la hoja.
-10. Evita convertir la ficha en una copia de la sesión.
+  if(type==="observation_guide") return `${base}
+Genera una GUÍA DE OBSERVACIÓN con exactamente ${n} indicadores.
+Debe servir para observar una actuación, procedimiento, participación o desempeño durante la clase.
+Incluye una situación de observación clara y aspectos observables.
+No convertirla en rúbrica.`;
 
-En los items:
-- "pregunta": pregunta breve con espacio de respuesta.
-- "respuesta_larga": pregunta que necesita varias líneas.
-- "tabla": usa columnas y filas; puede dejar celdas vacías para el estudiante.
-- "pasos": texto con opciones como pasos numerados.
-- "lista": texto con opciones como lista.
-- "texto": texto breve informativo.
+  if(type==="rating_scale") return `${base}
+Genera una ESCALA DE VALORACIÓN con exactamente ${n} criterios.
+Tipo solicitado: ${options.scaleType==="frecuencia" ? "frecuencia" : "nivel de logro"}.
+Frecuencia: Nunca, A veces, Casi siempre, Siempre.
+Logro: Inicio, En proceso, Logrado, Destacado.`;
 
-Devuelve JSON según el esquema.`;
-  }
+  if(type==="worksheet") return `${base}
+Genera una FICHA DE TRABAJO PARA EL ESTUDIANTE.
+No debe parecer planificación docente.
+Debe tener 3 a 5 secciones con actividades listas para responder.
+Adapta el tipo de ficha al área:
+Ciencia y Tecnología: indagación/investigación/diseño.
+Comunicación: comprensión/producción.
+Matemática: resolución de problemas.
+Personal Social: análisis/reflexión.
+Incluye espacios de respuesta y tabla cuando sea pedagógicamente útil.
+Finaliza con metacognición.`;
 
-  const count = Math.min(Math.max(Number(options.numeroCriterios || 4), 3), 8);
-
-  if (type === "rubric") {
-    return `${base}
-
-Crea una RÚBRICA ANALÍTICA con exactamente ${count} criterios.
-- Cada criterio debe ser observable y derivarse de la capacidad, propósito y evidencia.
-- Si ya existen criterios aprobados, consérvalos en esencia.
-- Cada descriptor debe mostrar progresión REAL entre:
-  Inicio (C), En proceso (B), Logro esperado (A), Logro destacado (AD).
-- No uses solo adjetivos como "excelente", "bueno" o "regular".
-- Los descriptores deben indicar qué hace el estudiante y con qué nivel de calidad.
-Devuelve JSON según el esquema.`;
-  }
-
-  if (type === "checklist") {
-    return `${base}
-
-Crea una LISTA DE COTEJO con exactamente ${count} criterios.
-- Criterios breves, observables y verificables.
-- Empieza cada criterio con un verbo observable.
-- Deben corresponder a la evidencia y capacidades.
-- El Word añadirá columnas Sí / No / Observaciones.
-Devuelve JSON según el esquema.`;
-  }
+  if(type==="reading") return `${base}
+Genera una LECTURA PEDAGÓGICA original y adecuada al grado, vinculada al propósito.
+Extensión aproximada: ${options.readingLength || "media"}.
+Incluye vocabulario breve y preguntas de comprensión literal, inferencial y crítica.
+No copies textos protegidos ni atribuyas a autores reales.`;
 
   return `${base}
-
-Crea una ESCALA DE VALORACIÓN con exactamente ${count} criterios.
-Tipo solicitado: ${options.scaleType === "frecuencia" ? "frecuencia" : "nivel de logro"}.
-Si es frecuencia usa niveles: Nunca, A veces, Casi siempre, Siempre.
-Si es logro usa niveles: Inicio, En proceso, Logrado, Destacado.
-- Criterios observables, claros y coherentes con la evidencia.
-- No repitas criterios.
-Devuelve JSON según el esquema.`;
+Genera un CUESTIONARIO de ${Math.min(Math.max(Number(options.questionCount || 8),5),15)} preguntas.
+Mezcla opción múltiple, verdadero/falso, respuesta corta y abierta cuando sea pertinente.
+Debe evaluar lo que realmente se trabajó en la sesión.
+Incluye respuesta esperada para uso docente, aunque la interfaz del estudiante no la muestre.`;
 }
 
-async function rpc(name, token, supabaseUrl, supabaseKey) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${name}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: supabaseKey,
-      Authorization: `Bearer ${token}`
-    },
-    body: "{}"
+async function rpc(name, token, url, key){
+  const r = await fetch(`${url}/rest/v1/rpc/${name}`, {
+    method:"POST",
+    headers:{"Content-Type":"application/json",apikey:key,Authorization:`Bearer ${token}`},
+    body:"{}"
   });
-
-  const data = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    const error = new Error(data?.message || `No se pudo ejecutar ${name}`);
-    error.status = response.status;
-    throw error;
-  }
-
-  return data;
+  const d = await r.json().catch(()=>({}));
+  if(!r.ok){ const e=new Error(d?.message || `Error ${name}`); e.status=r.status; throw e; }
+  return d;
 }
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Método no permitido" });
-  }
+export default async function handler(req,res){
+  if(req.method!=="POST") return res.status(405).json({error:"Método no permitido"});
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  const supabaseUrl =
-    process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const supabaseKey =
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY;
-  const accessToken =
-    req.headers.authorization?.replace(/^Bearer\s+/i, "");
+  const apiKey=process.env.GEMINI_API_KEY;
+  const supabaseUrl=process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
+  const supabaseKey=process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+  const token=req.headers.authorization?.replace(/^Bearer\s+/i,"");
+  const type=req.body?.type;
 
-  if (!apiKey) {
-    return res.status(500).json({
-      error: "Falta configurar GEMINI_API_KEY en Vercel"
+  if(!SCHEMAS[type]) return res.status(400).json({error:"Tipo de recurso no válido"});
+  if(!apiKey) return res.status(500).json({error:"Falta GEMINI_API_KEY"});
+  if(!token || !supabaseUrl || !supabaseKey) return res.status(401).json({error:"Inicia sesión para continuar"});
+
+  let consumed=false;
+  try{
+    const auth=await fetch(`${supabaseUrl}/auth/v1/user`,{headers:{apikey:supabaseKey,Authorization:`Bearer ${token}`}});
+    if(!auth.ok) return res.status(401).json({error:"Tu sesión venció. Vuelve a iniciar sesión."});
+
+    const quota=await rpc("consume_ai_credit",token,supabaseUrl,supabaseKey);
+    if(!quota?.ok) return res.status(429).json({
+      error:"Has utilizado tus 5 creaciones gratuitas de esta semana.",
+      code:quota?.reason || "WEEKLY_LIMIT_REACHED",
+      credits:quota
     });
-  }
+    consumed=true;
 
-  if (!accessToken || !supabaseUrl || !supabaseKey) {
-    return res.status(401).json({
-      error: "Inicia sesión para generar recursos"
+    const c=context(req.body||{});
+    const p=prompt(type,c,req.body?.options||{});
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+      body:JSON.stringify({
+        contents:[{parts:[{text:p}]}],
+        systemInstruction:{parts:[{text:"Eres especialista peruano en CNEB. Entrega JSON válido y pedagógicamente aplicable."}]},
+        generationConfig:{
+          maxOutputTokens:type==="worksheet"||type==="reading"?6000:4500,
+          responseMimeType:"application/json",
+          responseSchema:SCHEMAS[type]
+        }
+      })
     });
-  }
-
-  const type = req.body?.type;
-  if (!schemas[type]) {
-    return res.status(400).json({
-      error: "Tipo de recurso no válido"
-    });
-  }
-
-  let consumed = false;
-
-  try {
-    // Confirma que el token pertenece a un usuario válido.
-    const auth = await fetch(`${supabaseUrl}/auth/v1/user`, {
-      headers: {
-        apikey: supabaseKey,
-        Authorization: `Bearer ${accessToken}`
-      }
-    });
-
-    if (!auth.ok) {
-      return res.status(401).json({
-        error: "Tu sesión venció. Vuelve a iniciar sesión."
-      });
-    }
-
-    const quota = await rpc(
-      "consume_ai_credit",
-      accessToken,
-      supabaseUrl,
-      supabaseKey
-    );
-
-    if (!quota?.ok) {
-      return res.status(429).json({
-        error: "Has utilizado tus 5 creaciones gratuitas de esta semana.",
-        code: quota?.reason || "WEEKLY_LIMIT_REACHED",
-        credits: quota
-      });
-    }
-
-    consumed = true;
-
-    const ctx = contextFrom(req.body || {});
-    const options = req.body?.options || {};
-    const promptText = promptFor(type, ctx, options);
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey
-        },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }],
-          systemInstruction: {
-            parts: [{
-              text:
-                "Eres especialista peruano en planificación curricular, evaluación formativa y diseño de materiales. Entrega siempre JSON válido que respete estrictamente el esquema solicitado."
-            }]
-          },
-          generationConfig: {
-            maxOutputTokens: type === "worksheet" ? 6000 : 4500,
-            responseMimeType: "application/json",
-            responseSchema: schemas[type]
-          }
-        })
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw Object.assign(
-        new Error(data?.error?.message || "Error de la API de Gemini"),
-        { status: response.status }
-      );
-    }
-
-    const candidate = data?.candidates?.[0];
-    const text =
-      candidate?.content?.parts?.map(part => part.text).join("") || "";
-
-    if (!text) {
-      throw new Error("Gemini no devolvió contenido");
-    }
-
-    if (candidate?.finishReason === "MAX_TOKENS") {
-      throw new Error(
-        "El recurso quedó incompleto. Intenta generarlo nuevamente."
-      );
-    }
-
-    const resource = JSON.parse(text);
-
-    return res.status(200).json({
-      resource,
-      type,
-      model: GEMINI_MODEL,
-      _credits: quota
-    });
-  } catch (error) {
-    console.error("generate-session-resource:", error);
-
-    if (consumed) {
-      await rpc(
-        "refund_ai_credit",
-        accessToken,
-        supabaseUrl,
-        supabaseKey
-      ).catch(refundError => {
-        console.error("No se pudo devolver el crédito:", refundError);
-      });
-    }
-
-    return res.status(error?.status || 500).json({
-      error:
-        error instanceof SyntaxError
-          ? "Gemini devolvió un recurso incompleto. Intenta nuevamente."
-          : error?.message || "No se pudo generar el recurso"
-    });
+    const data=await r.json();
+    if(!r.ok) throw Object.assign(new Error(data?.error?.message || "Error de Gemini"),{status:r.status});
+    const candidate=data?.candidates?.[0];
+    const text=candidate?.content?.parts?.map(x=>x.text).join("") || "";
+    if(!text) throw new Error("Gemini no devolvió contenido");
+    if(candidate?.finishReason==="MAX_TOKENS") throw new Error("El recurso quedó incompleto. Intenta nuevamente.");
+    const resource=JSON.parse(text);
+    return res.status(200).json({resource,type,_credits:quota,model:GEMINI_MODEL});
+  }catch(e){
+    if(consumed) await rpc("refund_ai_credit",token,supabaseUrl,supabaseKey).catch(()=>{});
+    return res.status(e?.status||500).json({error:e instanceof SyntaxError?"Gemini devolvió una respuesta incompleta.":e?.message||"No se pudo generar"});
   }
 }
