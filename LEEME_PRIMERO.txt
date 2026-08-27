@@ -1,0 +1,34 @@
+SCIVERSE V2 — SUBIR DIRECTAMENTE A GITHUB
+
+IMPORTANTE: NO necesitas ejecutar ningún comando.
+
+1. Entra a:
+   teachingticconsultorias-source/pruebatt
+
+2. Reemplaza el archivo package.json de la raíz por el package.json de este paquete.
+
+3. Verifica que en la raíz también exista:
+   apply-sciverse-v2.mjs
+   Si ya existe, puedes dejarlo tal como está. Si quieres estar segura, reemplázalo con el incluido aquí.
+
+4. Haz Commit changes directamente en main.
+
+5. Vercel detectará el commit automáticamente.
+   En el build ahora ejecutará:
+   node apply-sciverse-v2.mjs && vite build
+
+6. Espera a que el deployment aparezca como Ready y luego actualiza la web con Ctrl + F5.
+
+CAMBIOS QUE DEBEN APARECER
+- Inicio: “Todo para planificar tu clase”
+- Bloque principal: “Crea tu clase completa”
+- Sesión + Instrumento + Materiales
+- Fichas: Ficha de trabajo / Ficha de lectura
+- Juegos: Sopa de letras / Crucigrama
+- Instrumentos: Rúbrica / Escala de valoración / Lista de cotejo
+- Planificación: Proyecto STEAM
+- No debe aparecer Unidad de aprendizaje en la primera versión
+- Proyecto STEAM: duración 1 a 4 semanas
+- Nombre e I.E. del docente desde su registro
+
+Si Vercel muestra un error de build, copia la captura del error y se corrige antes de tocar más archivos.
