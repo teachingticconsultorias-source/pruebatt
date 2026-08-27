@@ -1,0 +1,23 @@
+CORRECCIÓN DEL ERROR DE VERCEL
+
+El error detectado fue:
+SyntaxError: Unexpected identifier 'Bearer'
+en apply-sciverse-v2.mjs.
+
+QUÉ HACER AHORA:
+1. En GitHub abre el archivo apply-sciverse-v2.mjs de la raíz.
+2. Reemplázalo COMPLETO por el apply-sciverse-v2.mjs de este paquete.
+3. NO cambies package.json por ahora.
+4. Haz Commit changes en main.
+5. Espera el nuevo deployment de Vercel.
+
+El package.json actual ya ejecuta:
+node apply-sciverse-v2.mjs && vite build
+
+El archivo corregido pasó la validación de sintaxis de Node (`node --check`).
+
+FALLBACK:
+Si quieres volver inmediatamente a la versión anterior que funcionaba,
+renombra package-fallback.json a package.json y reemplaza el package.json actual.
+Eso hará que Vercel vuelva a ejecutar solamente:
+vite build
