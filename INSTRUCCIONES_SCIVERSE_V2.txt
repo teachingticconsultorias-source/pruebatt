@@ -1,0 +1,32 @@
+SCIVERSE V2 — INSTRUCCIONES RÁPIDAS
+
+Este paquete aplica:
+- Dashboard principal estilo SciVerse.
+- Botón “Crear clase completa”.
+- Fichas: Ficha de trabajo + Ficha de lectura.
+- Juegos: Sopa de letras + Crucigrama.
+- Instrumentos: Rúbrica + Escala de valoración + Lista de cotejo.
+- Planificación: Proyecto STEAM (1 a 4 semanas).
+- Proyecto STEAM separado del código de Sesión de aprendizaje.
+- Nombre e I.E. del docente tomados automáticamente de su registro.
+- Nuevo endpoint: api/generate-project-steam.js.
+- Mantiene el generador de Sesión de aprendizaje existente.
+
+CÓMO PROBARLO EN GITHUB CODESPACES
+1. Entra a tu repositorio pruebatt.
+2. Ve a Code > Codespaces > Create codespace on main.
+3. Sube el archivo apply-sciverse-v2.mjs a la raíz del proyecto.
+4. En la terminal ejecuta:
+   node apply-sciverse-v2.mjs
+5. Luego ejecuta:
+   npm run build
+6. Si no aparecen errores:
+   git add App.jsx index.css api/generate-project-steam.js
+   git commit -m "feat: dashboard SciVerse v2 y recursos docentes"
+   git push
+7. Vercel debería desplegar automáticamente el cambio.
+
+IMPORTANTE
+- No reemplaza ni reescribe el flujo de Sesión de aprendizaje.
+- Antes de hacer push, revisa que `npm run build` termine correctamente.
+- Conserva tu versión anterior en el historial de GitHub, por lo que puedes revertir el commit si deseas.
