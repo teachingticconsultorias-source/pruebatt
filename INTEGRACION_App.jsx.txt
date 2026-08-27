@@ -1,0 +1,120 @@
+============================================================
+INTEGRACIÓN EN App.jsx
+============================================================
+
+1) NO BORRES tu App.jsx actual.
+
+2) Arriba, junto a los demás imports, agrega:
+
+import SessionResourcesPanel from "./components/SessionResourcesPanel.jsx";
+
+El componente importa automáticamente:
+  ./session-resources.css
+
+3) Localiza la parte de App.jsx donde se muestra la SESIÓN YA GENERADA.
+Debe ser el bloque que aparece después de generar la sesión y donde actualmente
+se ven los anexos / ficha de investigación.
+
+Justo DESPUÉS del resultado principal de la sesión agrega:
+
+<SessionResourcesPanel
+  session={result}
+  form={form}
+  profile={profile}
+/>
+
+IMPORTANTE:
+En tu App.jsx el estado de la sesión puede no llamarse "result".
+Si se llama `session`, `generatedSession`, `resultado`, etc., reemplaza
+SOLAMENTE `result` por ese nombre real.
+
+Ejemplos:
+
+<SessionResourcesPanel
+  session={generatedSession}
+  form={form}
+  profile={profile}
+/>
+
+o:
+
+<SessionResourcesPanel
+  session={session}
+  form={form}
+  profile={profile}
+/>
+
+4) Si tu objeto del formulario tampoco se llama `form`, usa el estado real
+que actualmente envías a /api/generate-session.
+
+5) Si no tienes un estado `profile`, puedes usar:
+
+<SessionResourcesPanel
+  session={generatedSession}
+  form={form}
+/>
+
+El componente seguirá funcionando; solo algunos datos de cabecera del Word
+quedarán vacíos.
+
+============================================================
+QUÉ AGREGA
+============================================================
+
+Después de generar una sesión aparecerá:
+
+"Recursos de tu sesión"
+
+[ Crear ficha de aprendizaje ]
+[ Crear rúbrica ]
+[ Crear lista de cotejo ]
+[ Crear escala de valoración ]
+
+Cada recurso:
+- consume 1 crédito IA;
+- usa la sesión ya generada como contexto;
+- muestra vista previa;
+- se descarga en .docx con formato;
+- se guarda automáticamente en materiales_docente;
+- aparece en Mis creaciones;
+- devuelve el crédito si Gemini falla.
+
+La ficha se adapta al área/competencia:
+- Ciencia y Tecnología -> indagación/investigación/diseño
+- Comunicación -> comprensión / escritura / oralidad
+- Matemática -> resolución de problemas
+- Personal Social -> análisis/reflexión
+- otras -> ficha pertinente
+
+============================================================
+ARCHIVOS A SUBIR
+============================================================
+
+NUEVOS:
+api/generate-session-resource.js
+components/SessionResourcesPanel.jsx
+session-resources.css
+
+SUPABASE:
+Ejecuta supabase-session-resources.sql en SQL Editor.
+
+NO REEMPLACES:
+api/generate-session.js
+supabaseClient.js
+AuthGate.jsx
+
+============================================================
+CRÉDITOS
+============================================================
+
+La generación de:
+- ficha = 1
+- rúbrica = 1
+- lista de cotejo = 1
+- escala = 1
+
+Vista previa = 0
+Descargar Word = 0
+Abrir Mis creaciones = 0
+
+"Nueva versión" vuelve a generar con Gemini y por tanto consume 1 crédito.
