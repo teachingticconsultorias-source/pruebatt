@@ -1,0 +1,91 @@
+SCIVERSE FREEMIUM — PASOS EXACTOS
+
+OBJETIVO
+- Cada docente del plan gratuito dispone de 5 generaciones IA por semana EN TOTAL.
+- Cualquier generación que pase por /api/generate-with-quota consume 1 crédito.
+- Si Gemini falla, el crédito se devuelve automáticamente.
+- Ver, editar, descargar o abrir recursos no consume créditos.
+- El reinicio semanal se calcula automáticamente usando la zona horaria America/Lima.
+
+PASO 1 — SUPABASE
+1. Abre Supabase.
+2. SQL Editor > New query.
+3. Pega TODO el contenido de `supabase-freemium.sql`.
+4. Pulsa Run.
+5. En Table Editor > docentes confirma que ahora existen:
+   - ai_weekly_limit
+   - ai_week_used
+   - ai_week_start
+
+PASO 2 — GITHUB
+Sube estos archivos:
+- api/credits.js
+- api/generate-with-quota.js
+- components/CreditsIndicator.jsx
+
+NO borres:
+- api/generate-session.js
+- supabaseClient.js
+- AuthGate.jsx
+
+El wrapper nuevo usa tu generate-session.js actual.
+
+PASO 3 — CAMBIO IMPRESCINDIBLE EN App.jsx
+Busca TODAS las llamadas:
+
+  /api/generate-session
+
+y reemplázalas por:
+
+  /api/generate-with-quota
+
+Eso hace que sesiones, rúbricas, listas, retos y cualquier otro modo que use ese endpoint
+pase primero por el control de los 5 créditos.
+
+IMPORTANTE:
+No cambies el body de las peticiones. El wrapper reenvía exactamente el mismo req.body
+a tu endpoint actual.
+
+PASO 4 — MOSTRAR CRÉDITOS (RECOMENDADO)
+Al comienzo de App.jsx agrega:
+
+  import CreditsIndicator from "./components/CreditsIndicator.jsx";
+
+Luego coloca donde quieras mostrar el contador:
+
+  <CreditsIndicator />
+
+Para una versión pequeña en la barra superior:
+
+  <CreditsIndicator compact />
+
+PASO 5 — CSS
+Copia el contenido de `credit-widget.css` AL FINAL de tu index.css.
+
+PASO 6 — VERCEL
+No necesitas una nueva clave.
+Conserva estas variables ya usadas por tu proyecto:
+- GEMINI_API_KEY
+- VITE_SUPABASE_URL
+- VITE_SUPABASE_PUBLISHABLE_KEY
+  o VITE_SUPABASE_ANON_KEY
+
+Después del push, Vercel desplegará automáticamente.
+
+PRUEBA COMPLETA
+1. Inicia sesión con un docente.
+2. Genera un recurso.
+3. Supabase > docentes > ai_week_used debe pasar de 0 a 1.
+4. Genera cuatro recursos más.
+5. ai_week_used debe quedar en 5.
+6. En el sexto intento debe responder HTTP 429 y mostrar:
+   "Has utilizado tus 5 creaciones gratuitas de esta semana."
+7. Cambia temporalmente ai_week_used a 4 y prueba una generación inválida/fallida:
+   si Gemini falla, ai_week_used debe volver a 4 por el reembolso.
+8. Nunca pongas GEMINI_API_KEY en App.jsx ni en variables VITE_*.
+
+NOTA SOBRE PRO
+El límite está guardado en `docentes.ai_weekly_limit`.
+Todos los usuarios actuales reciben 5.
+Más adelante, cuando implementemos pagos, basta con cambiar el límite del usuario
+(por ejemplo 100) o adaptar la función a un esquema mensual para Pro.
