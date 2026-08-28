@@ -1,0 +1,75 @@
+SCIVERSE — FLUJO DE CLASE COMPLETA V3
+
+SUBE/REEMPLAZA SOLO ESTOS 2 ARCHIVOS:
+
+1) EN LA RAÍZ DEL REPOSITORIO:
+   apply-sciverse-v2.mjs
+
+   Reemplaza completamente el que ya existe.
+
+2) DENTRO DE /api:
+   generate-linked-worksheet.js
+
+   Este es un archivo NUEVO.
+
+NO MODIFIQUES package.json.
+El package.json actual ya ejecuta:
+node apply-sciverse-v2.mjs && vite build
+
+FLUJO IMPLEMENTADO
+
+Crear clase completa
+→ Sesión de aprendizaje
+→ al terminar aparecen ARRIBA:
+   Editar | Descargar Word | Descargar PDF | Siguiente
+→ Siguiente:
+   “¿Qué quieres hacer ahora?”
+   - Instrumentos de evaluación
+   - Material
+
+Instrumentos:
+- Rúbrica
+- Lista de cotejo
+- Escala de valoración
+Todos reutilizan automáticamente los datos de la sesión.
+
+Al terminar el instrumento:
+Editar | Word | PDF | Siguiente
+→ Material
+
+Material:
+- Ficha de trabajo
+- Ficha de lectura
+- Juegos
+
+Ficha de trabajo:
+- Preguntas abiertas
+- Opción múltiple
+- Lectura y preguntas
+- Verdadero o falso
+- Cantidad: MÍNIMO 5 / MÁXIMO 20
+- Generación vinculada a la sesión
+- Previsualización tipo documento
+- Editar | Word | PDF | Terminar
+
+Ficha de lectura:
+- Vinculada a la sesión
+- Word | PDF | Terminar
+
+Juegos:
+- Sopa de letras
+- Crucigrama
+
+NOTA SOBRE PDF
+El botón “Descargar PDF” abre la vista de impresión del navegador para
+seleccionar “Guardar como PDF”. No requiere instalar otra librería.
+
+ANTES DE SUBIR
+Los dos archivos incluidos fueron validados con Node para evitar errores
+de sintaxis del script/endpoint.
+
+DESPUÉS DE SUBIR
+1. Commit changes en main.
+2. Espera el deployment de Vercel.
+3. Si sale Ready, abre la web y presiona Ctrl + F5.
+4. Prueba primero: Crear clase completa → generar sesión → Siguiente.
