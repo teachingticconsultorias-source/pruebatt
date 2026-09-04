@@ -61,6 +61,7 @@
 
 .auth__back {
   display: inline-flex; align-items: center; gap: var(--space-2);
+  min-height: 40px; padding-right: var(--space-2);
   margin-bottom: var(--space-6); font-size: var(--text-sm);
   color: var(--text-secondary); text-decoration: none;
   transition: color var(--dur-fast) var(--ease-out);
@@ -192,14 +193,14 @@
 }
 
 .auth__link {
-  align-self: center; padding: var(--space-2); border: 0; background: none;
+  align-self: center; min-height: 44px; padding: var(--space-2) var(--space-3); border: 0; background: none;
   font-family: var(--font-body); font-size: var(--text-sm);
   color: var(--text-secondary); cursor: pointer;
 }
 .auth__link:hover { color: var(--teal-700); }
 
 .auth__switch { margin: var(--space-6) 0 0; padding-top: var(--space-5); border-top: 1px solid var(--border-subtle); text-align: center; font-size: var(--text-sm); color: var(--text-secondary); }
-.auth__switch button { border: 0; background: none; font: inherit; font-weight: var(--weight-semibold); color: var(--teal-700); cursor: pointer; }
+.auth__switch button { min-height: 40px; padding: 0 var(--space-2); border: 0; background: none; font: inherit; font-weight: var(--weight-semibold); color: var(--teal-700); cursor: pointer; }
 
 .auth__security { display: flex; align-items: center; justify-content: center; gap: var(--space-2); margin: var(--space-5) 0 0; font-size: var(--text-label); color: var(--text-tertiary); }
 

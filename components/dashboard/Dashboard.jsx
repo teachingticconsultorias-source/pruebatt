@@ -122,7 +122,7 @@ export default function Dashboard({
       {/* ================================================= ACCIONES RÁPIDAS */}
       <section aria-labelledby="dash-quick">
         <div className="dash__sectionhead">
-          <h2 id="dash-quick">O crea algo puntual</h2>
+          <h2 id="dash-quick">Crea algo puntual</h2>
           <button type="button" className="dash__seeall" onClick={() => onNavigate("crear")}>
             Ver todo <ArrowRight size={14} />
           </button>

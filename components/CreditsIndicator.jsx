@@ -47,12 +47,20 @@ export default function CreditsIndicator({
         },
       });
 
-      if (!response.ok) throw new Error("No se pudieron cargar los créditos");
+      // En preview local no hay funciones serverless: /api/credits devuelve
+      // el index.html del SPA. Sin esta comprobación, response.json() lanzaba
+      // un SyntaxError por cada intento y llenaba la consola de ruido.
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok || !contentType.includes("application/json")) {
+        setCredits(null);
+        return;
+      }
 
-      const data = await response.json();
-      setCredits(data);
+      const data = await response.json().catch(() => null);
+      if (data) setCredits(data);
     } catch (error) {
-      console.error(error);
+      // Un fallo al consultar créditos no debe romper la interfaz.
+      if (import.meta.env.DEV) console.warn("[sciverse] créditos no disponibles:", error?.message);
     } finally {
       setLoading(false);
     }

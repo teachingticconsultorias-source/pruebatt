@@ -3,3 +3,6 @@ dist/
 .npm-cache/
 .env
 .env.local
+
+# Capturas de QA visual (12 MB) — se regeneran con scripts/visual-qa.mjs
+docs/qa/

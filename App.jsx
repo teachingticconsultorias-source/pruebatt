@@ -1209,7 +1209,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
           <SaveStatus state={materialSave.state} onRetry={materialSave.retry} onDownload={handleDownloadSession} />
           <div className="flex flex-wrap gap-1.5 mb-4">
             {(result.areasSTEAM || []).map((a, i) => (
-              <span key={i} className="text-[11px] font-semibold px-2 py-1 rounded-full" style={{ background: "rgba(62,198,192,0.12)", color: C.teal, border: `1px solid rgba(62,198,192,0.3)` }}>
+              <span key={i} className="text-xs font-semibold px-2 py-1 rounded-full" style={{ background: "rgba(62,198,192,0.12)", color: C.teal, border: `1px solid rgba(62,198,192,0.3)` }}>
                 {a}
               </span>
             ))}
@@ -3874,7 +3874,7 @@ function GradeTag({ grade }) {
   const isPrimaria = grade === "primaria";
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase"
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold tracking-wide uppercase"
       style={{
         color: isPrimaria ? C.amber : C.cyan,
         background: isPrimaria ? "rgba(255,187,0,0.14)" : "rgba(31,158,152,0.14)",
@@ -3929,7 +3929,7 @@ function ActivityModal({ activity, grade, setGrade, onClose, onSave, isSaved }) 
       <div className="printable relative w-full max-w-4xl rounded-2xl my-6" style={{ background: C.surface2, border: `1px solid ${C.line}` }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between px-6 pt-6">
           <div>
-            <span className="text-[11px] tracking-widest" style={{ color: subj.color, fontFamily: "'JetBrains Mono', monospace" }}>
+            <span className="text-xs tracking-widest" style={{ color: subj.color, fontFamily: "'JetBrains Mono', monospace" }}>
               {activity.code} · {subj.label}
             </span>
             <h2 className="text-2xl font-semibold mt-1" style={{ color: C.text, fontFamily: "'Space Grotesk', sans-serif" }}>
@@ -3987,7 +3987,7 @@ function ActivityModal({ activity, grade, setGrade, onClose, onSave, isSaved }) 
             <ol className="space-y-2.5">
               {v.pasos.map((p, i) => (
                 <li key={i} className="flex gap-3 text-sm leading-relaxed" style={{ color: C.text }}>
-                  <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: accent, color: "#0B2B29" }}>{i + 1}</span>
+                  <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: accent, color: "#0B2B29" }}>{i + 1}</span>
                   {p}
                 </li>
               ))}
