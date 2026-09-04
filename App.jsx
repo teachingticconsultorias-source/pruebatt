@@ -8,6 +8,8 @@ import AppShell from "./components/layout/AppShell.jsx";
 import Dashboard from "./components/dashboard/Dashboard.jsx";
 import GenerationProgress from "./components/ui/GenerationProgress.jsx";
 import ToolGrid from "./components/create/ToolGrid.jsx";
+import Library, { MATERIAL_TYPES } from "./components/library/Library.jsx";
+import "./components/library/library-v2.css";
 import "./components/create/create.css";
 import { TOOLS_BY_ID } from "./config/tools.js";
 import Button from "./components/ui/Button.jsx";
@@ -4204,7 +4206,10 @@ function SciVerseApp({ profile, onLogout }) {
     return()=>window.removeEventListener("sciverse:material-created",refresh);
   },[loadTeacherMaterials]);
 
-  const materialTypeLabel={session:"Sesión de aprendizaje",project:"Proyecto STEAM",rubric:"Rúbrica",checklist:"Lista de cotejo",challenge:"Reto grupal"};
+  // Etiquetas derivadas del catálogo compartido: antes este objeto mapeaba
+  // solo 5 de los 9 tipos que la aplicación escribe, y el resto aparecía
+  // como "Material" genérico y no se podía filtrar.
+  const materialTypeLabel=Object.fromEntries(Object.entries(MATERIAL_TYPES).map(([k,v])=>[k,v.label]));
   const formatMaterialDate=value=>new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(value));
   const visibleMaterials=teacherMaterials.filter(item=>(libraryType==="todos"||item.tipo===libraryType||(libraryType==="instrumentos"&&["rubric","checklist"].includes(item.tipo)))&&(libraryLevel==="todos"||(item.nivel||"").toLowerCase()===libraryLevel)&&`${item.titulo} ${item.tema} ${item.area}`.toLowerCase().includes(librarySearch.toLowerCase())).sort((a,b)=>librarySort==="antiguos"?new Date(a.created_at)-new Date(b.created_at):new Date(b.created_at)-new Date(a.created_at));
 
@@ -4289,18 +4294,24 @@ function SciVerseApp({ profile, onLogout }) {
       </section>}
 
       {/* BIBLIOTECA */}
-      {activeSection === "biblioteca" && <section id="biblioteca" className="library-page">
-        <header className="library-hero"><div><span><FolderOpen size={14}/> TU ESPACIO DOCENTE</span><h1>Mi biblioteca</h1><p>Encuentra, revisa y descarga todo lo que creaste o guardaste en SciVerse.</p></div><button onClick={()=>setActiveSection("crear")}><Plus size={16}/> Crear nuevo material</button></header>
-        <nav className="library-tabs">{[["creaciones",FileText,"Mis creaciones",teacherMaterials.length],["guardados",Star,"Guardados",savedResources.length],["plantillas",Download,"Plantillas",TEMPLATES.length]].map(([key,Icon,label,count])=><button key={key} className={libraryTab===key?"active":""} onClick={()=>setLibraryTab(key)}><Icon size={16}/>{label}<b>{count}</b></button>)}</nav>
-
-        {libraryTab==="creaciones"&&<>
-          <div className="library-toolbar"><label><Search size={15}/><input value={librarySearch} onChange={e=>setLibrarySearch(e.target.value)} placeholder="Buscar por título, tema o área"/></label><select value={libraryType} onChange={e=>setLibraryType(e.target.value)}><option value="todos">Todos los tipos</option><option value="session">Sesiones</option><option value="project">Proyectos STEAM</option><option value="instrumentos">Instrumentos</option><option value="challenge">Retos grupales</option></select><select value={libraryLevel} onChange={e=>setLibraryLevel(e.target.value)}><option value="todos">Todos los niveles</option><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select><select value={librarySort} onChange={e=>setLibrarySort(e.target.value)}><option value="recientes">Más recientes</option><option value="antiguos">Más antiguos</option></select></div>
-          {materialsLoading?<div className="library-loading"><Loader2 className="animate-spin" size={22}/> Cargando tus creaciones…</div>:visibleMaterials.length?<div className="library-material-grid">{visibleMaterials.map(item=><article key={item.id}><header><span className={`library-type ${item.tipo}`}><FileText size={18}/></span><small>{materialTypeLabel[item.tipo]||"Material"}</small></header><h3>{item.titulo}</h3><p>{item.grado||item.nivel} · {item.area||"Área curricular"}</p><time>Creado {formatMaterialDate(item.created_at)}</time><footer><button className="primary" onClick={()=>openMaterial(item)}><Eye size={14}/> Abrir</button><button onClick={()=>downloadMaterial(item)} title="Descargar Word"><Download size={14}/></button><button onClick={()=>duplicateMaterial(item)} title="Duplicar"><Copy size={14}/></button><button className="danger" onClick={()=>deleteMaterial(item)} title="Eliminar"><Trash2 size={14}/></button></footer></article>)}</div>:teacherMaterials.length?<div className="library-no-results"><Search size={23}/><strong>No encontramos materiales con esos filtros</strong><p>Prueba cambiando el tipo, nivel o palabras de búsqueda.</p><button onClick={()=>{setLibrarySearch("");setLibraryType("todos");setLibraryLevel("todos");}}>Limpiar filtros</button></div>:<LibraryEmpty onCreate={()=>setActiveSection("crear")} onChallenges={()=>{setActiveSection("retos");setRetoView("crear");}} onActivities={()=>setActiveSection("actividades")}/>}</>}
-
-        {libraryTab==="guardados"&&(savedResources.length?<div className="library-saved-grid">{savedResources.map(item=><article key={item.id}><span><Star size={18}/></span><div><small>{item.kind==="activity"?"ACTIVIDAD STEAM":"RETO GRUPAL"}</small><h3>{item.title}</h3><p>{item.subtitle}</p></div><button onClick={()=>{if(item.kind==="activity"){setSelected(item.payload.activity);setModalGrade(item.payload.grade);}else setSelectedReto(item.payload);}}><Eye size={14}/> Abrir</button><button onClick={()=>toggleSaved(item)} title="Quitar de guardados"><Trash2 size={14}/></button></article>)}</div>:<div className="library-empty-state"><Star size={27}/><h2>Aún no guardaste recursos</h2><p>En Actividades y Retos encontrarás el botón Guardar para reunir aquí lo que quieras aplicar después.</p><div><button onClick={()=>setActiveSection("actividades")}>Explorar actividades</button><button onClick={()=>setActiveSection("retos")}>Explorar retos</button></div></div>)}
-
-        {libraryTab==="plantillas"&&<><div className="library-template-heading"><div><small>RECURSOS DESCARGABLES</small><h2>Plantillas para organizar tu trabajo docente</h2><p>Formatos editables con la identidad de SciVerse. Los instrumentos de evaluación personalizados se crean desde Kantu.</p></div></div><div className="library-template-grid">{TEMPLATES.map(t=>{const Icon=t.icon;return <article key={t.id}><span><Icon size={19}/></span><small>PLANTILLA WORD</small><h3>{t.title}</h3><p>{t.desc}</p><button onClick={()=>downloadWord(`${t.id}.docx`,TEMPLATE_CONTENT[t.id],t.title)}><Download size={14}/> Descargar Word</button></article>})}</div></>}
-      </section>}
+      {activeSection === "biblioteca" && (
+        <Library
+          materials={teacherMaterials}
+          loading={materialsLoading}
+          savedResources={savedResources}
+          templates={TEMPLATES}
+          formatDate={formatMaterialDate}
+          onCreate={openCreate}
+          onNavigate={setActiveSection}
+          onOpen={openMaterial}
+          onDownload={downloadMaterial}
+          onDuplicate={duplicateMaterial}
+          onDelete={deleteMaterial}
+          onOpenSaved={(item)=>{ if(item.kind==="activity"){ setSelected(item.payload.activity); setModalGrade(item.payload.grade); } else setSelectedReto(item.payload); }}
+          onRemoveSaved={toggleSaved}
+          onDownloadTemplate={(t)=>downloadWord(`${t.id}.docx`, TEMPLATE_CONTENT[t.id], t.title)}
+        />
+      )}
 
     </AppShell>
 
