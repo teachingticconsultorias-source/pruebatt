@@ -4,6 +4,10 @@ import AuthGate from "./AuthGate.jsx";
 import { GUIDE_ACTIVITIES } from "./steamGuideActivities.js";
 import CreditsIndicator from "./components/CreditsIndicator.jsx";
 import Landing from "./components/landing/Landing.jsx";
+import AppShell from "./components/layout/AppShell.jsx";
+import Dashboard from "./components/dashboard/Dashboard.jsx";
+import "./components/dashboard/dashboard.css";
+import "./components/layout/appshell.css";
 import "./components/landing/landing.css";
 import { PLANS, FREE_WEEKLY_AI_LIMIT, whatsappLink } from "./config/plans.js";
 import "./library.css";
@@ -4113,8 +4117,8 @@ export default function SciVerseDocentes() {
   return <AuthGate LandingComponent={Landing}>{(profile, onLogout) => <SciVerseApp profile={profile} onLogout={onLogout} />}</AuthGate>;
 }
 
-function TeacherAccountModal({ profile, onClose }) {
-  const [tab, setTab] = useState("perfil");
+function TeacherAccountModal({ profile, initialTab = "perfil", onClose }) {
+  const [tab, setTab] = useState(initialTab);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
@@ -4171,6 +4175,7 @@ function SciVerseApp({ profile, onLogout }) {
   const [retoView, setRetoView] = useState("explorar");
   const [modalGrade, setModalGrade] = useState(preferredGrade);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [accountTab, setAccountTab] = useState("perfil");
   const [activeSection, setActiveSection] = useState("inicio");
   const [createEntry, setCreateEntry] = useState(null);
   const openCreate = (entry=null) => { setCreateEntry(entry); setActiveSection("crear"); };
@@ -4250,86 +4255,30 @@ function SciVerseApp({ profile, onLogout }) {
   const heroAccent = heroGrade === "primaria" ? C.amber : C.cyan;
 
   return (
-    <div className="teacher-app-shell" style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap');
-        @media print {
-          body * { visibility: hidden; }
-          .printable, .printable * { visibility: visible; }
-          .printable { position: absolute; left: 0; top: 0; width: 100%; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
+    <>
+    <AppShell
+      profile={profile}
+      plan={dbProfile?.plan}
+      activeSection={activeSection}
+      onNavigate={setActiveSection}
+      onOpenAccount={(tab) => { setAccountTab(tab || "perfil"); setAccountOpen(true); }}
+      onLogout={onLogout}
+    >
 
-      <aside className="teacher-sidebar">
-        <button className="sidebar-brand" onClick={()=>setActiveSection("inicio")}><span><Microscope size={22} /></span><div><strong>SciVerse</strong><small>Teaching TIC</small></div></button>
-        <nav className="sidebar-menu" aria-label="Panel docente">
-          <button className={activeSection==="inicio"?"active":""} onClick={()=>setActiveSection("inicio")}><LayoutDashboard size={18} /> Inicio</button>
-          <span>Recursos docentes</span>
-          <button className={activeSection==="actividades"?"active":""} onClick={()=>setActiveSection("actividades")}><ClipboardList size={18} /> Actividades</button>
-          <button className={activeSection==="crear"?"active":""} onClick={()=>setActiveSection("crear")}><Wand2 size={18} /> Crear con IA</button>
-          <button className={activeSection==="retos"?"active":""} onClick={()=>setActiveSection("retos")}><Users size={18} /> Retos grupales</button>
-          <button className={activeSection==="biblioteca"?"active":""} onClick={()=>setActiveSection("biblioteca")}><FolderOpen size={18} /> Mi biblioteca</button>
-        </nav>
-        <div className="sidebar-bottom">
-          <CreditsIndicator compact />
-          <a className="sidebar-plan" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer"><Award size={17} /><div><small>Plan actual</small><strong className="capitalize">{dbProfile?.plan || "Gratuito"}</strong></div><ChevronRight size={15} /></a>
-          <button onClick={() => setAccountOpen(true)}><User size={17} /> Mi cuenta</button>
-          <button onClick={onLogout}><LogOut size={17} /> Cerrar sesión</button>
-        </div>
-      </aside>
-
-      <nav className="teacher-topbar flex items-center justify-between px-6 md:px-10 py-5 sticky top-0 z-30" style={{ background: "rgba(255,255,255,0.88)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.lineSoft}` }}>
-        <div className="flex items-center gap-2">
-          <Microscope size={20} color={C.teal} />
-          <span className="text-lg font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            SciVerse <span style={{ color: C.muted, fontWeight: 400 }}>para Docentes</span>
-          </span>
-        </div>
-        <span className="hidden md:inline text-xs" style={{ color: C.muted }}>Panel docente · Recursos alineados al CNEB</span>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setAccountOpen(true)} className="hidden sm:inline text-sm" style={{ color: C.muted }}>
-            Hola, <strong style={{ color: C.text }}>{profile.nombres}</strong> · {heroGrade === "primaria" ? "Primaria" : "Secundaria"}
-          </button>
-          <button onClick={onLogout} className="p-1.5 rounded-lg" style={{ color: C.muted }} title="Cerrar sesión">
-            <LogOut size={16} />
-          </button>
-        </div>
-      </nav>
-
-      <nav className="teacher-mobile-nav" aria-label="Navegación móvil del panel">
-        <button className={activeSection==="inicio"?"active":""} onClick={()=>setActiveSection("inicio")}><LayoutDashboard size={17}/><span>Inicio</span></button>
-        <button className={activeSection==="actividades"?"active":""} onClick={()=>setActiveSection("actividades")}><ClipboardList size={17}/><span>Actividades</span></button>
-        <button className={activeSection==="crear"?"active":""} onClick={()=>setActiveSection("crear")}><Wand2 size={18}/><span>Crear</span></button>
-        <button className={activeSection==="retos"?"active":""} onClick={()=>setActiveSection("retos")}><Users size={17}/><span>Retos</span></button>
-        <button className={activeSection==="biblioteca"?"active":""} onClick={()=>setActiveSection("biblioteca")}><FolderOpen size={17}/><span>Biblioteca</span></button>
-      </nav>
-
-      {activeSection === "inicio" && <section id="inicio-docente" className="teacher-dashboard sciverse-home-v2">
-        <div className="home-v2-heading">
-          <small>HOLA, {(profile.nombres||"DOCENTE").toUpperCase()}</small>
-          <h1>Todo para <span>planificar</span> tu clase</h1>
-          <p><ShieldCheck size={14}/> Alineado al CNEB del MINEDU</p>
-        </div>
-
-        <article className="complete-class-banner">
-          <div className="complete-class-visual"><span><BookOpen size={28}/></span><span><ClipboardList size={28}/></span><span><FileText size={28}/></span></div>
-          <div className="complete-class-copy"><h2>Crea tu clase completa</h2><p>Genera tu sesión de aprendizaje, un instrumento de evaluación y materiales listos para usar.</p><div><span><BookOpen size={13}/> Sesión de aprendizaje</span><span><ClipboardList size={13}/> Instrumento de evaluación</span><span><FileText size={13}/> Materiales</span></div></div>
-          <button onClick={()=>openCreate("complete")}>Crear clase completa <ArrowRight size={16}/></button>
-          <img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/>
-        </article>
-
-        <div className="home-v2-section-title"><h2>Explora lo que puedes crear</h2><span/></div>
-
-        <div className="home-v2-categories">
-          <button onClick={()=>openCreate("worksheet-v2")}><span className="cat-illustration"><FileText size={31}/></span><h3>Fichas</h3><p>Crea fichas de trabajo y fichas de lectura para tus estudiantes.</p><b>Crear fichas <ArrowRight size={14}/></b></button>
-          <button onClick={()=>openCreate("wordsearch")}><span className="cat-illustration"><Gamepad2 size={31}/></span><h3>Juegos</h3><p>Sopa de letras y crucigramas para aprender jugando.</p><b>Crear juegos <ArrowRight size={14}/></b></button>
-          <button onClick={()=>openCreate("rubric")}><span className="cat-illustration"><ClipboardList size={31}/></span><h3>Instrumentos</h3><p>Rúbricas, escalas de valoración y listas de cotejo.</p><b>Crear instrumentos <ArrowRight size={14}/></b></button>
-          <button onClick={()=>openCreate("project-v2")}><span className="cat-illustration"><CalendarDays size={31}/></span><h3>Planificación</h3><p>Diseña proyectos STEAM alineados al CNEB paso a paso.</p><b>Crear proyecto STEAM <ArrowRight size={14}/></b></button>
-        </div>
-
-        <div className="home-kantu-help"><span><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/></span><div><strong>¿Necesitas ideas o ayuda?</strong><p>Kantu está aquí para acompañarte en cada paso de tu planificación.</p></div><button onClick={()=>openCreate(null)}><MessageCircle size={15}/> Pregúntale a Kantu</button></div>
-      </section>}
+      {activeSection === "inicio" && (
+        <Dashboard
+          profile={profile}
+          materials={teacherMaterials}
+          loading={materialsLoading}
+          typeLabel={materialTypeLabel}
+          formatDate={formatMaterialDate}
+          onCreate={openCreate}
+          onNavigate={setActiveSection}
+          onOpenMaterial={openMaterial}
+          onDownloadMaterial={downloadMaterial}
+          onOpenAccount={(tab) => { setAccountTab(tab || "perfil"); setAccountOpen(true); }}
+        />
+      )}
 
       {activeSection === "actividades" && <section id="actividades" className="steam-catalog-page">
         <header className="steam-catalog-header"><div><span><Sparkles size={14}/> BANCO DE EXPERIENCIAS STEAM</span><h1>Actividades listas para llevar al aula</h1><p>Elige el nivel y encuentra una guía completa con preparación, pasos, preguntas de acompañamiento y evidencias para evaluar.</p></div><div className="steam-level-switch"><small>NIVEL DE TUS ESTUDIANTES</small><div>{["primaria","secundaria"].map(g=><button key={g} className={heroGrade===g?"active":""} onClick={()=>{setHeroGrade(g);setSubjectFilter("todos");}}><School size={15}/>{g==="primaria"?"Primaria":"Secundaria"}</button>)}</div></div></header>
@@ -4366,6 +4315,8 @@ function SciVerseApp({ profile, onLogout }) {
         {libraryTab==="plantillas"&&<><div className="library-template-heading"><div><small>RECURSOS DESCARGABLES</small><h2>Plantillas para organizar tu trabajo docente</h2><p>Formatos editables con la identidad de SciVerse. Los instrumentos de evaluación personalizados se crean desde Kantu.</p></div></div><div className="library-template-grid">{TEMPLATES.map(t=>{const Icon=t.icon;return <article key={t.id}><span><Icon size={19}/></span><small>PLANTILLA WORD</small><h3>{t.title}</h3><p>{t.desc}</p><button onClick={()=>downloadWord(`${t.id}.docx`,TEMPLATE_CONTENT[t.id],t.title)}><Download size={14}/> Descargar Word</button></article>})}</div></>}
       </section>}
 
+    </AppShell>
+
       <footer className="px-6 md:px-10 py-8 text-center text-xs" style={{ color: C.muted, borderTop: `1px solid ${C.lineSoft}` }}>
         SciVerse para Docentes — un espacio de Frida García Rurush, IA educativa.
       </footer>
@@ -4373,7 +4324,7 @@ function SciVerseApp({ profile, onLogout }) {
       {selected && <ActivityModal activity={selected} grade={modalGrade} setGrade={setModalGrade} onClose={() => setSelected(null)} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===`${selected.id}-${modalGrade}`)} />}
       {selectedReto && <RetoModal reto={selectedReto} profile={profile} onClose={()=>setSelectedReto(null)} onCreateInstrument={()=>{setSelectedReto(null);setActiveSection("crear");}} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===(selectedReto.id||selectedReto.titulo))} />}
       {selectedMaterial&&<MaterialViewerModal item={selectedMaterial} typeLabel={materialTypeLabel[selectedMaterial.tipo]||"Material"} onClose={()=>setSelectedMaterial(null)} onDownload={()=>downloadMaterial(selectedMaterial)} onDuplicate={()=>duplicateMaterial(selectedMaterial)} onDelete={()=>deleteMaterial(selectedMaterial)}/>} 
-      {accountOpen && <TeacherAccountModal profile={profile} onClose={() => setAccountOpen(false)} />}
-    </div>
+      {accountOpen && <TeacherAccountModal profile={profile} initialTab={accountTab} onClose={() => setAccountOpen(false)} />}
+    </>
   );
 }
