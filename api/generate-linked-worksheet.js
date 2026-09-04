@@ -1,4 +1,7 @@
-const GEMINI_MODEL = process.env.GEMINI_MAIN_MODEL || "gemini-3.6-flash";
+import { getGeminiModel } from "./_lib/gemini.js";
+import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
+
+const GEMINI_MODEL = getGeminiModel();
 
 const SCHEMA = {
   type: "object",
@@ -56,6 +59,9 @@ export default async function handler(req, res) {
   try {
     const auth = await fetch(`${supabaseUrl}/auth/v1/user`, { headers: { apikey: supabaseKey, Authorization: `Bearer ${token}` } });
     if (!auth.ok) return res.status(401).json({ error: "Tu sesión venció. Vuelve a iniciar sesión." });
+    // Limitación de ráfagas (best-effort por instancia; ver _lib/rate-limit.js).
+    enforceRateLimit({ key: clientKey(req), bucket: "ai-generation", ...RateLimits.aiGeneration });
+
 
     const quota = await rpc("consume_ai_credit", token, supabaseUrl, supabaseKey);
     if (!quota?.ok) return res.status(429).json({ error: "Has utilizado tus creaciones disponibles de esta semana.", code: quota?.reason || "WEEKLY_LIMIT_REACHED", credits: quota });

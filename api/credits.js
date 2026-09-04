@@ -1,46 +1,36 @@
 // api/credits.js
-// Devuelve el estado semanal de créditos del docente autenticado.
+//
+// Estado semanal de créditos de IA del docente autenticado.
+//
+// Este endpoint existía desde hace tiempo pero estaba HUÉRFANO: su único
+// consumidor (`components/CreditsIndicator.jsx`) nunca se importaba, así que
+// la docente no tenía forma de saber cuántas creaciones le quedaban.
+// Desde el Bloque B, `CreditsIndicator` está conectado en la barra lateral.
+
+import { Errors, sendError } from "./_lib/errors.js";
+import { requireUser } from "./_lib/supabase.js";
+import { getCreditStatus } from "./_lib/credits.js";
+import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 
 export default async function handler(req, res) {
-  if (req.method !== "GET") {
-    return res.status(405).json({ error: "Método no permitido" });
-  }
-
-  const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-  const supabaseKey =
-    process.env.VITE_SUPABASE_PUBLISHABLE_KEY ||
-    process.env.VITE_SUPABASE_ANON_KEY;
-
-  if (!accessToken || !supabaseUrl || !supabaseKey) {
-    return res.status(401).json({ error: "Inicia sesión para consultar tus créditos" });
-  }
-
   try {
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/rpc/get_ai_credit_status`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey: supabaseKey,
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: "{}",
-      }
-    );
+    if (req.method !== "GET") throw Errors.methodNotAllowed();
 
-    const data = await response.json();
+    const auth = await requireUser(req);
+    enforceRateLimit({
+      key: clientKey(req, auth.user.id),
+      bucket: "credits",
+      ...RateLimits.readOwn,
+    });
 
-    if (!response.ok) {
-      return res.status(response.status).json({
-        error: data?.message || "No se pudo consultar tus créditos",
-      });
-    }
+    const status = await getCreditStatus({
+      token: auth.token,
+      url: auth.url,
+      key: auth.key,
+    });
 
-    return res.status(200).json(data);
+    return res.status(200).json(status);
   } catch (error) {
-    console.error("credits error:", error);
-    return res.status(500).json({ error: "Error interno al consultar créditos" });
+    return sendError(res, error, { endpoint: "credits" });
   }
 }

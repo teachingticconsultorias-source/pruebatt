@@ -1,3 +1,18 @@
+// ⚠️ ENDPOINT LEGACY — NO SE USA
+//
+// Estado: HUÉRFANO. Ningún archivo del frontend lo invoca (verificado en el
+// Bloque A y de nuevo en el Bloque B con una búsqueda de "/api/" sobre
+// App.jsx y components/).
+//
+// Fue escrito para envolver `generate-session` con consumo y devolución de
+// crédito. Desde el Bloque B esa responsabilidad vive DENTRO de
+// `api/generate-session.js` mediante `_lib/credits.js` (`withCredit`), que
+// además cobra 1 crédito por SESIÓN COMPLETA y no por llamada: este wrapper
+// habría cobrado 4 créditos por sesión, agotando el cupo semanal de una vez.
+//
+// Se conserva sin borrar para no perder el historial. NO construir encima.
+// Eliminación registrada para el Bloque C.
+
 // api/generate-with-quota.js
 //
 // Envuelve tu endpoint ACTUAL api/generate-session.js.
