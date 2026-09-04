@@ -337,3 +337,20 @@ button, a { -webkit-tap-highlight-color: transparent; }
 .flow-centered-card,.complete-done-card{text-align:center;max-width:760px;margin:35px auto;padding:36px;border:1px solid #dce9e4;border-radius:20px;background:#fff}.flow-centered-card>svg,.complete-done-card>svg{color:#0b8d5b}.flow-centered-card h2,.complete-done-card h2{color:#164a3d}.flow-centered-card p,.complete-done-card p{color:#687c76}.complete-done-card button{display:inline-flex;align-items:center;gap:7px;border:0;border-radius:999px;background:#0b8d5b;color:#fff;padding:12px 19px;font-weight:800}.flow-finish-row{display:flex;justify-content:flex-end;margin-top:16px}
 @media(max-width:900px){.instrument-select-grid,.material-select-grid{grid-template-columns:1fr 1fr}}@media(max-width:700px){.flow-choice-grid,.instrument-select-grid,.material-select-grid,.question-type-grid{grid-template-columns:1fr}.flow-actionbar{position:static}.question-count-control{align-items:flex-start;flex-direction:column}.worksheet-student-data>div,.worksheet-student-data>div:first-child{grid-template-columns:125px 1fr}.worksheet-student-data>div b:nth-of-type(2),.worksheet-student-data>div p:nth-of-type(2){border-top:1px solid #e2e9e7}}
 @media print{.flow-actionbar,.teacher-sidebar,.teacher-topbar,.app-sidebar{display:none!important}.create-generator-head{display:none!important}.create-studio{padding:0!important}.worksheet-preview-card,.resource-document-preview{box-shadow:none!important;border:0!important}}
+
+/* SCIVERSE P0 — ESTADO DE GUARDADO VISIBLE (Bloque B) */
+.save-status{display:flex;flex-direction:column;gap:8px;margin:12px 0;padding:11px 14px;border-radius:12px;font-size:13px;line-height:1.5}
+.save-status p{display:flex;align-items:center;gap:7px;margin:0}
+.save-status--saving{background:#F1F7F6;border:1px solid #DCE9E6;color:#4A6663}
+.save-status--saved{background:#E9F9F1;border:1px solid #BFE7D3;color:#0E7A4E}
+.save-status--error{background:#FDECE8;border:1px solid #F5C6B8;color:#A8321A}
+.save-status--error strong{font-weight:700}
+.save-status__actions{display:flex;flex-wrap:wrap;gap:8px}
+.save-status__actions button{display:inline-flex;align-items:center;gap:6px;border:1px solid #E0B3A5;border-radius:9px;background:#fff;color:#A8321A;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer}
+.save-status__actions button:hover{background:#FFF6F3}
+
+/* SCIVERSE P0 — FOCO DE TECLADO VISIBLE (Bloque B)
+   Antes solo existían 3 reglas :focus en todo el CSS: navegar con Tab era
+   prácticamente a ciegas. WCAG 2.4.7. */
+:focus-visible{outline:2px solid #1F9E98;outline-offset:2px;border-radius:4px}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:2px solid #1F9E98;outline-offset:2px}

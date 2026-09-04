@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
+import "../credit-widget.css";
 
 function prettyDate(value) {
   if (!value) return "";
@@ -105,7 +106,7 @@ export default function CreditsIndicator({
     <section className="credit-widget">
       <div className="credit-widget__head">
         <div>
-          <span className="credit-widget__eyebrow">PLAN GRATIS</span>
+          <span className="credit-widget__eyebrow">PLAN {String(credits.plan || "gratuito").toUpperCase()}</span>
           <h3>Tus creaciones con IA</h3>
         </div>
         <Sparkles size={22} />
@@ -123,6 +124,10 @@ export default function CreditsIndicator({
       <p>
         Se renuevan el {prettyDate(credits.next_reset)}.
       </p>
+
+      {remaining > 0 && remaining <= 1 && (
+        <p className="credit-widget__warn">Te queda {remaining} creación esta semana.</p>
+      )}
 
       {remaining === 0 && (
         <button type="button" onClick={onUpgrade}>

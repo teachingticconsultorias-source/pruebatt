@@ -32,6 +32,7 @@ export default function AuthGate({ LandingComponent, children }) {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
 
   useEffect(() => {
     if (!supabase) {
@@ -72,6 +73,29 @@ export default function AuthGate({ LandingComponent, children }) {
 
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  // Cuenta atrás para no permitir reenvíos en ráfaga.
+  useEffect(() => {
+    if (resendCooldown <= 0) return undefined;
+    const timer = window.setTimeout(() => setResendCooldown((value) => value - 1), 1000);
+    return () => window.clearTimeout(timer);
+  }, [resendCooldown]);
+
+  async function resendConfirmation() {
+    if (!supabase || resendCooldown > 0) return;
+    const email = form.correo.trim().toLowerCase();
+    if (!email) return setError("Escribe el correo con el que te registraste.");
+    setSaving(true);
+    setError("");
+    const { error: resendError } = await supabase.auth.resend({ type: "signup", email });
+    setSaving(false);
+    if (resendError) {
+      setError("No pudimos reenviar el correo. Espera un momento e inténtalo otra vez.");
+      return;
+    }
+    setNotice(`Volvimos a enviar el enlace a ${email}.`);
+    setResendCooldown(60);
+  }
 
   const changeView = (next) => {
     setError("");
@@ -222,8 +246,22 @@ export default function AuthGate({ LandingComponent, children }) {
           <div className="text-center py-4">
             <CheckCircle2 size={50} color={COLORS.teal} className="mx-auto mb-4" />
             <h1 className="text-xl font-semibold mb-2">Revisa tu correo</h1>
-            <p className="text-sm mb-5" style={{ color: COLORS.muted }}>{notice}</p>
+            <p className="text-sm mb-3" style={{ color: COLORS.muted }}>{notice}</p>
+            <p className="text-xs mb-5" style={{ color: COLORS.muted }}>
+              Si no lo encuentras, revisa tu carpeta de <strong>spam</strong> o <strong>correo no deseado</strong>.
+            </p>
+            {error && <p role="alert" className="text-xs mb-3" style={{ color: COLORS.danger }}>{error}</p>}
             <button type="button" onClick={() => changeView("login")} className="w-full rounded-lg py-2.5 text-sm font-semibold" style={{ background: COLORS.teal, color: "#072E2B" }}>Ya confirmé mi cuenta</button>
+            <button
+              type="button"
+              onClick={resendConfirmation}
+              disabled={saving || resendCooldown > 0}
+              className="w-full mt-2 rounded-lg py-2.5 text-sm font-semibold"
+              style={{ background: "transparent", border: `1px solid ${COLORS.line}`, color: COLORS.text, opacity: saving || resendCooldown > 0 ? 0.6 : 1 }}
+            >
+              {saving ? "Enviando…" : resendCooldown > 0 ? `Reenviar en ${resendCooldown}s` : "Reenviar correo de confirmación"}
+            </button>
+            <button type="button" onClick={() => changeView("register")} className="w-full mt-3 text-xs" style={{ color: COLORS.muted }}>¿Te equivocaste de correo? Corrígelo</button>
           </div>
         ) : (
           <form onSubmit={submit} className="space-y-3">
