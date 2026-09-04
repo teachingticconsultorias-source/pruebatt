@@ -119,7 +119,7 @@
 .lp-preview__bar small { margin-left: var(--space-2); font-size: var(--text-label); color: var(--text-tertiary); }
 
 .lp-preview__body { display: grid; grid-template-columns: 1fr; gap: var(--space-4); padding: var(--space-5); }
-.lp-preview__eyebrow { font-size: var(--text-label); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); color: var(--teal-600); }
+.lp-preview__eyebrow { font-size: var(--text-label); font-weight: var(--weight-bold); letter-spacing: var(--tracking-label); color: var(--teal-700); }
 .lp-preview__doc strong { display: block; margin: var(--space-2) 0 var(--space-1); font-family: var(--font-display); font-size: var(--text-h3); color: var(--text-primary); }
 .lp-preview__doc p { margin: 0 0 var(--space-3); font-size: var(--text-sm); }
 .lp-preview__chips { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-bottom: var(--space-4); }
@@ -187,7 +187,7 @@
 .lp-step__num {
   position: absolute; top: var(--space-5); right: var(--space-5);
   font-family: var(--font-display); font-size: var(--text-h2);
-  font-weight: var(--weight-bold); color: var(--neutral-100); line-height: 1;
+  font-weight: var(--weight-bold); color: var(--neutral-200); line-height: 1;
 }
 .lp-step__icon {
   display: grid; place-items: center; width: 48px; height: 48px; margin-bottom: var(--space-4);

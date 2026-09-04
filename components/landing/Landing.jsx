@@ -287,7 +287,7 @@ export default function Landing({ onRegister, onLogin }) {
               const Icon = step.icon;
               return (
                 <li key={step.title} className="lp-step">
-                  <span className="lp-step__num">{index + 1}</span>
+                  <span className="lp-step__num" aria-hidden="true">{index + 1}</span>
                   <span className="lp-step__icon"><Icon size={22} /></span>
                   <h3>{step.title}</h3>
                   <p>{step.text}</p>

@@ -45,9 +45,15 @@
   --amber-50:  #FFFBEB;
   --amber-100: #FFF4D1;
   --amber-400: #FFBB00;
-  --amber-700: #A87A00;
+  --amber-700: #8A6400;
 
-  /* Neutrales. --neutral-500 es el MÍNIMO para texto secundario (4.6:1). */
+  /* Neutrales.
+     Contraste medido sobre el render real (no estimado):
+       neutral-400  2.67:1 blanco · 2.49:1 hundido  → solo decorativo
+       neutral-500  4.09:1 blanco · 3.83:1 hundido  → NO alcanza AA para texto
+       neutral-550  4.91:1 blanco · 4.59:1 hundido  → mínimo para texto terciario
+       neutral-600  5.88:1 blanco · 5.50:1 hundido  → texto secundario
+     Por eso el texto secundario y el terciario NO se mapean a 400/500. */
   --neutral-0:   #FFFFFF;
   --neutral-25:  #FAFEFE;
   --neutral-50:  #F4F8F8;
@@ -56,6 +62,7 @@
   --neutral-300: #B4C6C4;
   --neutral-400: #8CA3A1;
   --neutral-500: #6B8280;
+  --neutral-550: #5F7573;
   --neutral-600: #526966;
   --neutral-700: #3A4F4C;
   --neutral-800: #233735;
@@ -96,8 +103,8 @@
   --border-focus:   var(--teal-600);
 
   --text-primary:   var(--neutral-900);
-  --text-secondary: var(--neutral-500);
-  --text-tertiary:  var(--neutral-400);
+  --text-secondary: var(--neutral-600);
+  --text-tertiary:  var(--neutral-550);
   --text-on-brand:  #04302C;
   --text-inverse:   var(--neutral-0);
   --text-brand:     var(--teal-700);
