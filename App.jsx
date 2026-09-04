@@ -6,6 +6,8 @@ import CreditsIndicator from "./components/CreditsIndicator.jsx";
 import Landing from "./components/landing/Landing.jsx";
 import AppShell from "./components/layout/AppShell.jsx";
 import Dashboard from "./components/dashboard/Dashboard.jsx";
+import GenerationProgress from "./components/ui/GenerationProgress.jsx";
+import { useUI } from "./components/ui/UIProvider.jsx";
 import "./components/dashboard/dashboard.css";
 import "./components/layout/appshell.css";
 import "./components/landing/landing.css";
@@ -1171,12 +1173,21 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
       {error&&<p className="wizard-error">{error}</p>}
       <div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":`Generar ${documentName} con IA`}</button>}</div>
 
-      {loading && <div className="kantu-generation-overlay" role="status" aria-live="polite" aria-label="Kantu está generando la sesión">
-        <div className="kantu-working kantu-working--overlay">
-          <div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img src={documentType === "session" ? "/mascot/kantu-session.webp" : "/mascot/kantu-material.webp"} alt="Kantu trabajando en el recurso educativo"/></div>
-          <div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>{loadingMessages[loadingMessageIndex]}…</h4><p>La sesión aparecerá cuando Kantu termine de revisar cada módulo. No cierres esta ventana.</p><div className="module-generation-status">{Object.entries(moduleLabels).map(([key,label])=><span key={key} className={completedModules.includes(key)?"done":activeModule===key?"active":""}>{completedModules.includes(key)?<CheckCircle2 size={13}/>:activeModule===key?<Loader2 size={13} className="animate-spin"/>:<i/>}{label}</span>)}</div></div>
+      {loading && (
+        <div className="kantu-generation-overlay">
+          {/* Los pasos son REALES: activeModule y completedModules ya los
+              reporta el generador. No se inventan porcentajes ni tiempos. */}
+          <GenerationProgress
+            steps={["alignment", "sequence", "assessment", "annexes"]}
+            labels={moduleLabels}
+            active={activeModule}
+            completed={completedModules}
+            title={`Kantu está creando tu ${documentName}`}
+            subtitle="Suele tomar entre uno y dos minutos. Puedes quedarte en esta pantalla."
+            tip="los criterios de evaluación deben empezar con un verbo observable para poder verificarse en la evidencia."
+          />
         </div>
-      </div>}
+      )}
 
       {result && completeClass && <div className="flow-actionbar session-flow-toolbar"><button onClick={()=>setResult(null)}><Pencil size={15}/> Editar</button><button onClick={handleDownloadSession} disabled={downloading}>{downloading?<Loader2 size={15} className="animate-spin"/>:<Download size={15}/>} Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form:{...form},result})}>Siguiente <ArrowRight size={16}/></button></div>}
       {result && (
@@ -4176,6 +4187,7 @@ function SciVerseApp({ profile, onLogout }) {
   const [modalGrade, setModalGrade] = useState(preferredGrade);
   const [accountOpen, setAccountOpen] = useState(false);
   const [accountTab, setAccountTab] = useState("perfil");
+  const { toast, confirm } = useUI();
   const [activeSection, setActiveSection] = useState("inicio");
   const [createEntry, setCreateEntry] = useState(null);
   const openCreate = (entry=null) => { setCreateEntry(entry); setActiveSection("crear"); };
@@ -4222,7 +4234,7 @@ function SciVerseApp({ profile, onLogout }) {
   const visibleMaterials=teacherMaterials.filter(item=>(libraryType==="todos"||item.tipo===libraryType||(libraryType==="instrumentos"&&["rubric","checklist"].includes(item.tipo)))&&(libraryLevel==="todos"||(item.nivel||"").toLowerCase()===libraryLevel)&&`${item.titulo} ${item.tema} ${item.area}`.toLowerCase().includes(librarySearch.toLowerCase())).sort((a,b)=>librarySort==="antiguos"?new Date(a.created_at)-new Date(b.created_at):new Date(b.created_at)-new Date(a.created_at));
 
   function toggleSaved(resource){setSavedResources(prev=>{const exists=prev.some(item=>item.id===resource.id);const next=exists?prev.filter(item=>item.id!==resource.id):[{...resource,savedAt:new Date().toISOString()},...prev];localStorage.setItem("sciverse-saved-resources",JSON.stringify(next));return next;});}
-  async function deleteMaterial(item){if(!window.confirm(`¿Eliminar “${item.titulo}”? Esta acción no se puede deshacer.`))return;const {error}=await supabase.from("materiales_docente").delete().eq("id",item.id);if(error){window.alert("No se pudo eliminar el material.");return;}setSelectedMaterial(null);loadTeacherMaterials();}
+  async function deleteMaterial(item){const okDelete=await confirm({title:"¿Eliminar este material?",description:`“${item.titulo}” se eliminará de tu biblioteca. Esta acción no se puede deshacer.`,confirmText:"Eliminar",cancelText:"Conservar",tone:"danger"});if(!okDelete)return;const {error}=await supabase.from("materiales_docente").delete().eq("id",item.id);if(error){console.error(error);toast({tone:"error",title:"No pudimos eliminar el material",description:describeSaveError(error)});return;}setSelectedMaterial(null);loadTeacherMaterials();toast({tone:"success",title:"Material eliminado"});}
   // El listado ya no trae `contenido` (pesaba 1-3 MB por carga). Se pide
   // solo del material concreto que la docente abre, descarga o duplica.
   const withContent=useCallback(async(item)=>{
@@ -4234,15 +4246,15 @@ function SciVerseApp({ profile, onLogout }) {
 
   async function openMaterial(item){
     try{ setSelectedMaterial(await withContent(item)); }
-    catch(e){ console.error(e); window.alert("No pudimos abrir este material. Inténtalo de nuevo."); }
+    catch(e){ console.error(e); toast({tone:"error",title:"No pudimos abrir este material",description:"Inténtalo de nuevo en unos segundos."}); }
   }
 
   async function downloadMaterial(item){
     try{ const full=await withContent(item); downloadWord(`${full.tipo}-${full.id}.docx`,materialContentText(full.contenido),full.titulo); }
-    catch(e){ console.error(e); window.alert("No pudimos preparar la descarga. Inténtalo de nuevo."); }
+    catch(e){ console.error(e); toast({tone:"error",title:"No pudimos preparar la descarga",description:"Inténtalo de nuevo en unos segundos."}); }
   }
 
-  async function duplicateMaterial(item){const form={nivel:item.nivel,grado:item.grado,area:item.area,tema:item.tema};try{const full=await withContent(item);await saveTeacherMaterial({tipo:full.tipo,titulo:`Copia de ${full.titulo}`,form,contenido:full.contenido});loadTeacherMaterials();}catch(e){console.error(e);window.alert(describeSaveError(e));}}
+  async function duplicateMaterial(item){const form={nivel:item.nivel,grado:item.grado,area:item.area,tema:item.tema};try{const full=await withContent(item);await saveTeacherMaterial({tipo:full.tipo,titulo:`Copia de ${full.titulo}`,form,contenido:full.contenido});loadTeacherMaterials();}catch(e){console.error(e);toast({tone:"error",title:"No pudimos duplicar el material",description:describeSaveError(e)});}}
 
   const filtered = ACTIVITIES.filter((a) => a.versions[heroGrade] && (subjectFilter === "todos" || a.subject === subjectFilter));
   const filteredRetos = RETOS.filter((r) => gradeFilter === "todos" || r.grades.includes(gradeFilter));
