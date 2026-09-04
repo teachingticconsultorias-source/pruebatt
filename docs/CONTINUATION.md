@@ -2,7 +2,7 @@
 
 ## ÚLTIMA ACTUALIZACIÓN
 
-2026-09-04 · Bloque Visual 03 **cerrado y revalidado** en navegador real.
+2026-09-04 · Bloque Visual 03 cerrado y revalidado + rama publicada en Vercel Preview.
 
 Esta revalidación se ejecutó sobre un `dist` reconstruido desde el HEAD actual.
 Antes de empezar había un proceso `vite preview` huérfano (PID en el puerto
@@ -178,6 +178,95 @@ Aviso conocido y no bloqueante: Vite informa que el bundle JS principal supera
    `Usage`, `CrosswordGenerator` — este último ya es inalcanzable, definido y
    nunca referenciado), y dividir el bundle empezando por Admin y la
    exportación DOCX, sin cambiar comportamiento.
+
+## BLOQUE DEPLOY VISUAL A VERCEL — 2026-09-04
+
+### Publicación
+
+| Concepto | Valor |
+|---|---|
+| Rama subida | `feat/visual-overhaul` → `origin` (rama nueva, sin force) |
+| Commit desplegado | `5792552` |
+| Remote | `github.com/teachingticconsultorias-source/pruebatt` |
+| Integración | GitHub → Vercel, activa y automática |
+| Deployment | **Preview** (no producción) |
+| Estado del build | **success** |
+| URL de Preview | https://pruebatt-qxduw84vy-teaching-tic.vercel.app |
+| Inspector | https://vercel.com/teaching-tic/pruebatt/8wW2H2wN5XWFV32mdZgqTuvf5oJZ |
+| Merge a `main` | NO realizado |
+
+### Un primer deploy falló y por qué
+
+El push inicial (`6f4d6c8`) **falló** en Vercel. El siguiente (`5792552`),
+con el mismo código de aplicación, compiló. La única diferencia es la
+retirada de `pnpm-lock.yaml`:
+
+- Coexistían `package-lock.json` y `pnpm-lock.yaml`, y Vercel prioriza pnpm
+  cuando encuentra su lockfile.
+- `pnpm-lock.yaml` no se actualizaba desde las subidas iniciales, así que le
+  faltaba `vitest`, añadido a `package.json` en `8580bc6` junto con las
+  pruebas P0. El desajuste lo introdujo este trabajo.
+- `pnpm install` en CI usa `--frozen-lockfile` y aborta con
+  `ERR_PNPM_OUTDATED_LOCKFILE` antes de llegar al guard de entorno.
+
+Se retiró el lockfile obsoleto en lugar de regenerarlo: el proyecto se
+mantiene con npm, `package-lock.json` está sincronizado con las once
+dependencias declaradas y `npm ci --dry-run` resuelve sin conflictos.
+No cambió ninguna versión instalada.
+
+**Lección para el próximo despliegue:** no reintroducir un segundo lockfile.
+
+### Variables de entorno
+
+No hay credenciales de Vercel en este entorno (`vercel whoami` → sin
+credenciales), así que no se pudo leer ni modificar la configuración. No se
+inventó ningún valor y no se puso ninguna variable dummy.
+
+Aun así, el resultado del build permite una inferencia sólida:
+
+| Variable | Estado |
+|---|---|
+| `VITE_SUPABASE_URL` | **Presente** en el scope Preview |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` o `VITE_SUPABASE_ANON_KEY` | **Presente** (al menos una) |
+
+El motivo: `npm run build` ejecuta `scripts/check-env.mjs` antes de Vite y
+aborta si falta cualquiera de las dos. El build terminó en success, luego
+ambas están definidas. Única salvedad no descartable sin acceso: que en
+Vercel esté puesto `SCIVERSE_SKIP_ENV_CHECK=1`, que saltaría la comprobación.
+
+Ningún valor fue impreso. Secretos (`GEMINI_API_KEY`,
+`SUPABASE_SERVICE_ROLE_KEY`, `ADMIN_SECRET`) no consultados ni tocados.
+
+### QA visual online — BLOQUEADO POR ACCESO
+
+La preview está detrás de **Vercel Deployment Protection (SSO)**: responde
+302 hacia `vercel.com/sso-api` y termina en `vercel.com/login`. Sin sesión
+del equipo `teaching-tic` no es alcanzable, y no se intentó sortearlo.
+
+Por tanto **no se pudo ejecutar el QA online en 375/768/1440**. No es un
+fallo del rediseño: el build es correcto y el frontend no llegó a evaluarse
+en remoto.
+
+Ojo con revisar la URL equivocada: el alias público `pruebatt.vercel.app`
+responde 200 pero sirve `index-DGkFS7QB.js`, el bundle de `main`, anterior
+al rediseño. El commit desplegado genera `index-CMRTgi7D.js`.
+
+Para desbloquear, cualquiera de estas dos:
+
+1. Abrir la URL de Preview con la sesión de Vercel del equipo (lo más
+   directo, no cambia nada en el proyecto).
+2. Vercel → Settings → Deployment Protection → Vercel Authentication:
+   desactivarla para Preview.
+
+### Backend
+
+Sin cambios: Supabase no tocado, ninguna migración ejecutada, Gemini
+intacto, créditos intactos, `ADMIN_SECRET` no rotado.
+
+### Siguiente acción exacta
+
+Revisar la Preview visualmente y decidir el merge a `main`. El merge sigue
+sin hacerse a propósito: producción continúa sirviendo el código anterior.
 
 ## SIGUIENTE ACCIÓN EXACTA
 
