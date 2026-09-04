@@ -7,6 +7,11 @@ import Landing from "./components/landing/Landing.jsx";
 import AppShell from "./components/layout/AppShell.jsx";
 import Dashboard from "./components/dashboard/Dashboard.jsx";
 import GenerationProgress from "./components/ui/GenerationProgress.jsx";
+import ToolGrid from "./components/create/ToolGrid.jsx";
+import "./components/create/create.css";
+import { TOOLS_BY_ID } from "./config/tools.js";
+import Button from "./components/ui/Button.jsx";
+import { Badge } from "./components/ui/Feedback.jsx";
 import { useUI } from "./components/ui/UIProvider.jsx";
 import "./components/dashboard/dashboard.css";
 import "./components/layout/appshell.css";
@@ -75,6 +80,8 @@ import {
   CalendarDays,
   AlertTriangle,
   RefreshCw,
+  ArrowLeft,
+  Lock,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -2917,79 +2924,48 @@ function CompleteClassIntro({onStart}){
   </div>;
 }
 
-function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreation = null, onInitialCreationConsumed = ()=>{} }) {
+function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreation = null, onInitialCreationConsumed = ()=>{}, onNavigate = ()=>{} }) {
   const [creation,setCreation]=useState(initialCreation);
-  const [category,setCategory]=useState(null);
 
   useEffect(()=>{
-    if(initialCreation){setCreation(initialCreation);setCategory(null);onInitialCreationConsumed();}
+    if(initialCreation){setCreation(initialCreation);onInitialCreationConsumed();}
   },[initialCreation]);
 
-  const catalog={
-    fichas:{
-      title:"Fichas",
-      icon:FileText,
-      desc:"Materiales para que tus estudiantes practiquen, respondan y comprendan.",
-      items:[
-        {id:"worksheet-v2",label:"Ficha de trabajo",desc:"Preguntas y respuestas listas para imprimir.",icon:FileText},
-        {id:"reading-v2",label:"Ficha de lectura",desc:"Texto original y preguntas literal, inferencial, crítica y reflexiva.",icon:BookOpen},
-      ]
-    },
-    juegos:{
-      title:"Juegos",
-      icon:Gamepad2,
-      desc:"Recursos lúdicos para repasar contenidos y motivar la participación.",
-      items:[
-        {id:"wordsearch",label:"Sopa de letras",desc:"Juego de palabras escondidas con solucionario.",icon:Search},
-        // Crucigrama retirado en el Bloque B: el generador era una simulación
-        // (setTimeout + eco de las pistas), no producía ninguna cuadrícula.
-        // Reintroducir solo con un algoritmo real. Ver docs/audit/10-FEATURE-AUDIT.md.
-      ]
-    },
-    instrumentos:{
-      title:"Instrumentos",
-      icon:ClipboardList,
-      desc:"Evalúa con criterios observables y formatos para el registro de aula.",
-      items:[
-        {id:"rubric",label:"Rúbrica de evaluación",desc:"Criterios con niveles de desempeño.",icon:ClipboardList},
-        {id:"rating-scale",label:"Escala de valoración",desc:"Siempre · A veces · No lo hace · No observado.",icon:ListChecks},
-        {id:"checklist",label:"Lista de cotejo",desc:"Verificación rápida de criterios observables.",icon:CheckCircle2},
-      ]
-    },
-    planificacion:{
-      title:"Planificación",
-      icon:CalendarDays,
-      desc:"Diseña experiencias de mayor duración alineadas al CNEB.",
-      items:[
-        {id:"project-v2",label:"Proyecto STEAM",desc:"Proyecto interdisciplinario organizado entre 1 y 4 semanas.",icon:Cog},
-      ]
-    }
-  };
+  const selected = TOOLS_BY_ID[creation];
 
-  const allItems=Object.values(catalog).flatMap(x=>x.items);
-  const selected=allItems.find(x=>x.id===creation);
+  // Catálogo plano y agrupado por intención. Antes había que entrar en una
+  // categoría y luego elegir, y "Sesión de aprendizaje" y "Clase completa"
+  // quedaban FUERA del catálogo: solo se alcanzaban desde el dashboard.
+  if (!creation) {
+    return (
+      <div className="studio">
+        <header className="studio__intro">
+          <div className="studio__introcopy">
+            <Badge tone="brand" icon={Sparkles}>Kantu te acompaña</Badge>
+            <h1>¿Qué vamos a crear?</h1>
+            <p>Elige una herramienta y Kantu te guía paso a paso. Todo lo que generes se guarda en tu biblioteca.</p>
+          </div>
+          <img className="studio__kantu" loading="lazy" src="/mascot/kantu-material.webp" alt="" width="120" />
+        </header>
 
-  function openCategory(key){setCategory(key);setCreation(null);}
-  function back(){if(creation){setCreation(null);return;}setCategory(null);}
-
-  return <div className="create-studio create-studio-v2">
-    {!creation&&!category&&<>
-      <div className="create-studio__intro compact-create-intro">
-        <div><span className="create-studio__eyebrow"><Sparkles size={13}/> KANTU TE ACOMPAÑA</span><h2>¿Qué quieres crear?</h2><p>Selecciona una categoría. Todo lo que generes se guardará en tu biblioteca.</p></div>
-        <div className="create-studio__nova"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><span><strong>Kantu te guía</strong><small>Te acompaño paso a paso</small></span></div>
+        <ToolGrid onCreate={setCreation} onNavigate={onNavigate} />
       </div>
-      <div className="creation-category-grid">
-        {Object.entries(catalog).map(([key,item])=>{const Icon=item.icon;return <button key={key} onClick={()=>openCategory(key)}><span><Icon size={26}/></span><h3>{item.title}</h3><p>{item.desc}</p><b>Explorar <ArrowRight size={14}/></b></button>})}
-      </div>
-    </>}
+    );
+  }
 
-    {!creation&&category&&<div>
-      <div className="create-generator-head"><div><span>CATEGORÍA</span><h3>{catalog[category].title}</h3><p>{catalog[category].desc}</p></div><button onClick={back}>← Volver a categorías</button></div>
-      <div className="creation-type-grid creation-type-grid-v2">{catalog[category].items.map(({id,label,desc,icon:Icon})=><button key={id} className="creation-type-card teal" onClick={()=>setCreation(id)}><span><Icon size={22}/></span><div><small>CREAR CON KANTU</small><h3>{label}</h3><p>{desc}</p><b>Comenzar <ArrowRight size={15}/></b></div></button>)}</div>
-    </div>}
+  return (
+    <div className="studio">
+      <header className="studio__head">
+        <div className="studio__headcopy">
+          <Badge tone="brand" icon={Sparkles}>Creando con Kantu</Badge>
+          <h1>{selected?.name || "Nuevo recurso"}</h1>
+          <p>{selected?.desc}</p>
+        </div>
+        <Button variant="ghost" icon={ArrowLeft} onClick={()=>setCreation(null)}>
+          Elegir otra herramienta
+        </Button>
+      </header>
 
-    {creation&&<div className="create-generator-wrap">
-      <div className="create-generator-head"><div><span>CREANDO CON KANTU</span><h3>{creation==="complete"?"Clase completa":selected?.label}</h3><p>{creation==="complete"?"Sesión + instrumento + material en un mismo recorrido.":selected?.desc}</p></div><button onClick={()=>{setCreation(null);setCategory(null)}}>← Elegir otro producto</button></div>
       {creation==="complete"?<CompleteClassFlow preferredGrade={preferredGrade} profile={profile}/>
       :creation==="session"?<SteamGenerator initialGrade={preferredGrade} documentType="session" profile={profile}/>
       :creation==="project-v2"?<ProjectSteamGenerator initialGrade={preferredGrade} profile={profile}/>
@@ -2998,10 +2974,9 @@ function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreati
       :creation==="rating-scale"?<ValuationScaleGenerator initialGrade={preferredGrade} profile={profile}/>
       :(creation==="rubric"||creation==="checklist")?<EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={creation}/>
       :creation==="wordsearch"?<WordSearchGenerator initialGrade={preferredGrade} profile={profile}/>
-      /* creation==="crossword" retirado en el Bloque B (generador simulado) */
       :null}
-    </div>}
-  </div>;
+    </div>
+  );
 }
 
 /* ---------------------------------------------------------------------- */
@@ -4310,7 +4285,7 @@ function SciVerseApp({ profile, onLogout }) {
 
       {/* GENERADOR STEAM */}
       {activeSection === "crear" && <section id="generador" className="px-6 md:px-10 py-14 max-w-5xl mx-auto">
-        <CreateStudio preferredGrade={preferredGrade} profile={profile} initialCreation={createEntry} onInitialCreationConsumed={()=>setCreateEntry(null)} />
+        <CreateStudio preferredGrade={preferredGrade} profile={profile} initialCreation={createEntry} onInitialCreationConsumed={()=>setCreateEntry(null)} onNavigate={setActiveSection} />
       </section>}
 
       {/* BIBLIOTECA */}
