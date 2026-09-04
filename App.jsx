@@ -9,6 +9,8 @@ import Dashboard from "./components/dashboard/Dashboard.jsx";
 import GenerationProgress from "./components/ui/GenerationProgress.jsx";
 import ToolGrid from "./components/create/ToolGrid.jsx";
 import Library, { MATERIAL_TYPES } from "./components/library/Library.jsx";
+import Account from "./components/account/Account.jsx";
+import "./components/account/account.css";
 import "./components/library/library-v2.css";
 import "./components/create/create.css";
 import { TOOLS_BY_ID } from "./config/tools.js";
@@ -4105,48 +4107,28 @@ export default function SciVerseDocentes() {
   return <AuthGate LandingComponent={Landing}>{(profile, onLogout) => <SciVerseApp profile={profile} onLogout={onLogout} />}</AuthGate>;
 }
 
-function TeacherAccountModal({ profile, initialTab = "perfil", onClose }) {
-  const [tab, setTab] = useState(initialTab);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [form, setForm] = useState({ nombres: profile.nombres || "", apellidos: profile.apellidos || "", ie: profile.ie || "", celular: profile.celular || "", nivel: profile.nivel || "primaria" });
-  const referralUrl = `${window.location.origin}/?ref=${(profile.userId || "docente").slice(0, 8)}`;
-  const joined = profile.createdAt ? new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "long", year: "numeric" }).format(new Date(profile.createdAt)) : "Cuenta activa";
-  const tabs = [
-    ["perfil", User, "Perfil"], ["plan", Sparkles, "Plan"], ["referidos", Gift, "Referidos"], ["capacitacion", GraduationCap, "Capacitación"], ["integraciones", Link2, "Integraciones"],
-  ];
-  async function saveProfile() {
-    setSaving(true); setNotice("");
+// Puente hacia el componente de cuenta rediseñado.
+// La escritura sigue siendo supabase.auth.updateUser, igual que antes:
+// no se toca el backend de perfil en el bloque visual.
+function TeacherAccountModal({ profile, dbProfile = null, initialTab = "perfil", onClose }) {
+  async function saveProfile(form) {
     const { error } = await supabase.auth.updateUser({ data: { ...form } });
-    setSaving(false);
-    if (error) return setNotice("No pudimos guardar los cambios.");
-    setNotice("Perfil actualizado correctamente. Los cambios se verán completamente al volver a iniciar sesión.");
-    setEditing(false);
+    if (error) {
+      console.error(error);
+      return { ok: false, message: "No pudimos guardar los cambios. Inténtalo de nuevo." };
+    }
+    return { ok: true };
   }
-  async function copyReferral() {
-    await navigator.clipboard.writeText(referralUrl);
-    setNotice("Enlace copiado.");
-  }
-  return <div className="account-backdrop" onMouseDown={onClose}>
-    <section className="account-modal" role="dialog" aria-modal="true" aria-label="Mi cuenta" onMouseDown={(event) => event.stopPropagation()}>
-      <header><div><h2>Mi cuenta</h2><p>Información de tu perfil, plan y beneficios docentes.</p></div><button onClick={onClose} aria-label="Cerrar"><X size={20} /></button></header>
-      <div className="account-layout">
-        <nav className="account-tabs">{tabs.map(([key, Icon, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => { setTab(key); setNotice(""); }}><Icon size={16} />{label}</button>)}</nav>
-        <div className="account-content">
-          {tab === "perfil" && <div>
-            <div className="profile-summary"><span>{(profile.nombres?.[0] || "D").toUpperCase()}{(profile.apellidos?.[0] || "").toUpperCase()}</span><div><h3>{profile.nombres} {profile.apellidos}</h3><p>{profile.correo}</p><small>DOCENTE · CUENTA PERSONAL</small></div></div>
-            {editing ? <div className="profile-form"><label>Nombres<input value={form.nombres} onChange={(e) => setForm({...form,nombres:e.target.value})} /></label><label>Apellidos<input value={form.apellidos} onChange={(e) => setForm({...form,apellidos:e.target.value})} /></label><label className="wide">Institución educativa<input value={form.ie} onChange={(e) => setForm({...form,ie:e.target.value})} /></label><label>Celular<input value={form.celular} onChange={(e) => setForm({...form,celular:e.target.value})} /></label><label>Nivel<select value={form.nivel} onChange={(e) => setForm({...form,nivel:e.target.value})}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><div className="wide account-actions"><button className="secondary-btn compact" onClick={() => setEditing(false)}>Cancelar</button><button className="primary-btn compact" onClick={saveProfile} disabled={saving}>{saving ? "Guardando..." : "Guardar cambios"}</button></div></div> : <div className="profile-rows"><div><span>Nombre completo</span><strong>{profile.nombres} {profile.apellidos}</strong><button onClick={() => setEditing(true)}>Cambiar</button></div><div><span>Correo</span><strong>{profile.correo}</strong></div><div><span>Rol</span><strong>Docente</strong></div><div><span>Nivel</span><strong className="capitalize">{profile.nivel}</strong></div><div><span>Institución</span><strong>{profile.ie || "Sin institución asignada"}</strong></div><div><span>Miembro desde</span><strong>{joined}</strong></div></div>}
-          </div>}
-          {tab === "plan" && <div><div className="account-heading"><span><Sparkles size={19} /></span><div><h3>Tu plan</h3><p>Uso actual en SciVerse</p></div></div><CreditsIndicator /><div className="account-plan-grid">{PLANS.filter((plan) => plan.name !== "Gratuito").map((plan) => <PlanMini key={plan.name} name={plan.name} price={plan.price} period={plan.period} benefits={plan.benefits} featured={plan.featured} />)}</div></div>}
-          {tab === "referidos" && <div><div className="account-heading"><span><Gift size={19} /></span><div><h3>Invita a otro docente</h3><p>Comparte SciVerse con tu comunidad educativa.</p></div></div><label className="referral-link"><input readOnly value={referralUrl} /><button onClick={copyReferral}><Copy size={15} /> Copiar</button></label><a className="whatsapp-share" href={`https://wa.me/?text=${encodeURIComponent(`Te invito a conocer SciVerse de Teaching TIC: ${referralUrl}`)}`} target="_blank" rel="noreferrer"><MessageCircle size={17} /> Compartir por WhatsApp</a><div className="referral-stats"><div><strong>0</strong><span>Invitaciones registradas</span></div><div><strong>0</strong><span>Docentes que se unieron</span></div></div></div>}
-          {tab === "capacitacion" && <div><span className="training-benefit"><Sparkles size={14} /> BENEFICIO TEACHING TIC</span><h3 className="training-title">Capacítate en vivo y fortalece tu portafolio docente</h3><p className="training-lead">Participa en sesiones virtuales desarrolladas por especialistas de Teaching TIC y recibe una constancia digital.</p><div className="training-points"><p><span><Video size={17} /></span><b>Capacitación en vivo.</b> Aprende, practica y resuelve tus dudas.</p><p><span><BadgeCheck size={17} /></span><b>Constancia digital.</b> Lista para tu CV y portafolio docente.</p><p><span><BookOpen size={17} /></span><b>Aplicación educativa.</b> IA, STEAM y recursos alineados al CNEB.</p></div><div className="training-card"><small>PRÓXIMA CAPACITACIÓN</small><h4>Inteligencia artificial para crear experiencias STEAM</h4><p>Fecha y horario por confirmar · Modalidad virtual</p><a href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20reservar%20un%20cupo%20en%20la%20pr%C3%B3xima%20capacitaci%C3%B3n%20de%20SciVerse." target="_blank" rel="noreferrer">Reservar mi cupo <ArrowRight size={15} /></a></div></div>}
-          {tab === "integraciones" && <div><div className="account-heading"><span><Link2 size={19} /></span><div><h3>Integraciones</h3><p>Próximamente podrás enviar tus materiales a otras plataformas.</p></div></div><Integration icon={HardDrive} name="Google Drive" text="Guarda tus sesiones y fichas en Drive" /><Integration icon={Palette} name="Canva" text="Edita tus recursos con diseños visuales" /></div>}
-          {notice && <p className="account-notice">{notice}</p>}
-        </div>
-      </div>
-    </section>
-  </div>;
+
+  return (
+    <Account
+      profile={profile}
+      dbProfile={dbProfile}
+      initialTab={initialTab}
+      onClose={onClose}
+      onSaveProfile={saveProfile}
+    />
+  );
 }
 
 function Usage({ label, current, total }) { return <div><p><span>{label}</span><b>{current} / {total}</b></p><span><i style={{width:`${Math.min(100,(Number(current)/Number(total))*100)}%`}} /></span></div>; }
@@ -4322,7 +4304,7 @@ function SciVerseApp({ profile, onLogout }) {
       {selected && <ActivityModal activity={selected} grade={modalGrade} setGrade={setModalGrade} onClose={() => setSelected(null)} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===`${selected.id}-${modalGrade}`)} />}
       {selectedReto && <RetoModal reto={selectedReto} profile={profile} onClose={()=>setSelectedReto(null)} onCreateInstrument={()=>{setSelectedReto(null);setActiveSection("crear");}} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===(selectedReto.id||selectedReto.titulo))} />}
       {selectedMaterial&&<MaterialViewerModal item={selectedMaterial} typeLabel={materialTypeLabel[selectedMaterial.tipo]||"Material"} onClose={()=>setSelectedMaterial(null)} onDownload={()=>downloadMaterial(selectedMaterial)} onDuplicate={()=>duplicateMaterial(selectedMaterial)} onDelete={()=>deleteMaterial(selectedMaterial)}/>} 
-      {accountOpen && <TeacherAccountModal profile={profile} initialTab={accountTab} onClose={() => setAccountOpen(false)} />}
+      {accountOpen && <TeacherAccountModal profile={profile} dbProfile={dbProfile} initialTab={accountTab} onClose={() => setAccountOpen(false)} />}
     </>
   );
 }
