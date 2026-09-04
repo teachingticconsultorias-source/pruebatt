@@ -4276,6 +4276,22 @@ function SciVerseApp({ profile, onLogout }) {
       </section>}
 
       {/* BIBLIOTECA */}
+      {activeSection === "herramientas" && (
+        <div className="studio">
+          <header className="studio__intro">
+            <div className="studio__introcopy">
+              <Badge tone="brand" icon={Sparkles}>Catálogo completo</Badge>
+              <h1>Herramientas para tu aula</h1>
+              <p>Todo lo que SciVerse puede crear contigo, agrupado por lo que necesitas resolver. Las que aún no están listas se indican como tales.</p>
+            </div>
+            <img className="studio__kantu" loading="lazy" src="/mascot/kantu-session.webp" alt="" width="120" />
+          </header>
+          {/* Mismo catálogo y mismo componente que el estudio de creación:
+              una sola fuente de verdad en config/tools.js. */}
+          <ToolGrid onCreate={openCreate} onNavigate={setActiveSection} />
+        </div>
+      )}
+
       {activeSection === "biblioteca" && (
         <Library
           materials={teacherMaterials}

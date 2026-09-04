@@ -90,6 +90,8 @@ const APP_SCREENS = [
   { id: "biblioteca",   go: async (p) => navTo(p, "Mi biblioteca", "Biblioteca") },
   { id: "actividades",  go: async (p) => navTo(p, "Actividades STEAM", "Actividades") },
   { id: "retos",        go: async (p) => navTo(p, "Retos grupales", "Más") },
+  { id: "herramientas", go: async (p) => navTo(p, "Herramientas", "Más") },
+  { id: "sesion",       go: async (p) => { await navTo(p, "Crear recurso", "Crear"); const c = p.locator(".tools__card", { hasText: "Sesión de aprendizaje" }).first(); if (await c.count()) { await c.click().catch(() => {}); await p.waitForTimeout(900); } } },
   { id: "cuenta",       go: async (p) => openAccount(p) },
 ];
 
@@ -265,7 +267,7 @@ for (const c of uniq.values()) console.log(`  [${c.type}] x${c.count} ${c.text}`
 console.log(`\nTOTAL problemas: ${total}`);
 
 console.log("\n===== COBERTURA REAL =====");
-const MAP = { dashboard: "inicio", crear: "crear", biblioteca: "biblioteca", actividades: "actividades", retos: "retos", cuenta: "cuenta" };
+const MAP = { dashboard: "inicio", crear: "crear", biblioteca: "biblioteca", actividades: "actividades", retos: "retos", cuenta: "cuenta", herramientas: "herramientas" };
 const bad = coverage.filter((c) => {
   const [key, where] = c.split(" -> ");
   const screen = key.split("@")[0];

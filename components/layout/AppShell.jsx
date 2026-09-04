@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
-  LayoutDashboard, Wand2, FolderOpen, ClipboardList, Users, GraduationCap,
+  LayoutDashboard, Wand2, FolderOpen, ClipboardList, Users, GraduationCap, Wrench,
   User, LogOut, ChevronRight, ChevronLeft, MoreHorizontal, X, CreditCard, Award,
 } from "lucide-react";
 
@@ -30,6 +30,7 @@ const NAV_GROUPS = [
     title: "Crear",
     items: [
       { id: "crear", label: "Crear recurso", icon: Wand2 },
+      { id: "herramientas", label: "Herramientas", icon: Wrench },
       { id: "actividades", label: "Actividades STEAM", icon: ClipboardList },
       { id: "retos", label: "Retos grupales", icon: Users },
     ],
@@ -50,6 +51,7 @@ const MOBILE_ITEMS = [
 const SECTION_TITLES = {
   inicio: "Inicio",
   crear: "Crear recurso",
+  herramientas: "Herramientas",
   actividades: "Actividades STEAM",
   retos: "Retos grupales",
   biblioteca: "Mi biblioteca",
@@ -236,6 +238,9 @@ export default function AppShell({
             <CreditsIndicator />
 
             <div className="shell__sheetlinks">
+              <button type="button" onClick={() => go("herramientas")}>
+                <Wrench size={18} /> Herramientas <ChevronRight size={16} />
+              </button>
               <button type="button" onClick={() => go("retos")}>
                 <Users size={18} /> Retos grupales <ChevronRight size={16} />
               </button>
