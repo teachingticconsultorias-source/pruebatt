@@ -1,16 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { BookOpen, CheckCircle2, GraduationCap, Loader2, LockKeyhole, Microscope, ShieldCheck, Sparkles, User } from "lucide-react";
+import {
+  ArrowLeft, BookOpen, Check, CheckCircle2, Eye, EyeOff, GraduationCap,
+  LockKeyhole, Mail, Phone, RefreshCw, School, ShieldCheck, Sparkles, User,
+} from "lucide-react";
 import { supabase } from "./supabaseClient.js";
-
-const COLORS = {
-  bg: "#FAFEFE",
-  surface: "#FFFFFF",
-  text: "#102A2E",
-  muted: "#64777A",
-  teal: "#35B9AD",
-  line: "#D7E9E7",
-  danger: "#C2410C",
-};
+import Button from "./components/ui/Button.jsx";
+import Splash from "./components/ui/Splash.jsx";
+import { useUI } from "./components/ui/UIProvider.jsx";
+import "./components/auth/auth.css";
 
 const EMPTY_FORM = {
   nombres: "",
@@ -33,6 +30,12 @@ export default function AuthGate({ LandingComponent, children }) {
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const { openComingSoon } = useUI();
+
+  // Etapa visual del registro. NO divide el envío: el submit sigue siendo
+  // único y compatible con el backend actual.
+  const registerStage =
+    form.nombres && form.apellidos && form.ie ? (form.nivel && form.correo && form.password ? 3 : 2) : 1;
 
   useEffect(() => {
     if (!supabase) {
@@ -201,156 +204,352 @@ export default function AuthGate({ LandingComponent, children }) {
     setView("landing");
   }
 
-  if (checking) {
-    return <div className="min-h-screen flex items-center justify-center" style={{ background: COLORS.bg }}><Loader2 className="animate-spin" color={COLORS.teal} /></div>;
-  }
+  /* --------------------------------------------------------------- RENDER */
+
+  if (checking) return <Splash done={false} />;
   if (profile) return children(profile, logout);
-  if (view === "landing") return <LandingComponent onRegister={() => changeView("register")} onLogin={() => changeView("login")} />;
+  if (view === "landing") {
+    return <LandingComponent onRegister={() => changeView("register")} onLogin={() => changeView("login")} />;
+  }
 
   const isRegister = view === "register";
   const isLogin = view === "login";
   const isRecovery = view === "recovery";
   const isNewPassword = view === "new-password";
+  const isConfirmation = view === "confirmation";
   const submit = isRegister ? register : isLogin ? login : isRecovery ? recover : updatePassword;
 
+  const strength = passwordStrength(form.password);
+
+  const HEADINGS = {
+    register: { title: "Crea tu cuenta docente", sub: "Empieza gratis. Sin tarjeta." },
+    login: { title: "Bienvenida de nuevo", sub: "Ingresa para continuar donde lo dejaste." },
+    recovery: { title: "Recupera tu acceso", sub: "Te enviaremos un enlace a tu correo." },
+    "new-password": { title: "Crea una nueva contraseña", sub: "Elige una que no uses en otro sitio." },
+    confirmation: { title: "Revisa tu correo", sub: "Solo falta confirmar tu cuenta." },
+  };
+  const heading = HEADINGS[view] || HEADINGS.login;
+
   return (
-    <main className="min-h-screen flex items-center justify-center px-5 py-10 auth-page" style={{ background: COLORS.bg, color: COLORS.text }}>
-      <div className="auth-layout">
-        <aside className="auth-showcase">
-          <div className="auth-brand"><span><Microscope size={24} /></span><div><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></div></div>
-          <div className="auth-showcase-copy">
-            <span className="auth-eyebrow"><Sparkles size={13} /> Plataforma educativa STEAM</span>
-            <h1>Más tiempo para enseñar. Más recursos para transformar.</h1>
-            <p>Crea experiencias alineadas al CNEB y encuentra materiales adaptados al nivel en el que enseñas.</p>
-            <ul><li><CheckCircle2 size={17} /> Recursos para primaria y secundaria</li><li><CheckCircle2 size={17} /> Generador de sesiones con IA</li><li><CheckCircle2 size={17} /> Acceso seguro y confirmación por correo</li></ul>
-          </div>
-          <small className="auth-company">Teaching TIC Consultorías S.A.C. · RUC 20607945331</small>
-        </aside>
-        <section className="auth-card">
-        {view !== "new-password" && <button type="button" onClick={() => changeView("landing")} className="auth-back">← Volver a la página principal</button>}
-        <div className="flex items-center gap-2 mb-2">
-          <Microscope size={22} color={COLORS.teal} />
-          <strong className="text-lg">SciVerse <span style={{ color: COLORS.muted, fontWeight: 400 }}>Docentes</span></strong>
+    <main className="auth">
+      {/* ------------------------------------------------- PANEL DE MARCA */}
+      <aside className="auth__brandside" aria-hidden="true">
+        <div className="auth__brandtop">
+          <img src="/brand/isotipo-white.svg" alt="" width="40" height="40" />
+          <span>
+            <strong>SciVerse</strong>
+            <small>una iniciativa de Teaching TIC</small>
+          </span>
         </div>
-        {(isRegister || isLogin) && <div className="auth-tabs" role="tablist" aria-label="Acceso a SciVerse"><button type="button" className={isLogin ? "active" : ""} onClick={() => changeView("login")}>Iniciar sesión</button><button type="button" className={isRegister ? "active" : ""} onClick={() => changeView("register")}>Crear cuenta</button></div>}
-        {(isRegister || isLogin) && <h1 className="auth-title">{isRegister ? "Crea tu cuenta docente" : "Bienvenido nuevamente"}</h1>}
-        <p className="text-sm mb-6" style={{ color: COLORS.muted }}>
-          {isRegister && "Crea tu cuenta para acceder a las herramientas de Teaching TIC."}
-          {isLogin && "Ingresa con tu correo y contraseña."}
-          {isRecovery && "Recibe un enlace para recuperar tu acceso."}
-          {isNewPassword && "Crea una nueva contraseña para tu cuenta."}
-          {view === "confirmation" && "Solo falta confirmar tu correo para activar la cuenta."}
-        </p>
 
-        {view === "confirmation" ? (
-          <div className="text-center py-4">
-            <CheckCircle2 size={50} color={COLORS.teal} className="mx-auto mb-4" />
-            <h1 className="text-xl font-semibold mb-2">Revisa tu correo</h1>
-            <p className="text-sm mb-3" style={{ color: COLORS.muted }}>{notice}</p>
-            <p className="text-xs mb-5" style={{ color: COLORS.muted }}>
-              Si no lo encuentras, revisa tu carpeta de <strong>spam</strong> o <strong>correo no deseado</strong>.
-            </p>
-            {error && <p role="alert" className="text-xs mb-3" style={{ color: COLORS.danger }}>{error}</p>}
-            <button type="button" onClick={() => changeView("login")} className="w-full rounded-lg py-2.5 text-sm font-semibold" style={{ background: COLORS.teal, color: "#072E2B" }}>Ya confirmé mi cuenta</button>
-            <button
-              type="button"
-              onClick={resendConfirmation}
-              disabled={saving || resendCooldown > 0}
-              className="w-full mt-2 rounded-lg py-2.5 text-sm font-semibold"
-              style={{ background: "transparent", border: `1px solid ${COLORS.line}`, color: COLORS.text, opacity: saving || resendCooldown > 0 ? 0.6 : 1 }}
-            >
-              {saving ? "Enviando…" : resendCooldown > 0 ? `Reenviar en ${resendCooldown}s` : "Reenviar correo de confirmación"}
-            </button>
-            <button type="button" onClick={() => changeView("register")} className="w-full mt-3 text-xs" style={{ color: COLORS.muted }}>¿Te equivocaste de correo? Corrígelo</button>
+        <div className="auth__brandcopy">
+          <p className="auth__eyebrow">
+            <Sparkles size={13} /> Plataforma educativa peruana
+          </p>
+          <h2>Más tiempo para enseñar. Menos tiempo programando.</h2>
+          <ul>
+            <li><CheckCircle2 size={17} /> Sesiones alineadas al CNEB en minutos</li>
+            <li><CheckCircle2 size={17} /> Rúbricas, fichas y proyectos STEAM</li>
+            <li><CheckCircle2 size={17} /> Descarga en Word lista para entregar</li>
+          </ul>
+        </div>
+
+        <img className="auth__kantu" src="/mascot/kantu-material.webp" alt="" width="132" loading="lazy" />
+        <small className="auth__company">Teaching TIC Consultorías S.A.C. · RUC 20607945331</small>
+      </aside>
+
+      {/* ---------------------------------------------------- FORMULARIO */}
+      <section className="auth__panel">
+        <div className="auth__card">
+          <a
+            href="#inicio"
+            className="auth__back"
+            onClick={(event) => { event.preventDefault(); changeView("landing"); }}
+          >
+            <ArrowLeft size={15} /> Volver al inicio
+          </a>
+
+          <div className="auth__mobilebrand">
+            <img src="/brand/isotipo.svg" alt="" width="34" height="34" />
+            <strong>SciVerse</strong>
           </div>
-        ) : (
-          <form onSubmit={submit} className="space-y-3">
-            {isRegister && <div className="grid grid-cols-2 gap-3">
-              <AuthInput label="Nombres" value={form.nombres} onChange={(v) => setForm({ ...form, nombres: v })} placeholder="Ej. María" autoComplete="given-name" />
-              <AuthInput label="Apellidos" value={form.apellidos} onChange={(v) => setForm({ ...form, apellidos: v })} placeholder="Ej. Pérez López" autoComplete="family-name" />
-            </div>}
-            {isRegister && <AuthInput label="Institución educativa" value={form.ie} onChange={(v) => setForm({ ...form, ie: v })} placeholder="Nombre de tu colegio o institución" />}
-            {isRegister && <AuthInput label="Celular (opcional)" value={form.celular} onChange={(v) => setForm({ ...form, celular: v })} placeholder="Ej. 999 999 999" type="tel" autoComplete="tel" required={false} />}
-            {isRegister && <fieldset>
-              <legend className="text-sm font-semibold mb-2">¿En qué nivel enseñas?</legend>
-              <div className="grid grid-cols-2 gap-3">
-                <LevelChoice
-                  active={form.nivel === "primaria"}
-                  icon={BookOpen}
-                  title="Primaria"
-                  description="1.° a 6.° grado"
-                  color="#FFBB00"
-                  onClick={() => setForm({ ...form, nivel: "primaria" })}
-                />
-                <LevelChoice
-                  active={form.nivel === "secundaria"}
-                  icon={GraduationCap}
-                  title="Secundaria"
-                  description="1.° a 5.° grado"
-                  color="#1F9E98"
-                  onClick={() => setForm({ ...form, nivel: "secundaria" })}
-                />
+
+          {(isRegister || isLogin) && (
+            <div className="auth__tabs" role="tablist" aria-label="Acceso a SciVerse">
+              <button
+                type="button" role="tab" aria-selected={isLogin}
+                className={isLogin ? "is-active" : ""}
+                onClick={() => changeView("login")}
+              >
+                Iniciar sesión
+              </button>
+              <button
+                type="button" role="tab" aria-selected={isRegister}
+                className={isRegister ? "is-active" : ""}
+                onClick={() => changeView("register")}
+              >
+                Crear cuenta
+              </button>
+            </div>
+          )}
+
+          <h1 className="auth__title">{heading.title}</h1>
+          <p className="auth__sub">{heading.sub}</p>
+
+          {/* ------------------------------------------- CONFIRMAR CORREO */}
+          {isConfirmation ? (
+            <div className="auth__confirm">
+              <img src="/illustrations/mail-sent.svg" alt="" width="200" loading="lazy" />
+              <p className="auth__confirmmsg">{notice}</p>
+              <p className="auth__confirmhint">
+                Si no lo encuentras, revisa tu carpeta de <strong>spam</strong> o{" "}
+                <strong>correo no deseado</strong>.
+              </p>
+
+              {error && <p role="alert" className="auth__error">{error}</p>}
+
+              <div className="auth__confirmactions">
+                <Button variant="primary" fullWidth onClick={() => changeView("login")}>
+                  Ya confirmé mi cuenta
+                </Button>
+                <Button
+                  variant="outline"
+                  fullWidth
+                  onClick={resendConfirmation}
+                  loading={saving}
+                  loadingText="Enviando…"
+                  disabled={resendCooldown > 0}
+                  icon={RefreshCw}
+                >
+                  {resendCooldown > 0 ? `Reenviar en ${resendCooldown}s` : "Reenviar correo de confirmación"}
+                </Button>
+                <button type="button" className="auth__link" onClick={() => changeView("register")}>
+                  ¿Te equivocaste de correo? Corrígelo
+                </button>
               </div>
-            </fieldset>}
-            {!isNewPassword && <AuthInput label="Correo electrónico" value={form.correo} onChange={(v) => setForm({ ...form, correo: v })} placeholder="docente@correo.com" type="email" autoComplete="email" />}
-            {!isRecovery && <AuthInput label={isNewPassword ? "Nueva contraseña" : "Contraseña"} value={form.password} onChange={(v) => setForm({ ...form, password: v })} placeholder="Mínimo 8 caracteres" type="password" autoComplete={isLogin ? "current-password" : "new-password"} minLength={8} />}
-            {(isRegister || isNewPassword) && <AuthInput label="Confirmar contraseña" value={form.confirmPassword} onChange={(v) => setForm({ ...form, confirmPassword: v })} placeholder="Escribe nuevamente tu contraseña" type="password" autoComplete="new-password" minLength={8} />}
-            {isRegister && <label className="auth-consent"><input type="checkbox" checked={form.acceptedTerms} onChange={(event) => setForm({ ...form, acceptedTerms: event.target.checked })} /><span>Acepto los términos y condiciones y la política de privacidad de Teaching TIC.</span></label>}
+            </div>
+          ) : (
+            <form onSubmit={submit} className="auth__form" noValidate={false}>
+              {/* Indicador de progreso: el registro pide bastantes datos y
+                  conviene que se vea que tiene final. El envío sigue siendo
+                  único, compatible con el backend actual. */}
+              {isRegister && (
+                <ol className="auth__progress" aria-label="Progreso del registro">
+                  <li className={registerStage >= 1 ? "is-done" : ""}>Tu cuenta</li>
+                  <li className={registerStage >= 2 ? "is-done" : ""}>Tu perfil</li>
+                  <li className={registerStage >= 3 ? "is-done" : ""}>Listo</li>
+                </ol>
+              )}
 
-            {error && <p role="alert" className="text-xs" style={{ color: COLORS.danger }}>{error}</p>}
-            {notice && <p role="status" className="text-xs" style={{ color: COLORS.teal }}>{notice}</p>}
+              {isRegister && (
+                <div className="auth__row">
+                  <AuthInput label="Nombres" value={form.nombres} onChange={(v) => setForm({ ...form, nombres: v })} placeholder="Ej. María" autoComplete="given-name" icon={User} />
+                  <AuthInput label="Apellidos" value={form.apellidos} onChange={(v) => setForm({ ...form, apellidos: v })} placeholder="Ej. Pérez López" autoComplete="family-name" />
+                </div>
+              )}
 
-            <button type="submit" disabled={saving} className="w-full inline-flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-semibold" style={{ background: COLORS.teal, color: "#072E2B", opacity: saving ? 0.7 : 1 }}>
-              {saving ? <Loader2 size={16} className="animate-spin" /> : isRegister ? <User size={16} /> : <LockKeyhole size={16} />}
-              {saving ? "Procesando..." : isRegister ? "Crear mi cuenta" : isLogin ? "Iniciar sesión" : isRecovery ? "Enviar enlace" : "Guardar contraseña"}
-            </button>
-            {isLogin && <button type="button" onClick={() => changeView("recovery")} className="w-full text-xs" style={{ color: COLORS.muted }}>¿Olvidaste tu contraseña?</button>}
-          </form>
-        )}
+              {isRegister && (
+                <AuthInput label="Institución educativa" value={form.ie} onChange={(v) => setForm({ ...form, ie: v })} placeholder="Nombre de tu colegio" icon={School} />
+              )}
 
-        {view !== "confirmation" && !isNewPassword && <div className="mt-5 pt-4 text-center text-sm" style={{ borderTop: `1px solid ${COLORS.line}`, color: COLORS.muted }}>
-          {isRegister ? "¿Ya tienes una cuenta? " : "¿Aún no tienes una cuenta? "}
-          <button type="button" onClick={() => changeView(isRegister ? "login" : "register")} className="font-semibold" style={{ color: COLORS.teal }}>{isRegister ? "Inicia sesión" : "Regístrate"}</button>
-        </div>}
-        <div className="auth-security"><ShieldCheck size={14} /> Tus datos se utilizan únicamente para gestionar tu cuenta.</div>
+              {isRegister && (
+                <AuthInput label="Celular" hint="Opcional" value={form.celular} onChange={(v) => setForm({ ...form, celular: v })} placeholder="999 999 999" type="tel" autoComplete="tel" required={false} icon={Phone} />
+              )}
+
+              {isRegister && (
+                <fieldset className="auth__levels">
+                  <legend>¿En qué nivel enseñas?</legend>
+                  <div>
+                    <LevelChoice active={form.nivel === "primaria"} icon={BookOpen} title="Primaria" description="1.° a 6.° grado" tone="amber" onClick={() => setForm({ ...form, nivel: "primaria" })} />
+                    <LevelChoice active={form.nivel === "secundaria"} icon={GraduationCap} title="Secundaria" description="1.° a 5.° grado" tone="teal" onClick={() => setForm({ ...form, nivel: "secundaria" })} />
+                  </div>
+                </fieldset>
+              )}
+
+              {!isNewPassword && (
+                <AuthInput label="Correo electrónico" value={form.correo} onChange={(v) => setForm({ ...form, correo: v })} placeholder="docente@correo.com" type="email" autoComplete="email" icon={Mail} />
+              )}
+
+              {!isRecovery && (
+                <AuthInput
+                  label={isNewPassword ? "Nueva contraseña" : "Contraseña"}
+                  value={form.password}
+                  onChange={(v) => setForm({ ...form, password: v })}
+                  placeholder="Mínimo 8 caracteres"
+                  type="password"
+                  autoComplete={isLogin ? "current-password" : "new-password"}
+                  minLength={8}
+                  icon={LockKeyhole}
+                  revealable
+                />
+              )}
+
+              {/* Medidor de fortaleza: solo cuando se está creando una
+                  contraseña, no al iniciar sesión. */}
+              {(isRegister || isNewPassword) && form.password && (
+                <div className={`auth__strength is-${strength.level}`}>
+                  <span aria-hidden="true"><i style={{ width: `${strength.pct}%` }} /></span>
+                  <small>{strength.label}</small>
+                </div>
+              )}
+
+              {(isRegister || isNewPassword) && (
+                <AuthInput
+                  label="Confirmar contraseña"
+                  value={form.confirmPassword}
+                  onChange={(v) => setForm({ ...form, confirmPassword: v })}
+                  placeholder="Escríbela otra vez"
+                  type="password"
+                  autoComplete="new-password"
+                  minLength={8}
+                  icon={LockKeyhole}
+                  revealable
+                  error={
+                    form.confirmPassword && form.password !== form.confirmPassword
+                      ? "Las contraseñas no coinciden."
+                      : null
+                  }
+                />
+              )}
+
+              {isRegister && (
+                <label className="auth__consent">
+                  <input
+                    type="checkbox"
+                    checked={form.acceptedTerms}
+                    onChange={(event) => setForm({ ...form, acceptedTerms: event.target.checked })}
+                  />
+                  <span>
+                    Acepto los{" "}
+                    <button type="button" onClick={() => openComingSoon({ title: "Términos y condiciones", description: "Estamos publicando esta página con su enlace permanente. Puedes solicitarnos el documento por WhatsApp." })}>
+                      términos y condiciones
+                    </button>{" "}
+                    y la{" "}
+                    <button type="button" onClick={() => openComingSoon({ title: "Política de privacidad", description: "Estamos publicando esta página con su enlace permanente. Puedes solicitarnos el documento por WhatsApp." })}>
+                      política de privacidad
+                    </button>{" "}
+                    de Teaching TIC.
+                  </span>
+                </label>
+              )}
+
+              {error && <p role="alert" className="auth__error">{error}</p>}
+              {notice && !isConfirmation && <p role="status" className="auth__notice">{notice}</p>}
+
+              <Button
+                type="submit"
+                variant="primary"
+                size="lg"
+                fullWidth
+                loading={saving}
+                loadingText="Procesando…"
+                icon={isRegister ? User : isLogin ? LockKeyhole : Mail}
+              >
+                {isRegister ? "Crear mi cuenta" : isLogin ? "Iniciar sesión" : isRecovery ? "Enviar enlace" : "Guardar contraseña"}
+              </Button>
+
+              {isLogin && (
+                <button type="button" className="auth__link" onClick={() => changeView("recovery")}>
+                  ¿Olvidaste tu contraseña?
+                </button>
+              )}
+              {isRecovery && (
+                <button type="button" className="auth__link" onClick={() => changeView("login")}>
+                  Volver a iniciar sesión
+                </button>
+              )}
+            </form>
+          )}
+
+          {!isConfirmation && !isNewPassword && (
+            <p className="auth__switch">
+              {isRegister ? "¿Ya tienes una cuenta? " : "¿Aún no tienes cuenta? "}
+              <button type="button" onClick={() => changeView(isRegister ? "login" : "register")}>
+                {isRegister ? "Inicia sesión" : "Regístrate gratis"}
+              </button>
+            </p>
+          )}
+
+          <p className="auth__security">
+            <ShieldCheck size={14} /> Tus datos se usan únicamente para gestionar tu cuenta.
+          </p>
+        </div>
       </section>
-      </div>
     </main>
   );
 }
 
-function LevelChoice({ active, icon: Icon, title, description, color, onClick }) {
+/* ------------------------------------------------------------------ PIEZAS */
+
+/** Fuerza de la contraseña. Orientativo: la validación real es length >= 8. */
+function passwordStrength(password = "") {
+  if (!password) return { level: "none", pct: 0, label: "" };
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (password.length >= 12) score += 1;
+  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score += 1;
+  if (/\d/.test(password)) score += 1;
+  if (/[^\w\s]/.test(password)) score += 1;
+
+  if (password.length < 8) return { level: "weak", pct: 20, label: "Muy corta: mínimo 8 caracteres" };
+  if (score <= 2) return { level: "weak", pct: 35, label: "Débil: combina mayúsculas y números" };
+  if (score === 3) return { level: "medium", pct: 65, label: "Aceptable" };
+  return { level: "strong", pct: 100, label: "Segura" };
+}
+
+function LevelChoice({ active, icon: Icon, title, description, tone, onClick }) {
   return (
     <button
       type="button"
       onClick={onClick}
       aria-pressed={active}
-      className="rounded-xl p-3 text-left transition-all"
-      style={{
-        border: `2px solid ${active ? color : COLORS.line}`,
-        background: active ? `${color}18` : COLORS.surface,
-        boxShadow: active ? `0 0 0 2px ${color}20` : "none",
-      }}
+      className={`auth__level auth__level--${tone}${active ? " is-active" : ""}`}
     >
-      <Icon size={20} color={color} className="mb-2" />
-      <strong className="block text-sm">{title}</strong>
-      <span className="text-xs" style={{ color: COLORS.muted }}>{description}</span>
+      <Icon size={20} aria-hidden="true" />
+      <strong>{title}</strong>
+      <span>{description}</span>
+      {active && <Check size={15} className="auth__levelcheck" aria-hidden="true" />}
     </button>
   );
 }
 
-function AuthInput({ label, value, onChange, placeholder, type = "text", autoComplete, minLength, required = true }) {
+function AuthInput({
+  label, value, onChange, placeholder, type = "text", autoComplete,
+  minLength, required = true, icon: Icon, hint, error, revealable = false,
+}) {
+  const [revealed, setRevealed] = useState(false);
+  const inputType = revealable && revealed ? "text" : type;
+
   return (
-    <label className="auth-field"><span>{label}</span><input
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      type={type}
-      autoComplete={autoComplete}
-      minLength={minLength}
-      required={required}
-      className="w-full rounded-lg px-3 py-2.5 text-sm outline-none focus:ring-2"
-      style={{ background: "rgba(15,61,58,0.05)", border: `1px solid ${COLORS.line}`, color: COLORS.text }}
-    /></label>
+    <label className={`auth__field${error ? " has-error" : ""}`}>
+      <span className="auth__label">
+        {label}
+        {hint && <em>{hint}</em>}
+      </span>
+      <span className="auth__control">
+        {Icon && <Icon size={17} className="auth__fieldicon" aria-hidden="true" />}
+        <input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          type={inputType}
+          autoComplete={autoComplete}
+          minLength={minLength}
+          required={required}
+          aria-invalid={error ? true : undefined}
+        />
+        {revealable && (
+          <button
+            type="button"
+            className="auth__reveal"
+            onClick={() => setRevealed((current) => !current)}
+            aria-label={revealed ? "Ocultar contraseña" : "Mostrar contraseña"}
+          >
+            {revealed ? <EyeOff size={17} /> : <Eye size={17} />}
+          </button>
+        )}
+      </span>
+      {error && <em className="auth__fielderror">{error}</em>}
+    </label>
   );
 }
