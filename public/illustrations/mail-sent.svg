@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="Correo enviado">
+  <title>Correo enviado</title>
+  <ellipse cx="120" cy="158" rx="72" ry="9" fill="#E8EFEF"/>
+  <rect x="56" y="52" width="128" height="88" rx="12" fill="#fff" stroke="#A8E5E1" stroke-width="2.5"/>
+  <path d="M56 66l58 42a10 10 0 0 0 12 0l58-42" fill="none" stroke="#3EC6C0" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="176" cy="52" r="21" fill="#16A46A"/>
+  <path d="M167 52.5l6.5 6.5L186 46" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="52" cy="40" r="4" fill="#FFBB00"/>
+  <circle cx="196" cy="122" r="5" fill="#FB6542" opacity=".7"/>
+</svg>

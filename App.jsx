@@ -2,6 +2,25 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "./supabaseClient.js";
 import AuthGate from "./AuthGate.jsx";
 import { GUIDE_ACTIVITIES } from "./steamGuideActivities.js";
+import CreditsIndicator from "./components/CreditsIndicator.jsx";
+import Landing from "./components/landing/Landing.jsx";
+import AppShell from "./components/layout/AppShell.jsx";
+import Dashboard from "./components/dashboard/Dashboard.jsx";
+import GenerationProgress from "./components/ui/GenerationProgress.jsx";
+import ToolGrid from "./components/create/ToolGrid.jsx";
+import Library, { MATERIAL_TYPES } from "./components/library/Library.jsx";
+import Account from "./components/account/Account.jsx";
+import "./components/account/account.css";
+import "./components/library/library-v2.css";
+import "./components/create/create.css";
+import { TOOLS_BY_ID } from "./config/tools.js";
+import Button from "./components/ui/Button.jsx";
+import { Badge } from "./components/ui/Feedback.jsx";
+import { useUI } from "./components/ui/UIProvider.jsx";
+import "./components/dashboard/dashboard.css";
+import "./components/layout/appshell.css";
+import "./components/landing/landing.css";
+import { PLANS, FREE_WEEKLY_AI_LIMIT, whatsappLink } from "./config/plans.js";
 import "./library.css";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
@@ -60,6 +79,13 @@ import {
   Plus,
   ChevronLeft,
   Quote,
+  Gamepad2,
+  ListChecks,
+  CalendarDays,
+  AlertTriangle,
+  RefreshCw,
+  ArrowLeft,
+  Lock,
 } from "lucide-react";
 
 /* ---------------------------------------------------------------------- */
@@ -123,6 +149,118 @@ async function saveTeacherMaterial({tipo,titulo,form,contenido}) {
   if(error) throw error;
   window.dispatchEvent(new CustomEvent("sciverse:material-created",{detail:{id:data.id}}));
   return data;
+}
+
+/* ---------------------------------------------------------------------- */
+/* GUARDADO DE MATERIALES CON ESTADO VISIBLE                              */
+/*                                                                        */
+/* Antes, cada generador hacía:                                           */
+/*     try { await saveTeacherMaterial(...) } catch(e) { console.error(e) }*/
+/* La docente veía el recurso en pantalla y creía que estaba guardado.    */
+/* Si el guardado fallaba, el material NO aparecía nunca en su biblioteca */
+/* y nadie se lo decía.                                                   */
+/* ---------------------------------------------------------------------- */
+
+/** Traduce un error técnico de Supabase/Postgres a algo accionable. */
+function describeSaveError(error) {
+  const code = error?.code || "";
+  const message = String(error?.message || "");
+
+  if (code === "23514" || /violates check constraint/i.test(message)) {
+    return "Este tipo de material todavía no está habilitado en la base de datos.";
+  }
+  if (code === "23505" || /duplicate key/i.test(message)) {
+    return "Ya existe un material igual en tu biblioteca.";
+  }
+  if (code === "42501" || /row-level security/i.test(message)) {
+    return "No tienes permiso para guardar este material. Vuelve a iniciar sesión.";
+  }
+  if (code === "PGRST301" || /jwt|expired/i.test(message)) {
+    return "Tu sesión venció. Vuelve a iniciar sesión y reintenta.";
+  }
+  if (/fetch|network|failed to fetch/i.test(message)) {
+    return "No hay conexión con el servidor. Revisa tu internet.";
+  }
+  return "No pudimos guardar este material.";
+}
+
+/**
+ * Hook de guardado con estado visible y reintento.
+ *
+ * Devuelve:
+ *   save(payload)  → intenta guardar y recuerda el payload por si hay que reintentar
+ *   retry()        → repite el último intento fallido
+ *   state          → { status: "idle"|"saving"|"saved"|"error", message }
+ */
+function useMaterialSave() {
+  const [state, setState] = useState({ status: "idle", message: "" });
+  const lastPayload = useRef(null);
+
+  const save = useCallback(async (payload) => {
+    lastPayload.current = payload;
+    setState({ status: "saving", message: "" });
+    try {
+      await saveTeacherMaterial(payload);
+      setState({ status: "saved", message: "" });
+      return true;
+    } catch (error) {
+      // El detalle técnico se queda en consola; a la docente le llega algo útil.
+      console.error("[sciverse] fallo al guardar material", error);
+      setState({ status: "error", message: describeSaveError(error) });
+      return false;
+    }
+  }, []);
+
+  const retry = useCallback(async () => {
+    if (!lastPayload.current) return false;
+    return save(lastPayload.current);
+  }, [save]);
+
+  return { state, save, retry };
+}
+
+/**
+ * Indicador de guardado.
+ *
+ * `onDownload` es la salida de emergencia: si el guardado falla, la docente
+ * todavía puede llevarse su trabajo en Word sin gastar otro crédito.
+ */
+function SaveStatus({ state, onRetry, onDownload }) {
+  if (!state || state.status === "idle") return null;
+
+  if (state.status === "saving") {
+    return (
+      <p className="save-status save-status--saving" role="status">
+        <Loader2 size={14} className="animate-spin" /> Guardando en tu biblioteca…
+      </p>
+    );
+  }
+
+  if (state.status === "saved") {
+    return (
+      <p className="save-status save-status--saved" role="status">
+        <CheckCircle2 size={14} /> Guardado en tu biblioteca
+      </p>
+    );
+  }
+
+  return (
+    <div className="save-status save-status--error" role="alert">
+      <p>
+        <AlertTriangle size={14} /> {state.message} <strong>Tu contenido sigue aquí.</strong>
+      </p>
+      <div className="save-status__actions">
+        <button type="button" onClick={onRetry}>
+          <RefreshCw size={13} /> Reintentar guardado
+        </button>
+        {onDownload && (
+          <button type="button" onClick={onDownload}>
+            <Download size={13} /> Descargar ahora
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 async function downloadWord(filename, content, title="Documento SciVerse") {
@@ -882,7 +1020,7 @@ const GENERATOR_CAPACITIES = {
 };
 const PERU_REGIONS = ["Amazonas","Áncash","Apurímac","Arequipa","Ayacucho","Cajamarca","Callao","Cusco","Huancavelica","Huánuco","Ica","Junín","La Libertad","Lambayeque","Lima","Loreto","Madre de Dios","Moquegua","Pasco","Piura","Puno","San Martín","Tacna","Tumbes","Ucayali"];
 
-function SteamGenerator({ initialGrade = "primaria", documentType = "session", profile = {} }) {
+function SteamGenerator({ initialGrade = "primaria", documentType = "session", profile = {}, completeClass = false, onNext = null }) {
   const documentNames = { session: "sesión de aprendizaje", project: "proyecto STEAM", rubric: "rúbrica de evaluación", checklist: "lista de cotejo" };
   const documentName = documentNames[documentType] || documentNames.session;
   const sectionLabels = documentType === "project" ? ["Inicio y reto", "Fases del proyecto", "Cierre y socialización", "Producto final"] : documentType === "rubric" ? ["Aplicación", "Uso de los descriptores", "Retroalimentación", "Evidencia evaluada"] : documentType === "checklist" ? ["Antes de observar", "Durante la observación", "Después de observar", "Evidencia verificada"] : ["Inicio", "Desarrollo", "Cierre", "Producto STEAM"];
@@ -893,6 +1031,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
+  const materialSave = useMaterialSave();
   const [suggesting, setSuggesting] = useState(null);
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [activeModule, setActiveModule] = useState(null);
@@ -986,8 +1125,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
         productoSTEAM: alignment.evidencia,
       };
       setResult(finalResult);
-      try { await saveTeacherMaterial({tipo:documentType,titulo:finalResult.titulo||form.tema,form,contenido:finalResult}); }
-      catch(saveError) { console.error("No se pudo guardar el material",saveError); }
+      await materialSave.save({tipo:documentType,titulo:finalResult.titulo||form.tema,form,contenido:finalResult});
     } catch (e) {
       setError(e.message || `No se pudo generar la ${documentName}. Intenta de nuevo en unos segundos.`);
     } finally {
@@ -1030,9 +1168,9 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
           <label className="wide">Tema o título provisional *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Cuidamos el agua de nuestra comunidad"/></label>
           <label className="wide">Competencia CNEB *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
           <fieldset className="wide capacity-picker"><legend>Capacidades que se movilizarán *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
-          <label className="wide ai-field"><span>Propósito de aprendizaje *</span><button type="button" onClick={()=>suggestField("proposito")} disabled={suggesting==="proposito"}>{suggesting==="proposito"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.proposito} onChange={e=>update("proposito",e.target.value)} placeholder="Qué aprenderán, cómo lo demostrarán y para qué les servirá."/></label>
-          <label className="wide ai-field"><span>Situación significativa o contexto regional *</span><button type="button" onClick={()=>suggestField("contexto")} disabled={suggesting==="contexto"}>{suggesting==="contexto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.contexto} onChange={e=>update("contexto",e.target.value)} placeholder="Describe brevemente a tus estudiantes, su región o el problema que abordarán."/></label>
-          <label className="wide ai-field"><span>Evidencia o producto esperado *</span><button type="button" onClick={()=>suggestField("evidencia")} disabled={suggesting==="evidencia"}>{suggesting==="evidencia"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="¿Qué elaborarán, explicarán o demostrarán al finalizar?"/></label>
+          <div className="wide ai-field"><label htmlFor={`${documentType}-purpose`}>Propósito de aprendizaje *</label><button type="button" onClick={()=>suggestField("proposito")} disabled={suggesting==="proposito"}>{suggesting==="proposito"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea id={`${documentType}-purpose`} value={form.proposito} onChange={e=>update("proposito",e.target.value)} placeholder="Qué aprenderán, cómo lo demostrarán y para qué les servirá."/></div>
+          <div className="wide ai-field"><label htmlFor={`${documentType}-context`}>Situación significativa o contexto regional *</label><button type="button" onClick={()=>suggestField("contexto")} disabled={suggesting==="contexto"}>{suggesting==="contexto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea id={`${documentType}-context`} value={form.contexto} onChange={e=>update("contexto",e.target.value)} placeholder="Describe brevemente a tus estudiantes, su región o el problema que abordarán."/></div>
+          <div className="wide ai-field"><label htmlFor={`${documentType}-evidence`}>Evidencia o producto esperado *</label><button type="button" onClick={()=>suggestField("evidencia")} disabled={suggesting==="evidencia"}>{suggesting==="evidencia"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea id={`${documentType}-evidence`} value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="¿Qué elaborarán, explicarán o demostrarán al finalizar?"/></div>
           <label className="wide">Recursos disponibles<input value={form.recursos} onChange={e=>update("recursos",e.target.value)} placeholder="Ej.: botellas, cartulina, tabletas, materiales de la comunidad"/></label>
         </div>
         <div className="wizard-switches"><label><input type="checkbox" checked={form.steam} onChange={e=>update("steam",e.target.checked)}/><span><strong>Integrar enfoque STEAM</strong><small>Conecta dos o más áreas mediante un reto.</small></span></label><label><input type="checkbox" checked={form.inclusivo} onChange={e=>update("inclusivo",e.target.checked)}/><span><strong>Incluir orientaciones DUA</strong><small>Considera distintas formas de participar y demostrar lo aprendido.</small></span></label></div>
@@ -1046,21 +1184,32 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
       {error&&<p className="wizard-error">{error}</p>}
       <div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":`Generar ${documentName} con IA`}</button>}</div>
 
-      {loading && <div className="kantu-generation-overlay" role="status" aria-live="polite" aria-label="Kantu está generando la sesión">
-        <div className="kantu-working kantu-working--overlay">
-          <div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img src={documentType === "session" ? "/mascot/kantu-session.png" : "/mascot/kantu-material.png"} alt="Kantu trabajando en el recurso educativo"/></div>
-          <div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>{loadingMessages[loadingMessageIndex]}…</h4><p>La sesión aparecerá cuando Kantu termine de revisar cada módulo. No cierres esta ventana.</p><div className="module-generation-status">{Object.entries(moduleLabels).map(([key,label])=><span key={key} className={completedModules.includes(key)?"done":activeModule===key?"active":""}>{completedModules.includes(key)?<CheckCircle2 size={13}/>:activeModule===key?<Loader2 size={13} className="animate-spin"/>:<i/>}{label}</span>)}</div></div>
+      {loading && (
+        <div className="kantu-generation-overlay">
+          {/* Los pasos son REALES: activeModule y completedModules ya los
+              reporta el generador. No se inventan porcentajes ni tiempos. */}
+          <GenerationProgress
+            steps={["alignment", "sequence", "assessment", "annexes"]}
+            labels={moduleLabels}
+            active={activeModule}
+            completed={completedModules}
+            title={`Kantu está creando tu ${documentName}`}
+            subtitle="Suele tomar entre uno y dos minutos. Puedes quedarte en esta pantalla."
+            tip="los criterios de evaluación deben empezar con un verbo observable para poder verificarse en la evidencia."
+          />
         </div>
-      </div>}
+      )}
 
+      {result && completeClass && <div className="flow-actionbar session-flow-toolbar"><button onClick={()=>setResult(null)}><Pencil size={15}/> Editar</button><button onClick={handleDownloadSession} disabled={downloading}>{downloading?<Loader2 size={15} className="animate-spin"/>:<Download size={15}/>} Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form:{...form},result})}>Siguiente <ArrowRight size={16}/></button></div>}
       {result && (
         <div className="mt-6 rounded-xl p-5" style={{ background: "rgba(15,61,58,0.03)", border: `1px solid ${C.line}` }}>
           <h4 className="text-lg font-semibold mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
             {result.titulo}
           </h4>
+          <SaveStatus state={materialSave.state} onRetry={materialSave.retry} onDownload={handleDownloadSession} />
           <div className="flex flex-wrap gap-1.5 mb-4">
             {(result.areasSTEAM || []).map((a, i) => (
-              <span key={i} className="text-[11px] font-semibold px-2 py-1 rounded-full" style={{ background: "rgba(62,198,192,0.12)", color: C.teal, border: `1px solid rgba(62,198,192,0.3)` }}>
+              <span key={i} className="text-xs font-semibold px-2 py-1 rounded-full" style={{ background: "rgba(62,198,192,0.12)", color: C.teal, border: `1px solid rgba(62,198,192,0.3)` }}>
                 {a}
               </span>
             ))}
@@ -1122,7 +1271,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
           >
             {downloading?<Loader2 size={14} className="animate-spin"/>:<Download size={14} />} {downloading?"Preparando Word...":`Descargar ${documentName} en Word`}
           </button>
-          {!evaluationFlow&&<button onClick={()=>setEvaluationFlow("choose")} className="session-next-step"><span><ClipboardList size={18}/><i><strong>Siguiente paso</strong><small>Crear el instrumento con los criterios y la evidencia de esta sesión</small></i></span>Continuar con evaluación <ArrowRight size={16}/></button>}
+          {!completeClass&&!evaluationFlow&&<button onClick={()=>setEvaluationFlow("choose")} className="session-next-step"><span><ClipboardList size={18}/><i><strong>Siguiente paso</strong><small>Crear el instrumento con los criterios y la evidencia de esta sesión</small></i></span>Continuar con evaluación <ArrowRight size={16}/></button>}
           {evaluationFlow==="choose"&&<div className="evaluation-flow-picker"><div className="evaluation-flow-head"><div><small>PASO 3 DE 4</small><h3>Instrumento de evaluación</h3><p>El contexto de la sesión ya está cargado. Elige el instrumento que utilizarás.</p></div><button onClick={()=>setEvaluationFlow(null)}>Cerrar</button></div><div className="evaluation-type-grid">
             <button className="available" onClick={()=>setEvaluationFlow("rubric")}><span><ClipboardList size={22}/></span><strong>Rúbrica analítica</strong><small>Sugerida para valorar niveles de logro</small><b>Crear rúbrica <ArrowRight size={14}/></b></button>
             <button className="available" onClick={()=>setEvaluationFlow("checklist")}><span><CheckCircle2 size={22}/></span><strong>Lista de cotejo</strong><small>Verificación rápida con Sí, No y observaciones</small><b>Crear lista <ArrowRight size={14}/></b></button>
@@ -1136,13 +1285,14 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
   );
 }
 
-function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentType = "checklist", initialContext = null, profile = {} }) {
+function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentType = "checklist", initialContext = null, profile = {}, completeClass = false, onNext = null }) {
   const isRubric = instrumentType === "rubric";
   const instrumentName = isRubric ? "rúbrica" : "lista de cotejo";
   const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
   const [step, setStep] = useState(initialContext ? 3 : 1);
   const [form, setForm] = useState(initialContext || { nivel: initialLevel, grado: initialLevel === "Primaria" ? "3.º" : "1.º", area: "Ciencia y Tecnología", region: "", tema: "", competencia: CNEB.indaga, capacidades: GENERATOR_CAPACITIES[CNEB.indaga], evidencia: "", numeroCriterios: "6" });
   const [instrument, setInstrument] = useState(null);
+  const instrumentSave = useMaterialSave();
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -1176,7 +1326,7 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
       if(!response.ok) throw new Error(data.error||`No se pudo generar la ${instrumentName}`);
       if(!data.instrument) throw new Error("El instrumento no llegó completo. Intenta nuevamente.");
       setInstrument(data.instrument); setEditing(false);
-      try { await saveTeacherMaterial({tipo:instrumentType,titulo:data.instrument.titulo||form.tema,form,contenido:data.instrument}); }
+      try { await instrumentSave.save({tipo:instrumentType,titulo:data.instrument.titulo||form.tema,form,contenido:data.instrument}); }
       catch(saveError) { console.error("No se pudo guardar el instrumento",saveError); }
     } catch(e){setError(e.message);} finally{setLoading(false);}
   }
@@ -1201,8 +1351,8 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
     {step===3&&!instrument&&<div className="wizard-card instrument-review"><div className="wizard-card__title"><span><ClipboardList size={18}/></span><div><h4>{initialContext?"Contexto recuperado de la sesión":"Revisa el contexto"}</h4><p>{initialContext?"Kantu utilizará la competencia, capacidades, criterios y evidencia ya generados.":"Puedes volver y editar cualquier dato antes de generar."}</p></div></div><div className="context-summary"><div><small>Contexto</small><strong>{form.area} · {form.grado} · {form.region}</strong><p>{form.tema}</p></div>{!initialContext&&<button onClick={()=>setStep(1)}>Editar contexto</button>}</div><div className="context-summary"><div><small>Evidencia</small><p>{form.evidencia}</p></div>{!initialContext&&<button onClick={()=>setStep(2)}>Editar evidencia</button>}</div></div>}
     {error&&<p className="wizard-error">{error}</p>}
     {!instrument&&<div className="wizard-actions">{step>1&&!initialContext&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<3?<button className="wizard-next" onClick={continueFlow}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={generateInstrument} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está trabajando...":`Generar ${instrumentName}`}</button>}</div>}
-    {loading&&<div className="kantu-working"><div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img src="/mascot/kantu-material.png" alt="Kantu creando el instrumento"/></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Está construyendo criterios observables y alineados…</h4><p>Está revisando la competencia, las capacidades y la evidencia de aprendizaje.</p><div className="kantu-progress"><i/><i/><i/></div></div></div>}
-    {instrument&&<div className="instrument-result"><div className="instrument-result__actions"><div><small>INSTRUMENTO GENERADO</small><h3>{instrument.titulo}</h3></div><div><button onClick={()=>setEditing(!editing)}><Pencil size={14}/>{editing?"Terminar edición":"Editar"}</button><button onClick={generateInstrument}><RotateCw size={14}/>Regenerar</button><button className="primary" onClick={downloadInstrument}><Download size={14}/>Word</button></div></div><div className="instrument-meta"><strong>Competencia evaluada</strong><p>{instrument.competencia}</p><strong>Capacidades</strong><ul>{instrument.capacidades.map((item,index)=><li key={index}>{item}</li>)}</ul><strong>Evidencia de aprendizaje</strong>{editing?<textarea value={instrument.evidencia} onChange={e=>setInstrument(current=>({...current,evidencia:e.target.value}))}/>:<p>{instrument.evidencia}</p>}</div><div className="instrument-table-wrap"><table className={isRubric?"rubric-table":"checklist-table"}><thead><tr><th>N.º</th><th>Criterio de evaluación</th>{isRubric?<><th>Inicio</th><th>En proceso</th><th>Logro esperado</th><th>Logro destacado</th></>:<><th>Sí</th><th>No</th><th>Observaciones</th></>}</tr></thead><tbody>{instrument.criterios.map((item,index)=><tr key={index}><td>{index+1}</td><td>{editing?<textarea value={item.criterio} onChange={e=>updateCriterion(index,"criterio",e.target.value)}/>:<><small>{item.capacidad}</small>{item.criterio}</>}</td>{isRubric?<>{["inicio","enProceso","logroEsperado","logroDestacado"].map(key=><td key={key}>{editing?<textarea value={item[key]} onChange={e=>updateCriterion(index,key,e.target.value)}/>:item[key]}</td>)}</>:<><td><i className="empty-check"/></td><td><i className="empty-check"/></td><td><span className="observation-line"/></td></>}</tr>)}</tbody></table></div></div>}
+    {loading&&<div className="kantu-working"><div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu creando el instrumento"/></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Está construyendo criterios observables y alineados…</h4><p>Está revisando la competencia, las capacidades y la evidencia de aprendizaje.</p><div className="kantu-progress"><i/><i/><i/></div></div></div>}
+    {instrument&&<div className="instrument-result"><div className="instrument-result__actions"><div><small>INSTRUMENTO GENERADO</small><h3>{instrument.titulo}</h3></div><div><button onClick={()=>setEditing(!editing)}><Pencil size={14}/>{editing?"Terminar edición":"Editar"}</button><button onClick={generateInstrument}><RotateCw size={14}/>Regenerar</button><button className="primary" onClick={downloadInstrument}><Download size={14}/>Word</button>{completeClass&&<><button onClick={()=>window.print()}><Printer size={14}/>PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form:{...form},instrument})}>Siguiente <ArrowRight size={15}/></button></>}</div></div><SaveStatus state={instrumentSave.state} onRetry={instrumentSave.retry} onDownload={downloadInstrument} /><div className="instrument-meta"><strong>Competencia evaluada</strong><p>{instrument.competencia}</p><strong>Capacidades</strong><ul>{instrument.capacidades.map((item,index)=><li key={index}>{item}</li>)}</ul><strong>Evidencia de aprendizaje</strong>{editing?<textarea value={instrument.evidencia} onChange={e=>setInstrument(current=>({...current,evidencia:e.target.value}))}/>:<p>{instrument.evidencia}</p>}</div><div className="instrument-table-wrap"><table className={isRubric?"rubric-table":"checklist-table"}><thead><tr><th>N.º</th><th>Criterio de evaluación</th>{isRubric?<><th>Inicio</th><th>En proceso</th><th>Logro esperado</th><th>Logro destacado</th></>:<><th>Sí</th><th>No</th><th>Observaciones</th></>}</tr></thead><tbody>{instrument.criterios.map((item,index)=><tr key={index}><td>{index+1}</td><td>{editing?<textarea value={item.criterio} onChange={e=>updateCriterion(index,"criterio",e.target.value)}/>:<><small>{item.capacidad}</small>{item.criterio}</>}</td>{isRubric?<>{["inicio","enProceso","logroEsperado","logroDestacado"].map(key=><td key={key}>{editing?<textarea value={item[key]} onChange={e=>updateCriterion(index,key,e.target.value)}/>:item[key]}</td>)}</>:<><td><i className="empty-check"/></td><td><i className="empty-check"/></td><td><span className="observation-line"/></td></>}</tr>)}</tbody></table></div></div>}
   </div>;
 }
 
@@ -2331,82 +2481,504 @@ function EvaluationSheetGenerator({ initialGrade = "primaria", profile = {} }) {
   );
 }
 
-function CreateStudio({ preferredGrade = "primaria", profile = {} }) {
-  const [creation, setCreation] = useState(null);
-  const creationSections = {
-    planificacion: {
-      title: "Planificación",
-      items: [
-        { id: "session", label: "Sesión de aprendizaje", desc: "Planificación completa con propósito, criterios, evidencia y secuencia didáctica.", icon: BookOpen, tone: "teal" },
-        { id: "project", label: "Proyecto STEAM", desc: "Reto, producto final, fases, recursos y evaluación para aprender creando.", icon: Cog, tone: "coral" },
-        { id: "unit", label: "Unidad de aprendizaje", desc: "Organización secuencial de sesiones articuladas en torno a una situación significativa.", icon: Layers, tone: "violet" },
-        { id: "worksheet", label: "Ficha de trabajo", desc: "Actividades prácticas y ejercicios para que los estudiantes desarrollen en clase o en casa.", icon: FileText, tone: "yellow" },
-        { id: "reading", label: "Generador de lecturas", desc: "Crea textos educativos y materiales de lectura adaptados al nivel y tema requerido.", icon: BookOpen, tone: "amber" },
-      ]
-    },
-    evaluacion: {
-      title: "Evaluación",
-      items: [
-        { id: "evalsheet", label: "Ficha de evaluación", desc: "Registro de observaciones y desempeños para seguimiento continuo del aprendizaje.", icon: FileText, tone: "teal" },
-        { id: "rubric", label: "Rúbrica de evaluación", desc: "Criterios observables y niveles de logro alineados a las capacidades.", icon: ClipboardList, tone: "violet" },
-        { id: "checklist", label: "Lista de cotejo", desc: "Indicadores claros y verificables para registrar Sí, No o En proceso.", icon: CheckCircle2, tone: "yellow" },
-      ]
-    },
-    ludicas: {
-      title: "Actividades lúdicas",
-      items: [
-        { id: "wordsearch", label: "Generador de sopa de letras", desc: "Crea juegos de palabras escondidas para repasar vocabulario y conceptos clave.", icon: Search, tone: "yellow" },
-        { id: "crossword", label: "Generador de crucigramas", desc: "Diseña crucigramas personalizados para afianzar conocimientos de forma divertida.", icon: Layers, tone: "coral" },
-      ]
-    },
-  };
 
-  const allItems = Object.values(creationSections).flatMap(s => s.items);
-  const selectedType = allItems.find((item) => item.id === creation);
+function getTeacherFullName(profile={}) {
+  return [profile.nombres, profile.apellidos].filter(Boolean).join(" ").trim() || "Docente";
+}
+
+function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
+  const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
+  const [step,setStep]=useState(1);
+  const [form,setForm]=useState({
+    nivel:initialLevel,
+    grado:initialLevel==="Primaria"?"4.º":"2.º",
+    seccion:"",
+    region:"",
+    duracionSemanas:"2",
+    tema:"",
+    situacion:"",
+    reto:"",
+    areasSTEAM:["Ciencia","Tecnología","Ingeniería","Arte","Matemática"],
+    areaCurricular:"Ciencia y Tecnología",
+    competencia:CNEB.disena,
+    capacidades:GENERATOR_CAPACITIES[CNEB.disena],
+    producto:"",
+    evidencias:"",
+    recursos:"",
+  });
+  const [loading,setLoading]=useState(false);
+  const [result,setResult]=useState(null);
+  const [error,setError]=useState("");
+  const [suggesting,setSuggesting]=useState("");
+
+  const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
+  const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
+  function changeLevel(nivel){setForm(prev=>({...prev,nivel,grado:"1.º"}));}
+  function changeArea(areaCurricular){
+    const competencia=GENERATOR_COMPETENCIES[areaCurricular][0];
+    setForm(prev=>({...prev,areaCurricular,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));
+  }
+  function changeCompetence(competencia){setForm(prev=>({...prev,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
+  function toggleSteamArea(area){setForm(prev=>({...prev,areasSTEAM:prev.areasSTEAM.includes(area)?prev.areasSTEAM.filter(x=>x!==area):[...prev.areasSTEAM,area]}));}
+  function toggleCapacity(cap){setForm(prev=>({...prev,capacidades:prev.capacidades.includes(cap)?prev.capacidades.filter(x=>x!==cap):[...prev.capacidades,cap]}));}
+
+  async function suggest(field){
+    if(!form.tema.trim()) return setError("Escribe primero un tema o idea para el proyecto.");
+    setSuggesting(field);setError("");
+    try{
+      const {data:{session}}=await supabase.auth.getSession();
+      const response=await fetch("/api/generate-project-steam",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"suggestion",field,form})});
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.error||"No se pudo generar la sugerencia.");
+      update(field,data.suggestion);
+    }catch(e){setError(e.message);}finally{setSuggesting("");}
+  }
+
+  function next(){
+    setError("");
+    if(step===1&&(!form.nivel||!form.grado||!form.region||!form.duracionSemanas)) return setError("Completa nivel, grado, región y duración.");
+    if(step===2&&(!form.tema.trim()||!form.situacion.trim()||form.areasSTEAM.length<2||!form.competencia||!form.capacidades.length)) return setError("Completa el tema, la situación significativa y selecciona al menos dos áreas STEAM.");
+    if(step===3&&(!form.producto.trim()||!form.evidencias.trim())) return setError("Completa el producto esperado y las evidencias.");
+    setStep(s=>Math.min(4,s+1));
+  }
+
+  async function generate(){
+    setLoading(true);setError("");setResult(null);
+    try{
+      const {data:{session}}=await supabase.auth.getSession();
+      const response=await fetch("/api/generate-project-steam",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"generate",form,profile:{nombres:profile.nombres,apellidos:profile.apellidos,ie:profile.ie}})});
+      const data=await response.json();
+      if(!response.ok) throw new Error(data.error||"No se pudo generar el proyecto STEAM.");
+      setResult(data.project);
+      try{
+        await saveTeacherMaterial({
+          tipo:"project",
+          titulo:data.project.titulo||form.tema,
+          form:{...form,area:form.areaCurricular,tema:form.tema},
+          contenido:data.project
+        });
+      }catch(saveError){console.error(saveError);}
+    }catch(e){setError(e.message);}finally{setLoading(false);}
+  }
+
+  async function downloadProject(){
+    if(!result)return;
+    const teacher=getTeacherFullName(profile);
+    const weeks=(result.rutaSemanas||[]).map((w,i)=>`SEMANA ${i+1}: ${w.titulo}\n${w.proposito}\nActividades: ${(w.actividades||[]).join(" | ")}\nEvidencia: ${w.evidencia}`).join("\n\n");
+    const sessions=(result.sesiones||[]).map((s,i)=>`${i+1}. ${s.titulo}\nCompetencia: ${s.competencia}\nActividad central: ${s.actividadCentral}\nEvidencia: ${s.evidencia}\nCriterios: ${(s.criterios||[]).join(" | ")}\nInstrumento: ${s.instrumento}`).join("\n\n");
+    const text=`PROYECTO STEAM
+
+I. DATOS INFORMATIVOS
+Docente: ${teacher}
+I.E.: ${profile.ie||""}
+Región: ${form.region}
+Nivel: ${form.nivel}
+Grado y sección: ${form.grado}${form.seccion?` - ${form.seccion}`:""}
+Duración: ${form.duracionSemanas} semana(s)
+
+II. TÍTULO
+${result.titulo}
+
+III. SITUACIÓN SIGNIFICATIVA
+${result.situacionSignificativa}
+
+IV. RETO O PREGUNTA GUÍA
+${result.reto}
+
+V. INTEGRACIÓN STEAM
+${(result.integracionSTEAM||[]).map(x=>`${x.area}: ${x.aporte}`).join("\n")}
+
+VI. COMPETENCIAS CNEB
+${(result.competencias||[]).map(x=>`${x.area}: ${x.competencia}`).join("\n")}
+
+VII. PRODUCTO ESPERADO
+${result.productoEsperado}
+
+VIII. EVIDENCIAS
+${(result.evidencias||[]).map(x=>`• ${x}`).join("\n")}
+
+IX. RUTA DEL PROYECTO POR SEMANAS
+${weeks}
+
+X. SESIONES DEL PROYECTO
+${sessions}`;
+    await downloadWord(`proyecto-steam-${(result.titulo||"proyecto").toLowerCase().replace(/[^a-z0-9]+/gi,"-")}.docx`,text,result.titulo);
+  }
+
+  return <div className="project-steam-v2">
+    <div className="project-teacher-card">
+      <div className="project-avatar">{(profile.nombres?.[0]||"D").toUpperCase()}</div>
+      <div><small>DATOS TOMADOS DE TU CUENTA</small><strong>{getTeacherFullName(profile)}</strong><p>{profile.ie||"Institución educativa no registrada"}</p></div>
+      <CheckCircle2 size={20}/>
+    </div>
+
+    <div className="instrument-steps project-steps">
+      {["Datos del proyecto","Situación y CNEB","Producto y evidencias","Revisión"].map((label,index)=><div key={label} className={step>=index+1?"active":""}><b>{step>index+1?<CheckCircle2 size={14}/>:index+1}</b><span>{label}</span></div>)}
+    </div>
+
+    {step===1&&<div className="wizard-card">
+      <div className="wizard-card__title"><span><School size={18}/></span><div><h4>Datos del proyecto</h4><p>Define a quién va dirigido y cuánto tiempo durará.</p></div></div>
+      <div className="wizard-fields">
+        <label>Nivel educativo *<select value={form.nivel} onChange={e=>changeLevel(e.target.value)}><option>Primaria</option><option>Secundaria</option></select></label>
+        <label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
+        <label>Sección<input value={form.seccion} onChange={e=>update("seccion",e.target.value)} placeholder="Ej.: A, B o Única"/></label>
+        <label>Duración *<select value={form.duracionSemanas} onChange={e=>update("duracionSemanas",e.target.value)}>{[1,2,3,4].map(n=><option key={n} value={n}>{n} {n===1?"semana":"semanas"}</option>)}</select></label>
+        <label className="wide">Región *<select value={form.region} onChange={e=>update("region",e.target.value)}><option value="">Selecciona una región</option>{PERU_REGIONS.map(r=><option key={r}>{r}</option>)}</select></label>
+      </div>
+    </div>}
+
+    {step===2&&<div className="wizard-card">
+      <div className="wizard-card__title"><span><Sparkles size={18}/></span><div><h4>Situación significativa e integración STEAM</h4><p>Cuéntale a Kantu qué problema o necesidad abordarán.</p></div></div>
+      <div className="wizard-fields">
+        <label className="wide">Tema o título provisional *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Guardianes del agua"/></label>
+        <label className="wide ai-field"><span>Situación significativa *</span><button type="button" onClick={()=>suggest("situacion")} disabled={suggesting==="situacion"}>{suggesting==="situacion"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.situacion} onChange={e=>update("situacion",e.target.value)} placeholder="Describe brevemente el problema, necesidad o situación de la escuela o comunidad."/></label>
+        <label className="wide ai-field"><span>Reto o pregunta guía</span><button type="button" onClick={()=>suggest("reto")} disabled={suggesting==="reto"}>{suggesting==="reto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><input value={form.reto} onChange={e=>update("reto",e.target.value)} placeholder="Ej.: ¿Cómo podríamos reducir el desperdicio de agua en nuestra escuela?"/></label>
+        <fieldset className="wide steam-area-picker"><legend>¿Qué áreas STEAM intervienen? * <small>Selecciona al menos 2</small></legend>{["Ciencia","Tecnología","Ingeniería","Arte","Matemática"].map(area=><label key={area} className={form.areasSTEAM.includes(area)?"selected":""}><input type="checkbox" checked={form.areasSTEAM.includes(area)} onChange={()=>toggleSteamArea(area)}/><span>{area}</span></label>)}</fieldset>
+        <label className="wide">Área curricular principal *<select value={form.areaCurricular} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+        <label className="wide">Competencia CNEB principal *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.areaCurricular].map(c=><option key={c}>{c}</option>)}</select></label>
+        <fieldset className="wide capacity-picker"><legend>Capacidades que se movilizarán *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
+      </div>
+    </div>}
+
+    {step===3&&<div className="wizard-card">
+      <div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Producto y evidencias</h4><p>Define qué construirán o presentarán los estudiantes.</p></div></div>
+      <div className="wizard-fields">
+        <label className="wide ai-field"><span>Producto esperado *</span><button type="button" onClick={()=>suggest("producto")} disabled={suggesting==="producto"}>{suggesting==="producto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.producto} onChange={e=>update("producto",e.target.value)} placeholder="Ej.: prototipo de un sistema sencillo para reutilizar agua."/></label>
+        <label className="wide ai-field"><span>Evidencias del proyecto *</span><button type="button" onClick={()=>suggest("evidencias")} disabled={suggesting==="evidencias"}>{suggesting==="evidencias"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.evidencias} onChange={e=>update("evidencias",e.target.value)} placeholder="Ej.: boceto, registro de pruebas, prototipo y exposición final."/></label>
+        <label className="wide">Recursos disponibles<input value={form.recursos} onChange={e=>update("recursos",e.target.value)} placeholder="Ej.: material reciclado, cartulina, tabletas, botellas"/></label>
+      </div>
+    </div>}
+
+    {step===4&&!result&&<div className="wizard-card wizard-review">
+      <div className="wizard-card__title"><span><ClipboardList size={18}/></span><div><h4>Revisa antes de crear</h4><p>Kantu organizará el proyecto en {form.duracionSemanas} semana(s), nunca más de cuatro.</p></div></div>
+      <div className="review-grid">
+        <div><small>Docente</small><strong>{getTeacherFullName(profile)}</strong></div>
+        <div><small>I.E.</small><strong>{profile.ie||"—"}</strong></div>
+        <div><small>Nivel y grado</small><strong>{form.nivel} · {form.grado} {form.seccion}</strong></div>
+        <div><small>Duración</small><strong>{form.duracionSemanas} semana(s)</strong></div>
+        <div className="wide"><small>Situación significativa</small><p>{form.situacion}</p></div>
+        <div className="wide"><small>Áreas STEAM</small><p>{form.areasSTEAM.join(" · ")}</p></div>
+        <div className="wide"><small>Producto</small><p>{form.producto}</p></div>
+      </div>
+    </div>}
+
+    {error&&<p className="wizard-error">{error}</p>}
+    {!result&&<div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<4?<button className="wizard-next" onClick={next}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar proyecto STEAM"}</button>}</div>}
+
+    {loading&&<div className="kantu-working"><div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu creando el proyecto"/></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando el proyecto por semanas…</h4><p>Relaciono la situación significativa, las áreas STEAM, las competencias y el producto final.</p><div className="kantu-progress"><i/><i/><i/></div></div></div>}
+
+    {result&&<div className="project-result-v2">
+      <header><div><small>PROYECTO STEAM GENERADO</small><h2>{result.titulo}</h2><p>{form.nivel} · {form.grado} · {form.duracionSemanas} semana(s)</p></div><button onClick={downloadProject}><Download size={16}/> Descargar Word</button></header>
+      <div className="steam-result-tags">{form.areasSTEAM.map(a=><span key={a}>{a}</span>)}</div>
+      <details open><summary>01 · Situación significativa</summary><p>{result.situacionSignificativa}</p></details>
+      <details open><summary>02 · Reto del proyecto</summary><p>{result.reto}</p></details>
+      <details><summary>03 · Integración STEAM</summary>{(result.integracionSTEAM||[]).map((x,i)=><div className="project-list-row" key={i}><strong>{x.area}</strong><p>{x.aporte}</p></div>)}</details>
+      <details><summary>04 · Competencias CNEB</summary>{(result.competencias||[]).map((x,i)=><div className="project-list-row" key={i}><strong>{x.area}</strong><p>{x.competencia}</p></div>)}</details>
+      <details><summary>05 · Producto y evidencias</summary><p><strong>Producto:</strong> {result.productoEsperado}</p><ul>{(result.evidencias||[]).map((e,i)=><li key={i}>{e}</li>)}</ul></details>
+      <details open><summary>06 · Ruta de {form.duracionSemanas} semana(s)</summary><div className="project-week-grid">{(result.rutaSemanas||[]).map((w,i)=><article key={i}><small>SEMANA {i+1}</small><h4>{w.titulo}</h4><p>{w.proposito}</p><ul>{(w.actividades||[]).map((a,j)=><li key={j}>{a}</li>)}</ul><strong>Evidencia</strong><p>{w.evidencia}</p></article>)}</div></details>
+      <details><summary>07 · Sesiones del proyecto</summary><div className="project-session-list">{(result.sesiones||[]).map((s,i)=><article key={i}><span>{i+1}</span><div><h4>{s.titulo}</h4><p><strong>Competencia:</strong> {s.competencia}</p><p>{s.actividadCentral}</p><p><strong>Evidencia:</strong> {s.evidencia}</p><p><strong>Instrumento:</strong> {s.instrumento}</p></div></article>)}</div></details>
+    </div>}
+  </div>;
+}
+
+function ResourceFromAI({ kind, initialGrade="primaria", profile={} }) {
+  const isReading=kind==="reading";
+  const [form,setForm]=useState({nivel:initialGrade==="secundaria"?"Secundaria":"Primaria",grado:initialGrade==="secundaria"?"2.º":"4.º",area:isReading?"Comunicación":"Ciencia y Tecnología",tema:"",proposito:"",contexto:""});
+  const [loading,setLoading]=useState(false);const [resource,setResource]=useState(null);const [error,setError]=useState("");
+  const resourceSave = useMaterialSave();
+  const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
+  const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
+  async function generate(){
+    if(!form.tema.trim())return setError("Escribe el tema del material.");
+    setLoading(true);setError("");setResource(null);
+    try{
+      const {data:{session}}=await supabase.auth.getSession();
+      const type=isReading?"reading":"worksheet";
+      const response=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({type,form:{...form,competencia:"",capacidades:[],evidencia:"",region:""},options:{readingLength:"media"}})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo generar el material.");
+      setResource(data.resource);
+      await resourceSave.save({tipo:type,titulo:data.resource.titulo||form.tema,form:{...form,tema:form.tema},contenido:data.resource});
+    }catch(e){setError(e.message);}finally{setLoading(false);}
+  }
+  function resourceText(){
+    if(isReading){
+      const grouped={literal:[],inferencial:[],critico:[]};(resource.preguntas||[]).forEach(q=>(grouped[q.nivel]||grouped.critico).push(q.pregunta));
+      return `FICHA DE LECTURA
+
+Nombre y apellidos: ______________________________
+Institución educativa: ____________________________
+Grado y sección: __________________  Fecha: _______
+Área / curso: ${form.area}
+
+Título del texto: ${resource.titulo}
+Autor(a) / fuente: Texto original generado con Kantu
+
+TEXTO DE LECTURA
+${resource.texto}
+
+NIVEL LITERAL
+${grouped.literal.map((q,i)=>`${i+1}. ${q}\n__________________________________________________`).join("\n")}
+
+NIVEL INFERENCIAL
+${grouped.inferencial.map((q,i)=>`${i+1}. ${q}\n__________________________________________________`).join("\n")}
+
+NIVEL CRÍTICO
+${grouped.critico.map((q,i)=>`${i+1}. ${q}\n__________________________________________________`).join("\n")}
+
+NIVEL REFLEXIVO
+1. ¿Cómo relacionas lo leído con una experiencia de tu vida?
+__________________________________________________
+2. ¿Qué enseñanza del texto podrías aplicar en tu entorno?
+__________________________________________________`;
+    }
+    const questions=(resource.secciones||[]).flatMap(s=>(s.actividades||[]).filter(a=>["pregunta","respuesta_larga"].includes(a.tipo)).map(a=>a.texto)).slice(0,8);
+    return `FICHA DE TRABAJO · PREGUNTAS Y RESPUESTAS
+
+Nombre y apellidos: ______________________________
+Institución educativa: ____________________________
+Grado y sección: __________________  Área / tema: ${form.area} / ${form.tema}
+Fecha: ____ / ____ / ____
+
+Instrucciones: Lee cada pregunta con atención y responde de forma clara y completa.
+
+${Array.from({length:8},(_,i)=>`${String(i+1).padStart(2,"0")} ${questions[i]||`Pregunta sobre ${form.tema}`}\n__________________________________________________\n__________________________________________________`).join("\n\n")}`;
+  }
+  return <div className="resource-ai-v2">
+    {!resource?<div className="wizard-card"><div className="wizard-card__title"><span>{isReading?<BookOpen size={18}/>:<FileText size={18}/>}</span><div><h4>{isReading?"Ficha de lectura":"Ficha de trabajo"}</h4><p>{isReading?"Genera una lectura original con preguntas por niveles de comprensión.":"Genera una ficha de preguntas y respuestas lista para tus estudiantes."}</p></div></div><div className="wizard-fields">
+      <label>Nivel *<select value={form.nivel} onChange={e=>setForm(prev=>({...prev,nivel:e.target.value,grado:"1.º"}))}><option>Primaria</option><option>Secundaria</option></select></label>
+      <label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
+      <label className="wide">Área curricular *<select value={form.area} onChange={e=>update("area",e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+      <label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder={isReading?"Ej.: Las festividades de mi comunidad":"Ej.: El ciclo del agua"}/></label>
+      <label className="wide">Contexto o indicación adicional<textarea value={form.contexto} onChange={e=>update("contexto",e.target.value)} placeholder="Opcional: contexto rural, festividad, situación del aula..."/></label>
+    </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar con Kantu"}</button></div></div>
+    :<div className="instrument-result"><div className="instrument-result__actions"><div><small>{isReading?"FICHA DE LECTURA":"FICHA DE TRABAJO"}</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadWord(`${isReading?"ficha-lectura":"ficha-trabajo"}.docx`,resourceText(),resource.titulo)}><Download size={14}/> Word</button></div></div><SaveStatus state={resourceSave.state} onRetry={resourceSave.retry} onDownload={()=>downloadWord(`${isReading?"ficha-lectura":"ficha-trabajo"}.docx`,resourceText(),resource.titulo)} /><pre className="resource-document-preview">{resourceText()}</pre></div>}
+  </div>;
+}
+
+function ValuationScaleGenerator({initialGrade="primaria",profile={}}){
+  const initialLevel=initialGrade==="secundaria"?"Secundaria":"Primaria";
+  const [form,setForm]=useState({nivel:initialLevel,grado:initialLevel==="Primaria"?"4.º":"2.º",area:"Ciencia y Tecnología",tema:"",competencia:CNEB.indaga,capacidades:GENERATOR_CAPACITIES[CNEB.indaga],evidencia:"",region:""});
+  const [resource,setResource]=useState(null);const[loading,setLoading]=useState(false);const[error,setError]=useState("");
+  const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
+  const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
+  function changeArea(area){const competencia=GENERATOR_COMPETENCIES[area][0];setForm(prev=>({...prev,area,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
+  function changeCompetence(competencia){setForm(prev=>({...prev,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
+  async function generate(){
+    if(!form.tema.trim()||!form.region||!form.evidencia.trim())return setError("Completa tema, región y evidencia.");
+    setLoading(true);setError("");
+    try{
+      const {data:{session}}=await supabase.auth.getSession();
+      const response=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({type:"rating_scale",form,options:{numeroCriterios:2,scaleType:"frecuencia"}})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo generar la escala.");setResource(data.resource);
+      try{await saveTeacherMaterial({tipo:"rating_scale",titulo:data.resource.titulo||form.tema,form,contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.");}
+    }catch(e){setError(e.message);}finally{setLoading(false);}
+  }
+  function text(){
+    const c=(resource.criterios||[]).slice(0,2);
+    return `ESCALA DE VALORACIÓN · REGISTRO DE AULA
+
+Institución educativa / Docente: ${profile.ie||""} / ${getTeacherFullName(profile)}
+Grado y sección: ${form.grado} __________________
+Área: ${form.area}
+Competencia: ${form.competencia}
+
+Escala: SIEMPRE · A VECES · NO LO HACE · NO OBSERVADO
+
+CRITERIO 1
+${c[0]?.criterio||""}
+
+CRITERIO 2
+${c[1]?.criterio||""}
+
+N.º | APELLIDOS Y NOMBRES | SIEMPRE | A VECES | NO LO HACE | NO OBSERVADO | SIEMPRE | A VECES | NO LO HACE | NO OBSERVADO
+${Array.from({length:25},(_,i)=>`${i+1}. | ______________________________ | ___ | ___ | ___ | ___ | ___ | ___ | ___ | ___`).join("\n")}`;
+  }
+  return <div>{!resource?<div className="wizard-card"><div className="wizard-card__title"><span><ListChecks size={18}/></span><div><h4>Escala de valoración</h4><p>Genera criterios observables para el registro de aula.</p></div></div><div className="wizard-fields">
+    <label>Nivel<select value={form.nivel} onChange={e=>setForm(prev=>({...prev,nivel:e.target.value,grado:"1.º"}))}><option>Primaria</option><option>Secundaria</option></select></label>
+    <label>Grado<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
+    <label className="wide">Región *<select value={form.region} onChange={e=>update("region",e.target.value)}><option value="">Selecciona una región</option>{PERU_REGIONS.map(r=><option key={r}>{r}</option>)}</select></label>
+    <label className="wide">Área<select value={form.area} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+    <label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)}/></label>
+    <label className="wide">Competencia<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
+    <label className="wide">Evidencia *<textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)}/></label>
+  </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} Generar escala</button></div></div>:<div className="instrument-result"><div className="instrument-result__actions"><div><small>ESCALA DE VALORACIÓN</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadWord("escala-de-valoracion.docx",text(),resource.titulo)}><Download size={14}/> Word</button></div></div><pre className="resource-document-preview">{text()}</pre></div>}</div>;
+}
+
+
+function FlowChoiceCard({icon:Icon,title,description,onClick,accent="teal"}){
+  return <button type="button" className={`flow-choice-card ${accent}`} onClick={onClick}>
+    <span><Icon size={28}/></span><div><h3>{title}</h3><p>{description}</p><b>Continuar <ArrowRight size={15}/></b></div>
+  </button>;
+}
+
+function LinkedWorksheetGenerator({sessionContext,profile={},onFinish}){
+  const [questionTypes,setQuestionTypes]=useState(["opcion_multiple"]);
+  const [questionCount,setQuestionCount]=useState(10);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const [resource,setResource]=useState(null);
+  const form=sessionContext?.form||{};
+  const session=sessionContext?.result||{};
+  const teacher=getTeacherFullName(profile);
+  const toggle=(type)=>setQuestionTypes(current=>current.includes(type)?(current.length===1?current:current.filter(x=>x!==type)):[...current,type]);
+  const typeLabels={abierta:"Preguntas abiertas",opcion_multiple:"Opción múltiple",lectura:"Lectura y preguntas",verdadero_falso:"Verdadero o falso"};
+
+  async function generate(){
+    setLoading(true);setError("");
+    try{
+      const {data:{session:authSession}}=await supabase.auth.getSession();
+      const response=await fetch("/api/generate-linked-worksheet",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${authSession?.access_token||""}`},body:JSON.stringify({session,form,options:{questionTypes,questionCount}})});
+      const data=await response.json();
+      if(!response.ok)throw new Error(data.error||"No se pudo generar la ficha de trabajo.");
+      setResource(data.resource);
+      try{await saveTeacherMaterial({tipo:"worksheet",titulo:data.resource.titulo||session.titulo||form.tema,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.");}
+    }catch(e){setError(e.message);}finally{setLoading(false);}
+  }
+
+  function studentText(){
+    if(!resource)return "";
+    const questions=(resource.preguntas||[]).map((q,i)=>{
+      const opts=(q.opciones||[]).length?"\n"+(q.opciones||[]).map((o,j)=>`${String.fromCharCode(65+j)}. ${o}`).join("\n"):"";
+      const reading=q.textoLectura?`\nLECTURA\n${q.textoLectura}\n`:"";
+      return `${i+1}. ${q.pregunta}${reading}${opts}\n\n____________________________________________________________\n____________________________________________________________`;
+    }).join("\n\n");
+    return `FICHA DE TRABAJO · PREGUNTAS Y RESPUESTAS\n\nNombre y apellidos: ______________________________________________\nInstitución educativa: ___________________________________________\nGrado y sección: ${form.grado||""}${form.seccion?` · ${form.seccion}`:""}\nÁrea / tema: ${form.area||""} / ${session.titulo||form.tema||""}\nFecha: ${form.fecha||"____ / ____ / ____"}\n\nInstrucciones: ${resource.instrucciones||"Lee cada pregunta con atención y responde de forma clara y completa."}\n\n${questions}`;
+  }
+
+  if(resource)return <div className="linked-resource-result">
+    <div className="flow-actionbar">
+      <button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button>
+      <button onClick={()=>downloadWord("ficha-de-trabajo.docx",studentText(),resource.titulo)}><Download size={15}/> Descargar Word</button>
+      <button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button>
+      <button className="flow-next-btn" onClick={()=>onFinish?.({form,resource})}>Terminar <CheckCircle2 size={16}/></button>
+    </div>
+    <div className="worksheet-preview-card">
+      <div className="worksheet-preview-head"><small>FICHA DE TRABAJO</small><h2>{resource.titulo}</h2><p>{form.area} · {form.grado}{form.seccion?` · ${form.seccion}`:""}</p></div>
+      <div className="worksheet-student-data"><div><b>NOMBRES Y APELLIDOS</b><span/></div><div><b>ÁREA</b><p>{form.area}</p><b>GRADO</b><p>{form.grado}{form.seccion?` · ${form.seccion}`:""}</p></div><div><b>FECHA</b><p>{form.fecha||""}</p><b>DOCENTE</b><p>{teacher}</p></div></div>
+      <p className="worksheet-instructions">{resource.instrucciones}</p>
+      <div className="worksheet-questions">{(resource.preguntas||[]).map((q,i)=><article key={i}><span>{i+1}</span><div>{q.textoLectura&&<blockquote>{q.textoLectura}</blockquote>}<h4>{q.pregunta}</h4>{!!q.opciones?.length&&<ul>{q.opciones.map((o,j)=><li key={j}>{String.fromCharCode(65+j)}. {o}</li>)}</ul>}<div className="answer-lines"><i/><i/></div></div></article>)}</div>
+    </div>
+  </div>;
+
+  return <div className="linked-worksheet-builder">
+    <div className="flow-page-title"><small>MATERIAL DE LA SESIÓN</small><h2>Ficha de trabajo</h2><p>La ficha utilizará automáticamente el tema, el propósito y los aprendizajes de la sesión.</p></div>
+    <div className="worksheet-config-card">
+      <h3>Tipos de preguntas</h3>
+      <div className="question-type-grid">
+        {[
+          ["abierta",Pencil,"Preguntas abiertas","Desarrollo libre donde el estudiante redacta su respuesta"],
+          ["opcion_multiple",ListChecks,"Opción múltiple","Selección entre alternativas con una respuesta correcta"],
+          ["lectura",BookOpen,"Lectura y preguntas","Texto breve seguido de preguntas de comprensión"],
+          ["verdadero_falso",CheckCircle2,"Verdadero o falso","Afirmaciones que el estudiante clasifica como verdaderas o falsas"],
+        ].map(([type,Icon,title,desc])=><button type="button" key={type} className={questionTypes.includes(type)?"selected":""} onClick={()=>toggle(type)}><i>{questionTypes.includes(type)?<CheckCircle2 size={18}/>:<span/>}</i><Icon size={24}/><div><strong>{title}</strong><p>{desc}</p></div></button>)}
+      </div>
+      <div className="question-count-control"><div><strong>Cantidad total de preguntas</strong><small>Mínimo 5, máximo 20</small></div><div><button onClick={()=>setQuestionCount(n=>Math.max(5,n-1))}>−</button><b>{questionCount} preguntas</b><button onClick={()=>setQuestionCount(n=>Math.min(20,n+1))}>+</button></div></div>
+      {error&&<p className="wizard-error">{error}</p>}
+      <div className="worksheet-generate-row"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?`Generando preguntas — 0 de ${questionCount}`:"Generar ficha"} <ArrowRight size={15}/></button></div>
+    </div>
+  </div>;
+}
+
+function LinkedReadingGenerator({sessionContext,profile={},onFinish}){
+  const [loading,setLoading]=useState(false);const[error,setError]=useState("");const[resource,setResource]=useState(null);
+  const form=sessionContext?.form||{};const session=sessionContext?.result||{};
+  async function generate(){setLoading(true);setError("");try{const {data:{session:authSession}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${authSession?.access_token||""}`},body:JSON.stringify({type:"reading",form,session,options:{readingLength:"media"}})});const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo generar la ficha de lectura.");setResource(data.resource);try{await saveTeacherMaterial({tipo:"reading",titulo:data.resource.titulo,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.");}}catch(e){setError(e.message)}finally{setLoading(false)}}
+  function text(){if(!resource)return"";const groups={literal:[],inferencial:[],critico:[]};(resource.preguntas||[]).forEach(q=>(groups[q.nivel]||groups.critico).push(q.pregunta));return `FICHA DE LECTURA\n\nNombre y apellidos: ______________________________________________\nInstitución educativa: ___________________________________________\nGrado y sección: ${form.grado||""}${form.seccion?` · ${form.seccion}`:""}\nÁrea / curso: ${form.area||"Comunicación"}\nFecha: ${form.fecha||""}\nDocente: ${getTeacherFullName(profile)}\n\n${resource.titulo}\n\n${resource.texto}\n\nNIVEL LITERAL\n${groups.literal.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL INFERENCIAL\n${groups.inferencial.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL CRÍTICO\n${groups.critico.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL REFLEXIVO\n1. ¿Cómo relacionas lo leído con una experiencia de tu vida?\n______________________________________________\n2. ¿Qué enseñanza podrías aplicar en tu entorno?\n______________________________________________`;}
+  if(!resource)return <div className="flow-centered-card"><BookOpen size={38}/><h2>Ficha de lectura</h2><p>Kantu creará una lectura alineada a la sesión y preguntas de comprensión.</p>{error&&<p className="wizard-error">{error}</p>}<button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 className="animate-spin" size={16}/>:<Sparkles size={16}/>} {loading?"Generando lectura...":"Generar ficha de lectura"}</button></div>;
+  return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadWord("ficha-de-lectura.docx",text(),resource.titulo)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onFinish?.({form,resource})}>Terminar <CheckCircle2 size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
+}
+
+function LinkedRatingScaleGenerator({sessionContext,profile={},onNext}){
+  const form=sessionContext?.form||{};const session=sessionContext?.result||{};const[loading,setLoading]=useState(false);const[error,setError]=useState("");const[resource,setResource]=useState(null);
+  async function generate(){setLoading(true);setError("");try{const {data:{session:authSession}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${authSession?.access_token||""}`},body:JSON.stringify({type:"rating_scale",form,session,options:{numeroCriterios:4,scaleType:"frecuencia"}})});const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo generar la escala.");setResource(data.resource);try{await saveTeacherMaterial({tipo:"rating_scale",titulo:data.resource.titulo,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.")}}catch(e){setError(e.message)}finally{setLoading(false)}}
+  function text(){if(!resource)return"";return `ESCALA DE VALORACIÓN · REGISTRO DE AULA\n\nInstitución educativa / Docente: ${profile.ie||""} / ${getTeacherFullName(profile)}\nGrado y sección: ${form.grado||""}${form.seccion?` · ${form.seccion}`:""}\nÁrea: ${form.area||""}\nCompetencia: ${resource.competencia||form.competencia||""}\n\nEscala: SIEMPRE · A VECES · NO LO HACE · NO OBSERVADO\n\n${(resource.criterios||[]).map((c,i)=>`CRITERIO ${i+1}: ${c.criterio}`).join("\n")}\n\nN.º | APELLIDOS Y NOMBRES | SIEMPRE | A VECES | NO LO HACE | NO OBSERVADO\n${Array.from({length:25},(_,i)=>`${i+1}. | __________________________ | ___ | ___ | ___ | ___`).join("\n")}`;}
+  if(!resource)return <div className="flow-centered-card"><ListChecks size={38}/><h2>Escala de valoración</h2><p>Se generará a partir de la competencia, evidencia y criterios de la sesión.</p>{error&&<p className="wizard-error">{error}</p>}<button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 className="animate-spin" size={16}/>:<Sparkles size={16}/>} Generar escala</button></div>;
+  return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadWord("escala-de-valoracion.docx",text(),resource.titulo)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form,instrument:resource})}>Siguiente <ArrowRight size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
+}
+
+function CompleteClassFlow({preferredGrade="primaria",profile={}}){
+  const[stage,setStage]=useState("intro");
+  const[sessionContext,setSessionContext]=useState(null);
+  const[instrumentType,setInstrumentType]=useState(null);
+  const[materialType,setMaterialType]=useState(null);
+  const initialContext=sessionContext?{...sessionContext.form,tema:sessionContext.result?.titulo||sessionContext.form?.tema,proposito:sessionContext.result?.proposito||sessionContext.form?.proposito,evidencia:sessionContext.result?.evidencia||sessionContext.form?.evidencia,criteriosBase:sessionContext.result?.criteriosDetallados||sessionContext.result?.criteriosEvaluacion||[]}:null;
+  const finish=()=>setStage("done");
+
+  if(stage==="intro")return <CompleteClassIntro onStart={()=>setStage("session")}/>;
+  if(stage==="session")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="active">1 Sesión</span><span>2 Instrumento</span><span>3 Material</span></div><SteamGenerator initialGrade={preferredGrade} documentType="session" profile={profile} completeClass onNext={(ctx)=>{setSessionContext(ctx);setStage("choice")}}/></div>;
+  if(stage==="choice")return <div className="flow-modal-shell"><div className="flow-modal-card"><div className="flow-modal-head"><div><small>SESIÓN LISTA</small><h2>¿Qué quieres hacer ahora?</h2><p>Continúa construyendo tu clase completa sin volver a ingresar los datos de la sesión.</p></div></div><div className="flow-choice-grid"><FlowChoiceCard icon={ClipboardList} title="Instrumentos de evaluación" description="Rúbrica, lista de cotejo o escala de valoración alineada a la sesión." onClick={()=>setStage("instrument-select")}/><FlowChoiceCard icon={FileText} title="Material" description="Ficha de trabajo, ficha de lectura o juegos para la sesión." onClick={()=>setStage("material-select")} accent="yellow"/></div></div></div>;
+  if(stage==="instrument-select")return <div className="complete-flow-stage"><div className="complete-flow-topline"><button onClick={()=>setStage("choice")}>← Atrás</button><div><small>PASO 2 DE 3</small><h2>Instrumento de evaluación</h2></div></div><div className="instrument-select-grid"><FlowChoiceCard icon={ClipboardList} title="Rúbrica" description="Criterios con niveles de logro y descriptores observables." onClick={()=>{setInstrumentType("rubric");setStage("instrument")}}/><FlowChoiceCard icon={CheckCircle2} title="Lista de cotejo" description="Verificación rápida de criterios observables." onClick={()=>{setInstrumentType("checklist");setStage("instrument")}}/><FlowChoiceCard icon={ListChecks} title="Escala de valoración" description="Registro de frecuencia y observación del desempeño." onClick={()=>{setInstrumentType("rating-scale");setStage("instrument")}}/></div></div>;
+  if(stage==="instrument")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="done">✓ Sesión</span><span className="active">2 Instrumento</span><span>3 Material</span></div>{instrumentType==="rating-scale"?<LinkedRatingScaleGenerator sessionContext={sessionContext} profile={profile} onNext={()=>setStage("material-select")}/>:<EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={instrumentType} initialContext={initialContext} completeClass onNext={()=>setStage("material-select")}/>}</div>;
+  if(stage==="material-select")return <div className="complete-flow-stage"><div className="complete-flow-topline"><button onClick={()=>setStage(sessionContext?"choice":"intro")}>← Atrás</button><div><small>PASO 3 DE 3</small><h2>Material de sesión</h2><p>Elige el recurso que quieres crear con los datos de la sesión.</p></div></div><div className="material-select-grid"><FlowChoiceCard icon={FileText} title="Ficha de trabajo" description="Preguntas abiertas, opción múltiple, lectura o verdadero/falso." onClick={()=>{setMaterialType("worksheet");setStage("material")}}/><FlowChoiceCard icon={BookOpen} title="Ficha de lectura" description="Lectura original con preguntas de comprensión." onClick={()=>{setMaterialType("reading");setStage("material")}}/><FlowChoiceCard icon={Gamepad2} title="Juegos" description="Sopa de letras o crucigrama para reforzar la sesión." onClick={()=>setStage("games")} accent="yellow"/></div></div>;
+  if(stage==="material")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="done">✓ Sesión</span><span className={instrumentType?"done":""}>{instrumentType?"✓ ":""}Instrumento</span><span className="active">3 Material</span></div>{materialType==="reading"?<LinkedReadingGenerator sessionContext={sessionContext} profile={profile} onFinish={finish}/>:<LinkedWorksheetGenerator sessionContext={sessionContext} profile={profile} onFinish={finish}/>}</div>;
+  if(stage==="games")return <div className="complete-flow-stage"><div className="complete-flow-topline"><button onClick={()=>setStage("material-select")}>← Atrás</button><div><small>MATERIAL DE SESIÓN</small><h2>Juegos</h2></div></div><div className="flow-choice-grid"><FlowChoiceCard icon={Search} title="Sopa de letras" description="Busca palabras clave relacionadas con la sesión." onClick={()=>setStage("wordsearch")}/>{/* Crucigrama retirado en el Bloque B: el generador era una simulación. */}</div></div>;
+  if(stage==="wordsearch")return <div><div className="complete-flow-topline"><button onClick={()=>setStage("games")}>← Atrás</button><div><h2>Sopa de letras</h2></div></div><WordSearchGenerator initialGrade={preferredGrade} profile={profile}/><div className="flow-finish-row"><button className="flow-next-btn" onClick={finish}>Terminar clase <CheckCircle2 size={16}/></button></div></div>;
+  return <div className="complete-done-card"><CheckCircle2 size={48}/><small>CLASE COMPLETA</small><h2>¡Todo quedó listo!</h2><p>Tu sesión y los recursos generados se guardaron en Mi biblioteca.</p><button onClick={()=>{setStage("intro");setSessionContext(null);setInstrumentType(null);setMaterialType(null)}}>Crear otra clase <ArrowRight size={15}/></button></div>;
+}
+
+function CompleteClassIntro({onStart}){
+  return <div className="complete-class-intro">
+    <div className="complete-flow-heading"><span><Sparkles size={14}/> KANTU TE ACOMPAÑA</span><h2>Crea tu clase completa</h2><p>En un solo recorrido prepararás tu sesión de aprendizaje, un instrumento de evaluación y un material para estudiantes.</p></div>
+    <div className="complete-flow-cards">
+      <article><span>01</span><BookOpen size={25}/><h3>Sesión de aprendizaje</h3><p>Propósito, competencia, capacidades, criterios y secuencia didáctica.</p></article>
+      <article><span>02</span><ClipboardList size={25}/><h3>Instrumento de evaluación</h3><p>Rúbrica o lista de cotejo vinculada a la evidencia de la sesión.</p></article>
+      <article><span>03</span><FileText size={25}/><h3>Material</h3><p>Ficha o recurso listo para trabajar con tus estudiantes.</p></article>
+    </div>
+    <button className="complete-start" onClick={onStart}>Empezar por la sesión <ArrowRight size={16}/></button>
+  </div>;
+}
+
+function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreation = null, onInitialCreationConsumed = ()=>{}, onNavigate = ()=>{} }) {
+  const [creation,setCreation]=useState(initialCreation);
+
+  useEffect(()=>{
+    if(initialCreation){setCreation(initialCreation);onInitialCreationConsumed();}
+  },[initialCreation]);
+
+  const selected = TOOLS_BY_ID[creation];
+
+  // Catálogo plano y agrupado por intención. Antes había que entrar en una
+  // categoría y luego elegir, y "Sesión de aprendizaje" y "Clase completa"
+  // quedaban FUERA del catálogo: solo se alcanzaban desde el dashboard.
+  if (!creation) {
+    return (
+      <div className="studio">
+        <header className="studio__intro">
+          <div className="studio__introcopy">
+            <Badge tone="brand" icon={Sparkles}>Kantu te acompaña</Badge>
+            <h1>¿Qué vamos a crear?</h1>
+            <p>Elige una herramienta y Kantu te guía paso a paso. Todo lo que generes se guarda en tu biblioteca.</p>
+          </div>
+          <img className="studio__kantu" loading="lazy" src="/mascot/kantu-material.webp" alt="" width="120" />
+        </header>
+
+        <ToolGrid onCreate={setCreation} onNavigate={onNavigate} />
+      </div>
+    );
+  }
 
   return (
-    <div className="create-studio">
-      <div className="create-studio__intro">
-        <div>
-          <span className="create-studio__eyebrow"><Sparkles size={13} /> KANTU TE ACOMPAÑA</span>
-          <h2>¿Qué quieres crear hoy?</h2>
-          <p>Elige un tipo de recurso y empecemos. Todo lo que generes se guardará en tu biblioteca.</p>
+    <div className="studio">
+      <header className="studio__head">
+        <div className="studio__headcopy">
+          <Badge tone="brand" icon={Sparkles}>Creando con Kantu</Badge>
+          <h1>{selected?.name || "Nuevo recurso"}</h1>
+          <p>{selected?.desc}</p>
         </div>
-        <div className="create-studio__nova">
-          <img src="/mascot/kantu-material.png" alt="Kantu, vicuña científica peruana de SciVerse" />
-          <span>
-            <strong>Hola 👋 Soy Kantu</strong>
-            <small>Tu asistente de IA para crear recursos</small>
-            <p style={{fontSize: '11px', margin: '8px 0 0', color: '#5B7876'}}>Te ayudaré a generar sesiones, evaluaciones y materiales paso a paso.</p>
-          </span>
-        </div>
-      </div>
+        <Button variant="ghost" icon={ArrowLeft} onClick={()=>setCreation(null)}>
+          Elegir otra herramienta
+        </Button>
+      </header>
 
-      {!creation && <div className="creation-sections">
-        {Object.values(creationSections).map((section) => (
-          <div key={section.title} className="creation-section">
-            <h3 className="section-title">{section.title}</h3>
-            <div className="creation-type-grid">
-              {section.items.map(({id,label,desc,icon:Icon,tone})=>(
-                <button key={id} className={`creation-type-card ${tone}`} onClick={()=>setCreation(id)}>
-                  <span><Icon size={22}/></span>
-                  <div>
-                    <small>CREAR CON IA</small>
-                    <h3>{label}</h3>
-                    <p>{desc}</p>
-                    <b>Comenzar <ArrowRight size={15}/></b>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>}
-
-      {creation && <div className="create-generator-wrap">
-        <div className="create-generator-head"><div><span>CREANDO CON KANTU</span><h3>{selectedType?.label}</h3><p>{selectedType?.desc}</p></div><button onClick={()=>setCreation(null)}>← Elegir otro producto</button></div>
-        {(creation === "rubric" || creation === "checklist" || creation === "evalsheet") ? (creation === "evalsheet" ? <EvaluationSheetGenerator profile={profile} initialGrade={preferredGrade} /> : <EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={creation} />) : creation === "wordsearch" ? <WordSearchGenerator initialGrade={preferredGrade} profile={profile} /> : creation === "crossword" ? <CrosswordGenerator initialGrade={preferredGrade} profile={profile} /> : creation === "unit" ? <LearningUnitGenerator initialGrade={preferredGrade} profile={profile} /> : creation === "worksheet" ? <WorksheetGenerator initialGrade={preferredGrade} profile={profile} /> : creation === "reading" ? <ReadingGenerator initialGrade={preferredGrade} profile={profile} /> : <SteamGenerator initialGrade={preferredGrade} documentType={creation} profile={profile} />}
-      </div>}
+      {creation==="complete"?<CompleteClassFlow preferredGrade={preferredGrade} profile={profile}/>
+      :creation==="session"?<SteamGenerator initialGrade={preferredGrade} documentType="session" profile={profile}/>
+      :creation==="project-v2"?<ProjectSteamGenerator initialGrade={preferredGrade} profile={profile}/>
+      :creation==="worksheet-v2"?<ResourceFromAI kind="worksheet" initialGrade={preferredGrade} profile={profile}/>
+      :creation==="reading-v2"?<ResourceFromAI kind="reading" initialGrade={preferredGrade} profile={profile}/>
+      :creation==="rating-scale"?<ValuationScaleGenerator initialGrade={preferredGrade} profile={profile}/>
+      :(creation==="rubric"||creation==="checklist")?<EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={creation}/>
+      :creation==="wordsearch"?<WordSearchGenerator initialGrade={preferredGrade} profile={profile}/>
+      :null}
     </div>
   );
 }
@@ -2418,10 +2990,7 @@ function CreateStudio({ preferredGrade = "primaria", profile = {} }) {
 /* Fuente única de verdad para los planes: se usa en el landing (sección
    #planes) y en el perfil del docente (TeacherAccountModal), para que
    ambos siempre muestren los mismos precios y beneficios. */
-const PLANS = [
-  { name: "Gratuito", price: "0", period: "para conocer SciVerse", saving: "Sin tarjeta", featured: false, benefits: ["5 actividades STEAM semanales", "5 instrumentos de evaluación por semana", "5 materiales semanales (fichas, recursos)", "Exportación a Word, PDF y PPT", "Acceso a comunidad WhatsApp"] },
-  { name: "Mensual", price: "20", period: "por 1 mes", saving: "Todo ilimitado", featured: true, benefits: ["Sesiones de aprendizaje ilimitadas", "Actividades STEAM y recursos CNEB ilimitados", "Instrumentos de evaluación ilimitados", "Materiales editables sin límite", "Exportación Word, PDF, PPT sin marca de agua", "Plantillas y fichas personalizables", "Primaria y Secundaria", "Soporte prioritario por WhatsApp"] },
-];
+// PLANS, whatsappLink y FREE_WEEKLY_AI_LIMIT viven ahora en config/plans.js
 
 const TESTIMONIALS = [
   { name: "Patricia Quispe", role: "Docente de Primaria", initials: "PQ", quote: "Al inicio no le tenía fe, pero cuando vi que la sesión salía alineada al CNEB, me pareció que es lo que todo docente necesita." },
@@ -2502,6 +3071,9 @@ function ImprovedLanding({ onRegister, onLogin, onForgotPassword }) {
     ["¿El pago se renueva automáticamente?", "No. Los pagos por Plin o Yape no se renuevan automáticamente; tú decides cuándo renovar."],
     ["¿La inteligencia artificial puede equivocarse?", "Sí. SciVerse es una herramienta de apoyo y el docente debe revisar el contenido antes de aplicarlo."],
   ];
+  // NOTA: duplicado histórico de PlansModal.handleChoosePlan. No se usa.
+  // Eliminar en el Bloque C junto con el resto de código muerto.
+  // eslint-disable-next-line no-unused-vars
   const choosePlan = (plan) => {
     if (plan.name === "Gratuito") return onRegister();
     const message = `Hola Teaching TIC, deseo adquirir el Plan ${plan.name} de SciVerse por S/${plan.price}. ¿Me comparten los datos para pagar por Plin o Yape?`;
@@ -2598,6 +3170,9 @@ function ImprovedLanding({ onRegister, onLogin, onForgotPassword }) {
         <div className="footer-column"><h4>Contacto</h4><p>Teaching TIC Consultorías S.A.C.<br />RUC 20607945331</p><a href="mailto:teachingticconsultorias@gmail.com">teachingticconsultorias@gmail.com</a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer">+51 921 090 875</a><small>© 2026 Teaching TIC. Todos los derechos reservados.</small></div>
       </footer>
       {legalView && <LegalModal view={legalView} onClose={() => setLegalView(null)} />}
+      {/* PlansModal gestiona internamente los planes de pago (abre WhatsApp).
+          onChoosePlan solo se invoca para el plan gratuito, con la cadena "gratuito":
+          por eso el handler correcto es onRegister. */}
       {showPlansModal && <PlansModal onClose={() => setShowPlansModal(false)} onChoosePlan={onRegister} />}
     </div>
   );
@@ -3299,11 +3874,11 @@ function GradeTag({ grade }) {
   const isPrimaria = grade === "primaria";
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold tracking-wide uppercase"
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold tracking-wide uppercase"
       style={{
-        color: isPrimaria ? C.amber : C.cyan,
+        color: isPrimaria ? "var(--amber-700)" : "var(--teal-800)",
         background: isPrimaria ? "rgba(255,187,0,0.14)" : "rgba(31,158,152,0.14)",
-        border: `1px solid ${isPrimaria ? "rgba(255,187,0,0.4)" : "rgba(31,158,152,0.4)"}`,
+        border: `1px solid ${isPrimaria ? "var(--amber-700)" : "var(--teal-800)"}`,
         fontFamily: "'JetBrains Mono', monospace",
       }}
     >
@@ -3354,7 +3929,7 @@ function ActivityModal({ activity, grade, setGrade, onClose, onSave, isSaved }) 
       <div className="printable relative w-full max-w-4xl rounded-2xl my-6" style={{ background: C.surface2, border: `1px solid ${C.line}` }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between px-6 pt-6">
           <div>
-            <span className="text-[11px] tracking-widest" style={{ color: subj.color, fontFamily: "'JetBrains Mono', monospace" }}>
+            <span className="text-xs tracking-widest" style={{ color: subj.color, fontFamily: "'JetBrains Mono', monospace" }}>
               {activity.code} · {subj.label}
             </span>
             <h2 className="text-2xl font-semibold mt-1" style={{ color: C.text, fontFamily: "'Space Grotesk', sans-serif" }}>
@@ -3412,7 +3987,7 @@ function ActivityModal({ activity, grade, setGrade, onClose, onSave, isSaved }) 
             <ol className="space-y-2.5">
               {v.pasos.map((p, i) => (
                 <li key={i} className="flex gap-3 text-sm leading-relaxed" style={{ color: C.text }}>
-                  <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ background: accent, color: "#0B2B29" }}>{i + 1}</span>
+                  <span className="shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: accent, color: "#0B2B29" }}>{i + 1}</span>
                   {p}
                 </li>
               ))}
@@ -3500,16 +4075,16 @@ function ChallengeCreator({profile,preferredGrade,onCreated}){
   async function generate(){
     if(!form.tema.trim()) return setError("Escribe el tema o problema que deseas trabajar.");
     setLoading(true);setError("");
-    try{const {data:{session}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"challenge",form})});const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo crear el reto");const reto={...data.challenge,id:`kantu-${Date.now()}`,title:data.challenge.titulo,area:form.area,subject:"tecnologia",grades:[form.nivel],teamSize:data.challenge.equipo,icon:Wand2};await saveTeacherMaterial({tipo:"challenge",titulo:reto.title,form:{...form,grado:form.grado},contenido:reto});onCreated(reto);}catch(e){setError(e.message);}finally{setLoading(false);}
+    try{const {data:{session}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"challenge",form})});const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo crear el reto");const reto={...data.challenge,id:`kantu-${Date.now()}`,title:data.challenge.titulo,area:form.area,subject:"tecnologia",grades:[form.nivel],teamSize:data.challenge.equipo,icon:Wand2};try{await saveTeacherMaterial({tipo:"challenge",titulo:reto.title,form:{...form,grado:form.grado},contenido:reto});}catch(saveErr){console.error(saveErr);setError(describeSaveError(saveErr)+" El reto se creó, pero no quedó en tu biblioteca.");}onCreated(reto);}catch(e){setError(e.message);}finally{setLoading(false);}
   }
-  return <div className="challenge-creator"><div className="challenge-creator-intro"><img src="/mascot/kantu-material.png" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Construyamos un reto para tu grupo</h2><p>Completa el contexto del aula. Kantu organizará la misión, los roles, las reglas, la secuencia y los criterios observables.</p></div></div><div className="challenge-form">
+  return <div className="challenge-creator"><div className="challenge-creator-intro"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Construyamos un reto para tu grupo</h2><p>Completa el contexto del aula. Kantu organizará la misión, los roles, las reglas, la secuencia y los criterios observables.</p></div></div><div className="challenge-form">
     <label>Nivel<select value={form.nivel} onChange={e=>update("nivel",e.target.value)}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><label>Grado<input value={form.grado} onChange={e=>update("grado",e.target.value)}/></label><label>Área curricular<select value={form.area} onChange={e=>update("area",e.target.value)}>{["Ciencia y Tecnología","Matemática","Comunicación","Personal Social","Arte y Cultura","Educación para el Trabajo"].map(x=><option key={x}>{x}</option>)}</select></label>
     <label className="wide">Tema, problema o aprendizaje que deseas trabajar *<textarea value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Reducir el desperdicio de agua en nuestra escuela"/></label><label>Región o contexto<input value={form.region} onChange={e=>update("region",e.target.value)} placeholder="Ej.: Áncash, contexto rural"/></label><label>Duración (minutos)<input type="number" min="20" value={form.duracion} onChange={e=>update("duracion",e.target.value)}/></label><label>N.º de estudiantes<input type="number" min="4" value={form.estudiantes} onChange={e=>update("estudiantes",e.target.value)}/></label><label>Integrantes por equipo<input type="number" min="2" max="8" value={form.integrantes} onChange={e=>update("integrantes",e.target.value)}/></label><label className="wide">Materiales disponibles<textarea value={form.materiales} onChange={e=>update("materiales",e.target.value)}/></label><label className="wide">Competencia CNEB <small>Opcional: Kantu puede sugerirla</small><input value={form.competencia} onChange={e=>update("competencia",e.target.value)} placeholder="Déjalo vacío para recibir una sugerencia"/></label>
     {error&&<p className="challenge-error">{error}</p>}<button className="challenge-generate" onClick={generate} disabled={loading}><Sparkles size={17}/>{loading?"Kantu está construyendo el reto…":"Crear reto con Kantu"}</button>
-  </div>{loading&&<div className="kantu-generation-overlay"><div className="kantu-working kantu-working--overlay"><div className="kantu-working__visual"><img src="/mascot/kantu-material.png" alt="Kantu trabajando"/><span className="kantu-orbit"><Sparkles size={17}/></span></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando la misión y los equipos…</h4><p>También estoy alineando el reto al CNEB y redactando criterios que puedas observar durante la actividad.</p><div className="kantu-progress"><i/><i/><i/></div></div></div></div>}</div>;
+  </div>{loading&&<div className="kantu-generation-overlay"><div className="kantu-working kantu-working--overlay"><div className="kantu-working__visual"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu trabajando"/><span className="kantu-orbit"><Sparkles size={17}/></span></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando la misión y los equipos…</h4><p>También estoy alineando el reto al CNEB y redactando criterios que puedas observar durante la actividad.</p><div className="kantu-progress"><i/><i/><i/></div></div></div></div>}</div>;
 }
 
-function LibraryEmpty({onCreate,onChallenges,onActivities}){return <div className="library-empty-state library-empty-kantu"><img src="/mascot/kantu-material.png" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Tu biblioteca está lista para empezar</h2><p>Crea una sesión, un reto grupal o un instrumento. Todo lo que prepares con Kantu se guardará automáticamente aquí.</p><div><button onClick={onCreate}>Crear sesión</button><button onClick={onChallenges}>Crear reto grupal</button><button onClick={onActivities}>Explorar actividades</button></div></div></div>}
+function LibraryEmpty({onCreate,onChallenges,onActivities}){return <div className="library-empty-state library-empty-kantu"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Tu biblioteca está lista para empezar</h2><p>Crea una sesión, un reto grupal o un instrumento. Todo lo que prepares con Kantu se guardará automáticamente aquí.</p><div><button onClick={onCreate}>Crear sesión</button><button onClick={onChallenges}>Crear reto grupal</button><button onClick={onActivities}>Explorar actividades</button></div></div></div>}
 
 function MaterialContentView({value,level=0}){
   if(value===null||value===undefined||value==="")return null;
@@ -3529,51 +4104,31 @@ function MaterialViewerModal({item,typeLabel,onClose,onDownload,onDuplicate,onDe
 /* ---------------------------------------------------------------------- */
 
 export default function SciVerseDocentes() {
-  return <AuthGate LandingComponent={ImprovedLanding}>{(profile, onLogout) => <SciVerseApp profile={profile} onLogout={onLogout} />}</AuthGate>;
+  return <AuthGate LandingComponent={Landing}>{(profile, onLogout) => <SciVerseApp profile={profile} onLogout={onLogout} />}</AuthGate>;
 }
 
-function TeacherAccountModal({ profile, onClose }) {
-  const [tab, setTab] = useState("perfil");
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [notice, setNotice] = useState("");
-  const [form, setForm] = useState({ nombres: profile.nombres || "", apellidos: profile.apellidos || "", ie: profile.ie || "", celular: profile.celular || "", nivel: profile.nivel || "primaria" });
-  const referralUrl = `${window.location.origin}/?ref=${(profile.userId || "docente").slice(0, 8)}`;
-  const joined = profile.createdAt ? new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "long", year: "numeric" }).format(new Date(profile.createdAt)) : "Cuenta activa";
-  const tabs = [
-    ["perfil", User, "Perfil"], ["plan", Sparkles, "Plan"], ["referidos", Gift, "Referidos"], ["capacitacion", GraduationCap, "Capacitación"], ["integraciones", Link2, "Integraciones"],
-  ];
-  async function saveProfile() {
-    setSaving(true); setNotice("");
+// Puente hacia el componente de cuenta rediseñado.
+// La escritura sigue siendo supabase.auth.updateUser, igual que antes:
+// no se toca el backend de perfil en el bloque visual.
+function TeacherAccountModal({ profile, dbProfile = null, initialTab = "perfil", onClose }) {
+  async function saveProfile(form) {
     const { error } = await supabase.auth.updateUser({ data: { ...form } });
-    setSaving(false);
-    if (error) return setNotice("No pudimos guardar los cambios.");
-    setNotice("Perfil actualizado correctamente. Los cambios se verán completamente al volver a iniciar sesión.");
-    setEditing(false);
+    if (error) {
+      console.error(error);
+      return { ok: false, message: "No pudimos guardar los cambios. Inténtalo de nuevo." };
+    }
+    return { ok: true };
   }
-  async function copyReferral() {
-    await navigator.clipboard.writeText(referralUrl);
-    setNotice("Enlace copiado.");
-  }
-  return <div className="account-backdrop" onMouseDown={onClose}>
-    <section className="account-modal" role="dialog" aria-modal="true" aria-label="Mi cuenta" onMouseDown={(event) => event.stopPropagation()}>
-      <header><div><h2>Mi cuenta</h2><p>Información de tu perfil, plan y beneficios docentes.</p></div><button onClick={onClose} aria-label="Cerrar"><X size={20} /></button></header>
-      <div className="account-layout">
-        <nav className="account-tabs">{tabs.map(([key, Icon, label]) => <button key={key} className={tab === key ? "active" : ""} onClick={() => { setTab(key); setNotice(""); }}><Icon size={16} />{label}</button>)}</nav>
-        <div className="account-content">
-          {tab === "perfil" && <div>
-            <div className="profile-summary"><span>{(profile.nombres?.[0] || "D").toUpperCase()}{(profile.apellidos?.[0] || "").toUpperCase()}</span><div><h3>{profile.nombres} {profile.apellidos}</h3><p>{profile.correo}</p><small>DOCENTE · CUENTA PERSONAL</small></div></div>
-            {editing ? <div className="profile-form"><label>Nombres<input value={form.nombres} onChange={(e) => setForm({...form,nombres:e.target.value})} /></label><label>Apellidos<input value={form.apellidos} onChange={(e) => setForm({...form,apellidos:e.target.value})} /></label><label className="wide">Institución educativa<input value={form.ie} onChange={(e) => setForm({...form,ie:e.target.value})} /></label><label>Celular<input value={form.celular} onChange={(e) => setForm({...form,celular:e.target.value})} /></label><label>Nivel<select value={form.nivel} onChange={(e) => setForm({...form,nivel:e.target.value})}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><div className="wide account-actions"><button className="secondary-btn compact" onClick={() => setEditing(false)}>Cancelar</button><button className="primary-btn compact" onClick={saveProfile} disabled={saving}>{saving ? "Guardando..." : "Guardar cambios"}</button></div></div> : <div className="profile-rows"><div><span>Nombre completo</span><strong>{profile.nombres} {profile.apellidos}</strong><button onClick={() => setEditing(true)}>Cambiar</button></div><div><span>Correo</span><strong>{profile.correo}</strong></div><div><span>Rol</span><strong>Docente</strong></div><div><span>Nivel</span><strong className="capitalize">{profile.nivel}</strong></div><div><span>Institución</span><strong>{profile.ie || "Sin institución asignada"}</strong></div><div><span>Miembro desde</span><strong>{joined}</strong></div></div>}
-          </div>}
-          {tab === "plan" && <div><div className="account-heading"><span><Sparkles size={19} /></span><div><h3>Plan gratuito</h3><p>Tu uso actual en SciVerse</p></div></div><div className="usage-box"><Usage label="Generaciones con IA" current="0" total="1" /><Usage label="Materiales guardados" current="0" total="5" /><Usage label="Descargas" current="0" total="5" /></div><div className="account-plan-grid">{PLANS.filter((plan) => plan.name !== "Gratuito").map((plan) => <PlanMini key={plan.name} name={plan.name} price={plan.price} period={plan.period} benefits={plan.benefits} featured={plan.featured} />)}</div></div>}
-          {tab === "referidos" && <div><div className="account-heading"><span><Gift size={19} /></span><div><h3>Invita a otro docente</h3><p>Comparte SciVerse con tu comunidad educativa.</p></div></div><label className="referral-link"><input readOnly value={referralUrl} /><button onClick={copyReferral}><Copy size={15} /> Copiar</button></label><a className="whatsapp-share" href={`https://wa.me/?text=${encodeURIComponent(`Te invito a conocer SciVerse de Teaching TIC: ${referralUrl}`)}`} target="_blank" rel="noreferrer"><MessageCircle size={17} /> Compartir por WhatsApp</a><div className="referral-stats"><div><strong>0</strong><span>Invitaciones registradas</span></div><div><strong>0</strong><span>Docentes que se unieron</span></div></div></div>}
-          {tab === "capacitacion" && <div><span className="training-benefit"><Sparkles size={14} /> BENEFICIO TEACHING TIC</span><h3 className="training-title">Capacítate en vivo y fortalece tu portafolio docente</h3><p className="training-lead">Participa en sesiones virtuales desarrolladas por especialistas de Teaching TIC y recibe una constancia digital.</p><div className="training-points"><p><span><Video size={17} /></span><b>Capacitación en vivo.</b> Aprende, practica y resuelve tus dudas.</p><p><span><BadgeCheck size={17} /></span><b>Constancia digital.</b> Lista para tu CV y portafolio docente.</p><p><span><BookOpen size={17} /></span><b>Aplicación educativa.</b> IA, STEAM y recursos alineados al CNEB.</p></div><div className="training-card"><small>PRÓXIMA CAPACITACIÓN</small><h4>Inteligencia artificial para crear experiencias STEAM</h4><p>Fecha y horario por confirmar · Modalidad virtual</p><a href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20reservar%20un%20cupo%20en%20la%20pr%C3%B3xima%20capacitaci%C3%B3n%20de%20SciVerse." target="_blank" rel="noreferrer">Reservar mi cupo <ArrowRight size={15} /></a></div></div>}
-          {tab === "integraciones" && <div><div className="account-heading"><span><Link2 size={19} /></span><div><h3>Integraciones</h3><p>Próximamente podrás enviar tus materiales a otras plataformas.</p></div></div><Integration icon={HardDrive} name="Google Drive" text="Guarda tus sesiones y fichas en Drive" /><Integration icon={Palette} name="Canva" text="Edita tus recursos con diseños visuales" /></div>}
-          {notice && <p className="account-notice">{notice}</p>}
-        </div>
-      </div>
-    </section>
-  </div>;
+
+  return (
+    <Account
+      profile={profile}
+      dbProfile={dbProfile}
+      initialTab={initialTab}
+      onClose={onClose}
+      onSaveProfile={saveProfile}
+    />
+  );
 }
 
 function Usage({ label, current, total }) { return <div><p><span>{label}</span><b>{current} / {total}</b></p><span><i style={{width:`${Math.min(100,(Number(current)/Number(total))*100)}%`}} /></span></div>; }
@@ -3590,7 +4145,11 @@ function SciVerseApp({ profile, onLogout }) {
   const [retoView, setRetoView] = useState("explorar");
   const [modalGrade, setModalGrade] = useState(preferredGrade);
   const [accountOpen, setAccountOpen] = useState(false);
+  const [accountTab, setAccountTab] = useState("perfil");
+  const { toast, confirm } = useUI();
   const [activeSection, setActiveSection] = useState("inicio");
+  const [createEntry, setCreateEntry] = useState(null);
+  const openCreate = (entry=null) => { setCreateEntry(entry); setActiveSection("crear"); };
   const [teacherMaterials, setTeacherMaterials] = useState([]);
   const [materialsLoading, setMaterialsLoading] = useState(true);
   const [libraryTab,setLibraryTab]=useState("creaciones");
@@ -3599,11 +4158,24 @@ function SciVerseApp({ profile, onLogout }) {
   const [libraryLevel,setLibraryLevel]=useState("todos");
   const [librarySort,setLibrarySort]=useState("recientes");
   const [selectedMaterial,setSelectedMaterial]=useState(null);
+  const [dbProfile,setDbProfile]=useState(null);
   const [savedResources,setSavedResources]=useState(()=>{try{return JSON.parse(localStorage.getItem("sciverse-saved-resources")||"[]");}catch{return[];}});
+
+  // Plan y estado reales. Antes el sidebar mostraba "Gratuito" fijo aunque
+  // la columna `plan` existiera en la base de datos.
+  useEffect(()=>{
+    let cancelled=false;
+    (async()=>{
+      if(!supabase) return;
+      const {data,error}=await supabase.from("docentes").select("plan,activo,nivel,ie").maybeSingle();
+      if(!cancelled && !error && data) setDbProfile(data);
+    })();
+    return()=>{cancelled=true;};
+  },[]);
 
   const loadTeacherMaterials=useCallback(async()=>{
     setMaterialsLoading(true);
-    const {data,error}=await supabase.from("materiales_docente").select("id,tipo,titulo,nivel,grado,area,tema,contenido,created_at").order("created_at",{ascending:false}).limit(100);
+    const {data,error}=await supabase.from("materiales_docente").select("id,tipo,titulo,nivel,grado,area,tema,created_at").order("created_at",{ascending:false}).limit(100);
     if(!error) setTeacherMaterials(data||[]);
     else console.error("No se pudo cargar la biblioteca",error);
     setMaterialsLoading(false);
@@ -3616,13 +4188,35 @@ function SciVerseApp({ profile, onLogout }) {
     return()=>window.removeEventListener("sciverse:material-created",refresh);
   },[loadTeacherMaterials]);
 
-  const materialTypeLabel={session:"Sesión de aprendizaje",project:"Proyecto STEAM",rubric:"Rúbrica",checklist:"Lista de cotejo",challenge:"Reto grupal"};
+  // Etiquetas derivadas del catálogo compartido: antes este objeto mapeaba
+  // solo 5 de los 9 tipos que la aplicación escribe, y el resto aparecía
+  // como "Material" genérico y no se podía filtrar.
+  const materialTypeLabel=Object.fromEntries(Object.entries(MATERIAL_TYPES).map(([k,v])=>[k,v.label]));
   const formatMaterialDate=value=>new Intl.DateTimeFormat("es-PE",{day:"2-digit",month:"short",hour:"numeric",minute:"2-digit"}).format(new Date(value));
   const visibleMaterials=teacherMaterials.filter(item=>(libraryType==="todos"||item.tipo===libraryType||(libraryType==="instrumentos"&&["rubric","checklist"].includes(item.tipo)))&&(libraryLevel==="todos"||(item.nivel||"").toLowerCase()===libraryLevel)&&`${item.titulo} ${item.tema} ${item.area}`.toLowerCase().includes(librarySearch.toLowerCase())).sort((a,b)=>librarySort==="antiguos"?new Date(a.created_at)-new Date(b.created_at):new Date(b.created_at)-new Date(a.created_at));
 
   function toggleSaved(resource){setSavedResources(prev=>{const exists=prev.some(item=>item.id===resource.id);const next=exists?prev.filter(item=>item.id!==resource.id):[{...resource,savedAt:new Date().toISOString()},...prev];localStorage.setItem("sciverse-saved-resources",JSON.stringify(next));return next;});}
-  async function deleteMaterial(item){if(!window.confirm(`¿Eliminar “${item.titulo}”? Esta acción no se puede deshacer.`))return;const {error}=await supabase.from("materiales_docente").delete().eq("id",item.id);if(error){window.alert("No se pudo eliminar el material.");return;}setSelectedMaterial(null);loadTeacherMaterials();}
-  async function duplicateMaterial(item){const form={nivel:item.nivel,grado:item.grado,area:item.area,tema:item.tema};try{await saveTeacherMaterial({tipo:item.tipo,titulo:`Copia de ${item.titulo}`,form,contenido:item.contenido});loadTeacherMaterials();}catch{window.alert("No se pudo duplicar el material.");}}
+  async function deleteMaterial(item){const okDelete=await confirm({title:"¿Eliminar este material?",description:`“${item.titulo}” se eliminará de tu biblioteca. Esta acción no se puede deshacer.`,confirmText:"Eliminar",cancelText:"Conservar",tone:"danger"});if(!okDelete)return;const {error}=await supabase.from("materiales_docente").delete().eq("id",item.id);if(error){console.error(error);toast({tone:"error",title:"No pudimos eliminar el material",description:describeSaveError(error)});return;}setSelectedMaterial(null);loadTeacherMaterials();toast({tone:"success",title:"Material eliminado"});}
+  // El listado ya no trae `contenido` (pesaba 1-3 MB por carga). Se pide
+  // solo del material concreto que la docente abre, descarga o duplica.
+  const withContent=useCallback(async(item)=>{
+    if(item?.contenido!==undefined) return item;
+    const {data,error}=await supabase.from("materiales_docente").select("contenido").eq("id",item.id).maybeSingle();
+    if(error||!data) throw error||new Error("No se pudo cargar el material");
+    return {...item,contenido:data.contenido};
+  },[]);
+
+  async function openMaterial(item){
+    try{ setSelectedMaterial(await withContent(item)); }
+    catch(e){ console.error(e); toast({tone:"error",title:"No pudimos abrir este material",description:"Inténtalo de nuevo en unos segundos."}); }
+  }
+
+  async function downloadMaterial(item){
+    try{ const full=await withContent(item); downloadWord(`${full.tipo}-${full.id}.docx`,materialContentText(full.contenido),full.titulo); }
+    catch(e){ console.error(e); toast({tone:"error",title:"No pudimos preparar la descarga",description:"Inténtalo de nuevo en unos segundos."}); }
+  }
+
+  async function duplicateMaterial(item){const form={nivel:item.nivel,grado:item.grado,area:item.area,tema:item.tema};try{const full=await withContent(item);await saveTeacherMaterial({tipo:full.tipo,titulo:`Copia de ${full.titulo}`,form,contenido:full.contenido});loadTeacherMaterials();}catch(e){console.error(e);toast({tone:"error",title:"No pudimos duplicar el material",description:describeSaveError(e)});}}
 
   const filtered = ACTIVITIES.filter((a) => a.versions[heroGrade] && (subjectFilter === "todos" || a.subject === subjectFilter));
   const filteredRetos = RETOS.filter((r) => gradeFilter === "todos" || r.grades.includes(gradeFilter));
@@ -3635,98 +4229,30 @@ function SciVerseApp({ profile, onLogout }) {
   const heroAccent = heroGrade === "primaria" ? C.amber : C.cyan;
 
   return (
-    <div className="teacher-app-shell" style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap');
-        @media print {
-          body * { visibility: hidden; }
-          .printable, .printable * { visibility: visible; }
-          .printable { position: absolute; left: 0; top: 0; width: 100%; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
+    <>
+    <AppShell
+      profile={profile}
+      plan={dbProfile?.plan}
+      activeSection={activeSection}
+      onNavigate={setActiveSection}
+      onOpenAccount={(tab) => { setAccountTab(tab || "perfil"); setAccountOpen(true); }}
+      onLogout={onLogout}
+    >
 
-      <aside className="teacher-sidebar">
-        <button className="sidebar-brand" onClick={()=>setActiveSection("inicio")}><span><Microscope size={22} /></span><div><strong>SciVerse</strong><small>Teaching TIC</small></div></button>
-        <nav className="sidebar-menu" aria-label="Panel docente">
-          <button className={activeSection==="inicio"?"active":""} onClick={()=>setActiveSection("inicio")}><LayoutDashboard size={18} /> Inicio</button>
-          <span>Recursos docentes</span>
-          <button className={activeSection==="actividades"?"active":""} onClick={()=>setActiveSection("actividades")}><ClipboardList size={18} /> Actividades</button>
-          <button className={activeSection==="crear"?"active":""} onClick={()=>setActiveSection("crear")}><Wand2 size={18} /> Crear con IA</button>
-          <button className={activeSection==="retos"?"active":""} onClick={()=>setActiveSection("retos")}><Users size={18} /> Retos grupales</button>
-          <button className={activeSection==="biblioteca"?"active":""} onClick={()=>setActiveSection("biblioteca")}><FolderOpen size={18} /> Mi biblioteca</button>
-        </nav>
-        <div className="sidebar-bottom">
-          <a className="sidebar-plan" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer"><Award size={17} /><div><small>Plan actual</small><strong>Gratuito</strong></div><ChevronRight size={15} /></a>
-          <button onClick={() => setAccountOpen(true)}><User size={17} /> Mi cuenta</button>
-          <button onClick={onLogout}><LogOut size={17} /> Cerrar sesión</button>
-        </div>
-      </aside>
-
-      <nav className="teacher-topbar flex items-center justify-between px-6 md:px-10 py-5 sticky top-0 z-30" style={{ background: "rgba(255,255,255,0.88)", backdropFilter: "blur(8px)", borderBottom: `1px solid ${C.lineSoft}` }}>
-        <div className="flex items-center gap-2">
-          <Microscope size={20} color={C.teal} />
-          <span className="text-lg font-semibold" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
-            SciVerse <span style={{ color: C.muted, fontWeight: 400 }}>para Docentes</span>
-          </span>
-        </div>
-        <span className="hidden md:inline text-xs" style={{ color: C.muted }}>Panel docente · Recursos alineados al CNEB</span>
-        <div className="flex items-center gap-3">
-          <button onClick={() => setAccountOpen(true)} className="hidden sm:inline text-sm" style={{ color: C.muted }}>
-            Hola, <strong style={{ color: C.text }}>{profile.nombres}</strong> · {heroGrade === "primaria" ? "Primaria" : "Secundaria"}
-          </button>
-          <button onClick={onLogout} className="p-1.5 rounded-lg" style={{ color: C.muted }} title="Cerrar sesión">
-            <LogOut size={16} />
-          </button>
-        </div>
-      </nav>
-
-      <nav className="teacher-mobile-nav" aria-label="Navegación móvil del panel">
-        <button className={activeSection==="inicio"?"active":""} onClick={()=>setActiveSection("inicio")}><LayoutDashboard size={17}/><span>Inicio</span></button>
-        <button className={activeSection==="actividades"?"active":""} onClick={()=>setActiveSection("actividades")}><ClipboardList size={17}/><span>Actividades</span></button>
-        <button className={activeSection==="crear"?"active":""} onClick={()=>setActiveSection("crear")}><Wand2 size={18}/><span>Crear</span></button>
-        <button className={activeSection==="retos"?"active":""} onClick={()=>setActiveSection("retos")}><Users size={17}/><span>Retos</span></button>
-        <button className={activeSection==="biblioteca"?"active":""} onClick={()=>setActiveSection("biblioteca")}><FolderOpen size={17}/><span>Biblioteca</span></button>
-      </nav>
-
-      {activeSection === "inicio" && <section id="inicio-docente" className="teacher-dashboard">
-        <div className="dashboard-welcome">
-          <div>
-            <span className="dashboard-kicker"><LayoutDashboard size={14} /> Panel del docente</span>
-            <h1>¡Hola, {profile.nombres}! 👋</h1>
-            <p>¿Qué deseas preparar hoy para tus estudiantes de {preferredGrade}?</p>
-          </div>
-          <button className="dashboard-profile" onClick={() => setAccountOpen(true)}>
-            <span>{(profile.nombres?.[0] || "D").toUpperCase()}{(profile.apellidos?.[0] || "").toUpperCase()}</span>
-            <div><strong>{profile.nombres} {profile.apellidos}</strong><small>{profile.ie || "Docente Teaching TIC"}</small></div>
-          </button>
-        </div>
-
-        <div className="dashboard-stats">
-          <article><span className="stat-icon teal"><Sparkles size={19} /></span><div><small>Creaciones realizadas</small><strong>{teacherMaterials.length}</strong><p>Sesiones e instrumentos</p></div></article>
-          <article><span className="stat-icon coral"><FolderOpen size={19} /></span><div><small>Mis materiales</small><strong>{teacherMaterials.length}</strong><p>{teacherMaterials.length?"Guardados en tu biblioteca":"Empieza creando una sesión"}</p></div></article>
-          <article><span className="stat-icon yellow"><School size={19} /></span><div><small>Nivel seleccionado</small><strong className="stat-word">{preferredGrade}</strong><p>Contenido personalizado</p></div></article>
-          <article><span className="stat-icon violet"><CreditCard size={19} /></span><div><small>Mi plan</small><strong className="stat-word">Gratuito</strong><p><a href="#planes-docente">Ver opciones</a></p></div></article>
-        </div>
-
-        <div className="dashboard-columns">
-          <div className="dashboard-panel">
-            <div className="panel-heading"><div><small>Accesos rápidos</small><h2>Crea y explora</h2></div><Zap size={20} /></div>
-            <div className="quick-tools">
-              <button onClick={()=>setActiveSection("actividades")}><span style={{background:"#FFF0EC",color:C.coral}}><ClipboardList size={21} /></span><div><strong>Ver actividades</strong><small>Experiencias listas para adaptar</small></div><ChevronRight size={17} /></button>
-              <button onClick={()=>setActiveSection("crear")}><span style={{background:"#E5F8F5",color:C.tealDeep}}><Wand2 size={21} /></span><div><strong>Crear con IA</strong><small>Sesión, proyecto e instrumentos</small></div><ChevronRight size={17} /></button>
-              <button onClick={()=>setActiveSection("retos")}><span style={{background:"#F4EEFF",color:C.violet}}><Users size={21} /></span><div><strong>Retos grupales</strong><small>Aprendizaje colaborativo</small></div><ChevronRight size={17} /></button>
-              <button onClick={()=>setActiveSection("biblioteca")}><span style={{background:"#FFF7DC",color:"#B78300"}}><FolderOpen size={21} /></span><div><strong>Mi biblioteca</strong><small>Recursos y descargas Word</small></div><ChevronRight size={17} /></button>
-            </div>
-          </div>
-          <aside className="dashboard-panel recent-panel">
-            <div className="panel-heading"><div><small>Tu espacio</small><h2>Materiales recientes</h2></div><Clock size={20} /></div>
-            {materialsLoading?<div className="empty-materials"><Loader2 className="animate-spin" size={25}/><p>Cargando tus materiales…</p></div>:teacherMaterials.length?<div className="recent-material-list">{teacherMaterials.slice(0,5).map(item=><button key={item.id} onClick={()=>setActiveSection("biblioteca")}><span><FileText size={17}/></span><div><strong>{item.titulo}</strong><small>{materialTypeLabel[item.tipo]||"Material"} · {item.grado} · {item.area}</small></div><time>{formatMaterialDate(item.created_at)}</time></button>)}<button className="view-library" onClick={()=>setActiveSection("biblioteca")}>Ver toda mi biblioteca <ArrowRight size={14}/></button></div>:<div className="empty-materials"><span><FolderOpen size={27} /></span><strong>Aún no tienes materiales</strong><p>Las sesiones que generes aparecerán aquí para que puedas retomarlas y descargarlas.</p><button onClick={()=>setActiveSection("crear")}>Crear mi primer recurso <ArrowRight size={14} /></button></div>}
-          </aside>
-        </div>
-
-        <div id="planes-docente" className="dashboard-plan"><div><span><Sparkles size={17} /></span><div><strong>Obtén más generaciones y descargas en Word</strong><p>Actualiza tu plan desde S/10 y activa tu acceso mediante Plin o Yape.</p></div></div><a href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20deseo%20mejorar%20mi%20plan%20de%20SciVerse." target="_blank" rel="noreferrer">Ver planes <ArrowRight size={15} /></a></div>
-      </section>}
+      {activeSection === "inicio" && (
+        <Dashboard
+          profile={profile}
+          materials={teacherMaterials}
+          loading={materialsLoading}
+          typeLabel={materialTypeLabel}
+          formatDate={formatMaterialDate}
+          onCreate={openCreate}
+          onNavigate={setActiveSection}
+          onOpenMaterial={openMaterial}
+          onDownloadMaterial={downloadMaterial}
+          onOpenAccount={(tab) => { setAccountTab(tab || "perfil"); setAccountOpen(true); }}
+        />
+      )}
 
       {activeSection === "actividades" && <section id="actividades" className="steam-catalog-page">
         <header className="steam-catalog-header"><div><span><Sparkles size={14}/> BANCO DE EXPERIENCIAS STEAM</span><h1>Actividades listas para llevar al aula</h1><p>Elige el nivel y encuentra una guía completa con preparación, pasos, preguntas de acompañamiento y evidencias para evaluar.</p></div><div className="steam-level-switch"><small>NIVEL DE TUS ESTUDIANTES</small><div>{["primaria","secundaria"].map(g=><button key={g} className={heroGrade===g?"active":""} onClick={()=>{setHeroGrade(g);setSubjectFilter("todos");}}><School size={15}/>{g==="primaria"?"Primaria":"Secundaria"}</button>)}</div></div></header>
@@ -3746,22 +4272,46 @@ function SciVerseApp({ profile, onLogout }) {
 
       {/* GENERADOR STEAM */}
       {activeSection === "crear" && <section id="generador" className="px-6 md:px-10 py-14 max-w-5xl mx-auto">
-        <CreateStudio preferredGrade={preferredGrade} profile={profile} />
+        <CreateStudio preferredGrade={preferredGrade} profile={profile} initialCreation={createEntry} onInitialCreationConsumed={()=>setCreateEntry(null)} onNavigate={setActiveSection} />
       </section>}
 
       {/* BIBLIOTECA */}
-      {activeSection === "biblioteca" && <section id="biblioteca" className="library-page">
-        <header className="library-hero"><div><span><FolderOpen size={14}/> TU ESPACIO DOCENTE</span><h1>Mi biblioteca</h1><p>Encuentra, revisa y descarga todo lo que creaste o guardaste en SciVerse.</p></div><button onClick={()=>setActiveSection("crear")}><Plus size={16}/> Crear nuevo material</button></header>
-        <nav className="library-tabs">{[["creaciones",FileText,"Mis creaciones",teacherMaterials.length],["guardados",Star,"Guardados",savedResources.length],["plantillas",Download,"Plantillas",TEMPLATES.length]].map(([key,Icon,label,count])=><button key={key} className={libraryTab===key?"active":""} onClick={()=>setLibraryTab(key)}><Icon size={16}/>{label}<b>{count}</b></button>)}</nav>
+      {activeSection === "herramientas" && (
+        <div className="studio">
+          <header className="studio__intro">
+            <div className="studio__introcopy">
+              <Badge tone="brand" icon={Sparkles}>Catálogo completo</Badge>
+              <h1>Herramientas para tu aula</h1>
+              <p>Todo lo que SciVerse puede crear contigo, agrupado por lo que necesitas resolver. Las que aún no están listas se indican como tales.</p>
+            </div>
+            <img className="studio__kantu" loading="lazy" src="/mascot/kantu-session.webp" alt="" width="120" />
+          </header>
+          {/* Mismo catálogo y mismo componente que el estudio de creación:
+              una sola fuente de verdad en config/tools.js. */}
+          <ToolGrid onCreate={openCreate} onNavigate={setActiveSection} />
+        </div>
+      )}
 
-        {libraryTab==="creaciones"&&<>
-          <div className="library-toolbar"><label><Search size={15}/><input value={librarySearch} onChange={e=>setLibrarySearch(e.target.value)} placeholder="Buscar por título, tema o área"/></label><select value={libraryType} onChange={e=>setLibraryType(e.target.value)}><option value="todos">Todos los tipos</option><option value="session">Sesiones</option><option value="project">Proyectos STEAM</option><option value="instrumentos">Instrumentos</option><option value="challenge">Retos grupales</option></select><select value={libraryLevel} onChange={e=>setLibraryLevel(e.target.value)}><option value="todos">Todos los niveles</option><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select><select value={librarySort} onChange={e=>setLibrarySort(e.target.value)}><option value="recientes">Más recientes</option><option value="antiguos">Más antiguos</option></select></div>
-          {materialsLoading?<div className="library-loading"><Loader2 className="animate-spin" size={22}/> Cargando tus creaciones…</div>:visibleMaterials.length?<div className="library-material-grid">{visibleMaterials.map(item=><article key={item.id}><header><span className={`library-type ${item.tipo}`}><FileText size={18}/></span><small>{materialTypeLabel[item.tipo]||"Material"}</small></header><h3>{item.titulo}</h3><p>{item.grado||item.nivel} · {item.area||"Área curricular"}</p><time>Creado {formatMaterialDate(item.created_at)}</time><footer><button className="primary" onClick={()=>setSelectedMaterial(item)}><Eye size={14}/> Abrir</button><button onClick={()=>downloadWord(`${item.tipo}-${item.id}.docx`,materialContentText(item.contenido),item.titulo)} title="Descargar Word"><Download size={14}/></button><button onClick={()=>duplicateMaterial(item)} title="Duplicar"><Copy size={14}/></button><button className="danger" onClick={()=>deleteMaterial(item)} title="Eliminar"><Trash2 size={14}/></button></footer></article>)}</div>:teacherMaterials.length?<div className="library-no-results"><Search size={23}/><strong>No encontramos materiales con esos filtros</strong><p>Prueba cambiando el tipo, nivel o palabras de búsqueda.</p><button onClick={()=>{setLibrarySearch("");setLibraryType("todos");setLibraryLevel("todos");}}>Limpiar filtros</button></div>:<LibraryEmpty onCreate={()=>setActiveSection("crear")} onChallenges={()=>{setActiveSection("retos");setRetoView("crear");}} onActivities={()=>setActiveSection("actividades")}/>}</>}
+      {activeSection === "biblioteca" && (
+        <Library
+          materials={teacherMaterials}
+          loading={materialsLoading}
+          savedResources={savedResources}
+          templates={TEMPLATES}
+          formatDate={formatMaterialDate}
+          onCreate={openCreate}
+          onNavigate={setActiveSection}
+          onOpen={openMaterial}
+          onDownload={downloadMaterial}
+          onDuplicate={duplicateMaterial}
+          onDelete={deleteMaterial}
+          onOpenSaved={(item)=>{ if(item.kind==="activity"){ setSelected(item.payload.activity); setModalGrade(item.payload.grade); } else setSelectedReto(item.payload); }}
+          onRemoveSaved={toggleSaved}
+          onDownloadTemplate={(t)=>downloadWord(`${t.id}.docx`, TEMPLATE_CONTENT[t.id], t.title)}
+        />
+      )}
 
-        {libraryTab==="guardados"&&(savedResources.length?<div className="library-saved-grid">{savedResources.map(item=><article key={item.id}><span><Star size={18}/></span><div><small>{item.kind==="activity"?"ACTIVIDAD STEAM":"RETO GRUPAL"}</small><h3>{item.title}</h3><p>{item.subtitle}</p></div><button onClick={()=>{if(item.kind==="activity"){setSelected(item.payload.activity);setModalGrade(item.payload.grade);}else setSelectedReto(item.payload);}}><Eye size={14}/> Abrir</button><button onClick={()=>toggleSaved(item)} title="Quitar de guardados"><Trash2 size={14}/></button></article>)}</div>:<div className="library-empty-state"><Star size={27}/><h2>Aún no guardaste recursos</h2><p>En Actividades y Retos encontrarás el botón Guardar para reunir aquí lo que quieras aplicar después.</p><div><button onClick={()=>setActiveSection("actividades")}>Explorar actividades</button><button onClick={()=>setActiveSection("retos")}>Explorar retos</button></div></div>)}
-
-        {libraryTab==="plantillas"&&<><div className="library-template-heading"><div><small>RECURSOS DESCARGABLES</small><h2>Plantillas para organizar tu trabajo docente</h2><p>Formatos editables con la identidad de SciVerse. Los instrumentos de evaluación personalizados se crean desde Kantu.</p></div></div><div className="library-template-grid">{TEMPLATES.map(t=>{const Icon=t.icon;return <article key={t.id}><span><Icon size={19}/></span><small>PLANTILLA WORD</small><h3>{t.title}</h3><p>{t.desc}</p><button onClick={()=>downloadWord(`${t.id}.docx`,TEMPLATE_CONTENT[t.id],t.title)}><Download size={14}/> Descargar Word</button></article>})}</div></>}
-      </section>}
+    </AppShell>
 
       <footer className="px-6 md:px-10 py-8 text-center text-xs" style={{ color: C.muted, borderTop: `1px solid ${C.lineSoft}` }}>
         SciVerse para Docentes — un espacio de Frida García Rurush, IA educativa.
@@ -3769,8 +4319,8 @@ function SciVerseApp({ profile, onLogout }) {
 
       {selected && <ActivityModal activity={selected} grade={modalGrade} setGrade={setModalGrade} onClose={() => setSelected(null)} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===`${selected.id}-${modalGrade}`)} />}
       {selectedReto && <RetoModal reto={selectedReto} profile={profile} onClose={()=>setSelectedReto(null)} onCreateInstrument={()=>{setSelectedReto(null);setActiveSection("crear");}} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===(selectedReto.id||selectedReto.titulo))} />}
-      {selectedMaterial&&<MaterialViewerModal item={selectedMaterial} typeLabel={materialTypeLabel[selectedMaterial.tipo]||"Material"} onClose={()=>setSelectedMaterial(null)} onDownload={()=>downloadWord(`${selectedMaterial.tipo}-${selectedMaterial.id}.docx`,materialContentText(selectedMaterial.contenido),selectedMaterial.titulo)} onDuplicate={()=>duplicateMaterial(selectedMaterial)} onDelete={()=>deleteMaterial(selectedMaterial)}/>} 
-      {accountOpen && <TeacherAccountModal profile={profile} onClose={() => setAccountOpen(false)} />}
-    </div>
+      {selectedMaterial&&<MaterialViewerModal item={selectedMaterial} typeLabel={materialTypeLabel[selectedMaterial.tipo]||"Material"} onClose={()=>setSelectedMaterial(null)} onDownload={()=>downloadMaterial(selectedMaterial)} onDuplicate={()=>duplicateMaterial(selectedMaterial)} onDelete={()=>deleteMaterial(selectedMaterial)}/>} 
+      {accountOpen && <TeacherAccountModal profile={profile} dbProfile={dbProfile} initialTab={accountTab} onClose={() => setAccountOpen(false)} />}
+    </>
   );
 }

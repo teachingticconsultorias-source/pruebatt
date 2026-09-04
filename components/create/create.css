@@ -1,0 +1,239 @@
+/* ==========================================================================
+   ESTUDIO DE CREACIÓN · CATÁLOGO DE HERRAMIENTAS
+   Compartido por "Crear" y "Herramientas": un solo lenguaje visual.
+   ========================================================================== */
+
+.studio { display: flex; flex-direction: column; gap: var(--space-8); max-width: 1080px; }
+
+/* ------------------------------------------------------------- CABECERA */
+.studio__intro {
+  display: grid; gap: var(--space-5); align-items: center;
+  padding: var(--space-6);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 12% 20%, rgba(62,198,192,.14), transparent 55%),
+    var(--bg-surface);
+}
+.studio__introcopy h1 {
+  margin: var(--space-2) 0 var(--space-2);
+  font-family: var(--font-display); font-size: var(--text-h1);
+  font-weight: var(--weight-bold); letter-spacing: -.02em; color: var(--text-primary);
+}
+.studio__introcopy p { margin: 0; max-width: 56ch; font-size: var(--text-body); color: var(--text-secondary); }
+.studio__kantu { display: none; justify-self: end; }
+@media (min-width: 860px) {
+  .studio__intro { grid-template-columns: 1fr auto; }
+  .studio__kantu { display: block; }
+}
+
+/* --------------------------------------------------- CABECERA DE GENERADOR */
+.studio__head {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-4); padding-bottom: var(--space-5);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.studio__headcopy h1 {
+  margin: var(--space-1) 0 var(--space-1);
+  font-family: var(--font-display); font-size: var(--text-h2);
+  font-weight: var(--weight-bold); color: var(--text-primary);
+}
+.studio__headcopy p { margin: 0; max-width: 60ch; font-size: var(--text-sm); color: var(--text-secondary); }
+
+/* ==========================================================================
+   REJILLA
+   ========================================================================== */
+.tools { display: flex; flex-direction: column; gap: var(--space-8); }
+.tools__group { display: flex; flex-direction: column; gap: var(--space-4); }
+.tools__grouphead h2 {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-display); font-size: var(--text-h3);
+  font-weight: var(--weight-bold); color: var(--text-primary);
+}
+.tools__grouphead p { margin: 0; font-size: var(--text-sm); color: var(--text-secondary); }
+
+/* Móvil 1 col · tablet 2 · escritorio 2-3 según ancho real.
+   No se fuerzan cuatro tarjetas estrechas. */
+.tools__grid { display: grid; gap: var(--space-3); grid-template-columns: 1fr; }
+@media (min-width: 640px)  { .tools__grid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 1280px) { .tools__grid { grid-template-columns: repeat(3, 1fr); } }
+
+.tools__card {
+  display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-4);
+  align-items: center; min-height: 92px; padding: var(--space-4);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: var(--bg-surface); text-align: left; cursor: pointer;
+  transition: transform var(--dur-base) var(--ease-out),
+              border-color var(--dur-base) var(--ease-out),
+              box-shadow var(--dur-base) var(--ease-out);
+}
+.tools__card:hover { transform: translateY(-2px); border-color: var(--border-brand); box-shadow: var(--elev-2); }
+.tools__card:hover .tools__go { color: var(--teal-700); transform: translateX(2px); }
+
+.tools__card.is-soon { background: var(--bg-sunken); }
+.tools__card.is-soon .tools__icon { background: var(--neutral-100); color: var(--text-tertiary); }
+.tools__card.is-soon:hover { border-color: var(--border-default); box-shadow: var(--elev-1); }
+
+.tools__icon {
+  display: grid; place-items: center; width: 46px; height: 46px; flex-shrink: 0;
+  border-radius: var(--radius-md); background: var(--bg-brand-soft); color: var(--teal-700);
+}
+.tools__body { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.tools__name {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  font-size: var(--text-body); font-weight: var(--weight-semibold); color: var(--text-primary);
+}
+.tools__desc { font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-secondary); }
+.tools__go { color: var(--text-tertiary); transition: color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out); }
+
+/* ==========================================================================
+   ASISTENTE DE GENERACIÓN — barra de acción fija
+   ========================================================================== */
+.studio__sticky {
+  position: sticky; bottom: 0; z-index: var(--z-sticky);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: var(--space-3); margin-top: var(--space-6);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: rgba(255,255,255,.94); backdrop-filter: blur(10px);
+  box-shadow: var(--elev-3);
+}
+.studio__stickyinfo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.studio__stickyinfo strong { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.studio__stickyinfo small { font-size: var(--text-label); color: var(--text-secondary); }
+.studio__stickyactions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+@media (max-width: 640px) {
+  /* No debe tapar el contenido ni la navegación inferior. */
+  .studio__sticky { bottom: calc(72px + var(--space-2)); }
+  .studio__stickyactions { width: 100%; }
+  .studio__stickyactions .sv-btn { flex: 1; }
+}
+
+/* ==========================================================================
+   Superposición de generación
+   ========================================================================== */
+.kantu-generation-overlay { display: block; }
+
+/* ==========================================================================
+   ASISTENTE DE GENERACIÓN
+   El asistente ya tenía 3 pasos lógicos (Diseño curricular · Propósito ·
+   Revisión). Aquí se le da el lenguaje visual del sistema, sin tocar la
+   lógica de pasos, la validación ni handleGenerate.
+   ========================================================================== */
+
+.session-wizard { display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* ------------------------------------------------------------- PROGRESO */
+.session-wizard .wizard-progress {
+  display: flex; align-items: center; gap: var(--space-2);
+  margin: 0; padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.session-wizard .wizard-progress button {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: var(--space-2);
+  min-height: 36px; padding: 0 var(--space-3);
+  border: 0; border-radius: var(--radius-full); background: var(--bg-sunken);
+  font-family: var(--font-body); font-size: var(--text-sm);
+  font-weight: var(--weight-semibold); color: var(--text-tertiary);
+  cursor: default; white-space: nowrap;
+  transition: all var(--dur-base) var(--ease-out);
+}
+.session-wizard .wizard-progress button.is-active {
+  background: var(--teal-50); color: var(--teal-800);
+}
+.session-wizard .wizard-progress i,
+.session-wizard .wizard-progress span:not([class]) {
+  flex: 1; height: 2px; border-radius: var(--radius-full); background: var(--border-default);
+}
+.session-wizard .wizard-caption {
+  margin: 0; font-size: var(--text-label); font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-label); text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+/* ----------------------------------------------------------- TARJETA */
+.session-wizard .wizard-card,
+.instrument-wizard .wizard-card,
+.generator-wrapper .wizard-card {
+  padding: var(--space-6);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: var(--bg-surface); box-shadow: var(--elev-1);
+}
+.wizard-card__title { display: grid; grid-template-columns: auto 1fr; gap: var(--space-4); align-items: center; margin-bottom: var(--space-5); }
+.wizard-card__title > span {
+  display: grid; place-items: center; width: 44px; height: 44px;
+  border-radius: var(--radius-md); background: var(--bg-brand-soft); color: var(--teal-700);
+}
+.wizard-card__title h4 {
+  margin: 0 0 2px; font-family: var(--font-display);
+  font-size: var(--text-h3); font-weight: var(--weight-bold); color: var(--text-primary);
+}
+.wizard-card__title p { margin: 0; font-size: var(--text-sm); color: var(--text-secondary); }
+
+/* ------------------------------------------------------------- CAMPOS */
+.wizard-card label { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.wizard-card input,
+.wizard-card select,
+.wizard-card textarea {
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--bg-surface); font-family: var(--font-body);
+  font-size: var(--text-body); font-weight: var(--weight-regular); color: var(--text-primary);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.wizard-card input, .wizard-card select { min-height: 44px; }
+.wizard-card input:focus,
+.wizard-card select:focus,
+.wizard-card textarea:focus {
+  outline: none; border-color: var(--border-focus); box-shadow: var(--elev-focus);
+}
+
+/* -------------------------------------------------- BARRA DE ACCIÓN FIJA */
+.session-wizard .wizard-actions,
+.instrument-wizard .wizard-actions {
+  position: sticky; bottom: 0; z-index: var(--z-sticky);
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end;
+  gap: var(--space-2); margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: rgba(255,255,255,.94); backdrop-filter: blur(10px);
+  box-shadow: var(--elev-3);
+}
+.wizard-actions .wizard-back,
+.wizard-actions .wizard-next {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: 44px; padding: 0 var(--space-5);
+  border-radius: var(--radius-md); font-family: var(--font-body);
+  font-size: var(--text-body); font-weight: var(--weight-semibold); cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.wizard-actions .wizard-back {
+  margin-right: auto; border: 1px solid var(--border-default);
+  background: var(--bg-surface); color: var(--text-secondary);
+}
+.wizard-actions .wizard-back:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.wizard-actions .wizard-next {
+  border: 0; background: var(--teal-700); color: #fff; box-shadow: var(--elev-1);
+}
+.wizard-actions .wizard-next:hover:not(:disabled) { background: var(--teal-800); }
+.wizard-actions .wizard-next:disabled { opacity: .55; cursor: not-allowed; }
+
+.wizard-error {
+  margin: 0; padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md); border-left: 3px solid var(--danger-500);
+  background: var(--danger-50); font-size: var(--text-sm); color: var(--danger-700);
+}
+
+/* La barra fija no puede quedar bajo la navegación inferior en móvil. */
+@media (max-width: 1023px) {
+  .session-wizard .wizard-actions,
+  .instrument-wizard .wizard-actions {
+    bottom: calc(72px + env(safe-area-inset-bottom, 0px) + var(--space-2));
+  }
+  .wizard-actions .wizard-next { flex: 1; }
+}
+@media (max-width: 560px) {
+  .session-wizard .wizard-progress { overflow-x: auto; scrollbar-width: none; }
+  .session-wizard .wizard-progress::-webkit-scrollbar { display: none; }
+  .wizard-card__title { grid-template-columns: 1fr; gap: var(--space-3); }
+}

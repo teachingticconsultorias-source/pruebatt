@@ -1,0 +1,225 @@
+/* ==========================================================================
+   SCIVERSE · DESIGN TOKENS
+   ==========================================================================
+   Fuente única de verdad visual. Antes existían TRES paletas divergentes
+   (App.jsx `C`, AuthGate.jsx `COLORS`, AdminPanel.jsx `C_*`) con valores
+   distintos para el mismo rol, 331 colores literales en CSS, 24 radios,
+   58 sombras y 25+ puntos de ruptura.
+
+   Se conserva la identidad de marca (teal, coral, amarillo, Kantu) y se
+   sistematiza su aplicación.
+
+   REGLAS
+   ------
+   1. Ningún texto por debajo de 12px.
+   2. El teal-400 es color de MARCA, no de texto: sobre blanco da ~2.1:1.
+      Para texto y botones sólidos se usa teal-700 o superior.
+   3. Coral y amarillo son ACENTOS, nunca color dominante de una pantalla.
+   4. Toda animación respeta `prefers-reduced-motion`.
+   ========================================================================== */
+
+:root {
+  /* ---------------------------------------------------------------- COLOR */
+
+  /* Marca — teal. El 400 es el color del logo. */
+  --teal-50:  #ECFAF9;
+  --teal-100: #D3F2F0;
+  --teal-200: #A8E5E1;
+  --teal-300: #6FD4CE;
+  --teal-400: #3EC6C0;
+  --teal-500: #2BAFA9;
+  --teal-600: #1F9E98;
+  --teal-700: #177C77;
+  --teal-800: #115E5A;
+  --teal-900: #0F3D3A;
+
+  /* Acento cálido — coral, del logo. */
+  --coral-50:  #FFF3EF;
+  --coral-100: #FFE7E0;
+  --coral-300: #FDA88E;
+  --coral-400: #FB6542;
+  --coral-600: #D9421F;
+  --coral-700: #B33418;
+
+  /* Acento luminoso — amarillo, del logo. Nivel primaria. */
+  --amber-50:  #FFFBEB;
+  --amber-100: #FFF4D1;
+  --amber-400: #FFBB00;
+  --amber-700: #8A6400;
+
+  /* Neutrales.
+     Contraste medido sobre el render real (no estimado):
+       neutral-400  2.67:1 blanco · 2.49:1 hundido  → solo decorativo
+       neutral-500  4.09:1 blanco · 3.83:1 hundido  → NO alcanza AA para texto
+       neutral-550  4.91:1 blanco · 4.59:1 hundido  → mínimo para texto terciario
+       neutral-600  5.88:1 blanco · 5.50:1 hundido  → texto secundario
+     Por eso el texto secundario y el terciario NO se mapean a 400/500. */
+  --neutral-0:   #FFFFFF;
+  --neutral-25:  #FAFEFE;
+  --neutral-50:  #F4F8F8;
+  --neutral-100: #E8EFEF;
+  --neutral-200: #D5E2E1;
+  --neutral-300: #B4C6C4;
+  --neutral-400: #8CA3A1;
+  --neutral-500: #6B8280;
+  --neutral-550: #5F7573;
+  --neutral-600: #526966;
+  --neutral-700: #3A4F4C;
+  --neutral-800: #233735;
+  --neutral-900: #0F2E2C;
+
+  /* Semánticos */
+  --success-50:  #E9F9F1;
+  --success-100: #C9F0DC;
+  --success-500: #16A46A;
+  --success-700: #0E7A4E;
+
+  --warning-50:  #FFF7E6;
+  --warning-100: #FFEBC2;
+  --warning-500: #E09400;
+  --warning-700: #A86D00;
+
+  --danger-50:   #FDECE8;
+  --danger-100:  #F9D5CC;
+  --danger-500:  #DC4A2A;
+  --danger-700:  #A8321A;
+
+  --info-50:     #EAF1FF;
+  --info-100:    #D2E0FF;
+  --info-500:    #3B6FD4;
+  --info-700:    #2A4F9B;
+
+  /* ------------------------------------------------------------- SUPERFICIE */
+  --bg-canvas:     var(--neutral-25);
+  --bg-surface:    var(--neutral-0);
+  --bg-sunken:     var(--neutral-50);
+  --bg-brand-soft: var(--teal-50);
+  --bg-overlay:    rgba(15, 46, 44, 0.55);
+
+  --border-subtle:  var(--neutral-100);
+  --border-default: var(--neutral-200);
+  --border-strong:  var(--neutral-300);
+  --border-brand:   var(--teal-300);
+  --border-focus:   var(--teal-600);
+
+  --text-primary:   var(--neutral-900);
+  --text-secondary: var(--neutral-600);
+  --text-tertiary:  var(--neutral-550);
+  --text-on-brand:  #04302C;
+  --text-inverse:   var(--neutral-0);
+  --text-brand:     var(--teal-700);
+
+  /* ------------------------------------------------------------ TIPOGRAFÍA */
+  --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
+  --font-body:    "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono:    "JetBrains Mono", ui-monospace, monospace;
+
+  /* Escala: 8 pasos. Mínimo absoluto 12px. */
+  --text-display:  clamp(2.25rem, 1.6rem + 2.6vw, 3.5rem);  /* 36 → 56 */
+  --text-h1:       clamp(1.75rem, 1.4rem + 1.4vw, 2.5rem);  /* 28 → 40 */
+  --text-h2:       clamp(1.375rem, 1.2rem + 0.7vw, 1.75rem);/* 22 → 28 */
+  --text-h3:       1.1875rem;  /* 19 */
+  --text-body-lg:  1rem;       /* 16 */
+  --text-body:     0.9375rem;  /* 15 */
+  --text-sm:       0.8125rem;  /* 13 */
+  --text-label:    0.75rem;    /* 12 — mínimo permitido */
+
+  --leading-tight:   1.15;
+  --leading-snug:    1.3;
+  --leading-normal:  1.55;
+  --leading-relaxed: 1.7;
+
+  --weight-regular:  400;
+  --weight-medium:   500;
+  --weight-semibold: 600;
+  --weight-bold:     700;
+
+  --tracking-label: 0.08em;
+
+  /* -------------------------------------------------------------- ESPACIADO */
+  --space-1:  4px;
+  --space-2:  8px;
+  --space-3:  12px;
+  --space-4:  16px;
+  --space-5:  20px;
+  --space-6:  24px;
+  --space-8:  32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  /* ----------------------------------------------------------------- RADIOS */
+  --radius-sm:   6px;
+  --radius-md:   10px;
+  --radius-lg:   14px;
+  --radius-xl:   20px;
+  --radius-2xl:  28px;
+  --radius-full: 999px;
+
+  /* ---------------------------------------------------------------- SOMBRAS */
+  --elev-1: 0 1px 2px rgba(15, 61, 58, .06), 0 1px 3px rgba(15, 61, 58, .04);
+  --elev-2: 0 4px 8px rgba(15, 61, 58, .06), 0 2px 4px rgba(15, 61, 58, .04);
+  --elev-3: 0 12px 24px rgba(15, 61, 58, .08), 0 4px 8px rgba(15, 61, 58, .04);
+  --elev-4: 0 24px 48px rgba(15, 61, 58, .12), 0 8px 16px rgba(15, 61, 58, .06);
+  --elev-focus: 0 0 0 3px rgba(31, 158, 152, .28);
+
+  /* ------------------------------------------------------------------ MOTION */
+  --ease-out:   cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast:   150ms;
+  --dur-base:   220ms;
+  --dur-slow:   380ms;
+
+  /* ----------------------------------------------------------------- Z-INDEX */
+  --z-base:     1;
+  --z-sticky:   100;
+  --z-sidebar:  200;
+  --z-dropdown: 300;
+  --z-overlay:  400;
+  --z-modal:    500;
+  --z-toast:    600;
+  --z-splash:   700;
+
+  /* ------------------------------------------------------------ BREAKPOINTS */
+  /* Referencia (las media queries no pueden usar var()):
+     sm 480 · md 768 · lg 1024 · xl 1280 · 2xl 1536 */
+
+  /* --------------------------------------------------------------- LAYOUT */
+  --sidebar-w: 264px;
+  --topbar-h:  64px;
+  --content-max: 1200px;
+  --content-pad: var(--space-6);
+}
+
+/* ==========================================================================
+   MOTION — accesibilidad
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-fast: 0.01ms;
+    --dur-base: 0.01ms;
+    --dur-slow: 0.01ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ==========================================================================
+   UTILIDADES TIPOGRÁFICAS
+   ========================================================================== */
+.sv-display { font: var(--weight-bold) var(--text-display)/var(--leading-tight) var(--font-display); letter-spacing: -0.02em; color: var(--text-primary); }
+.sv-h1      { font: var(--weight-bold) var(--text-h1)/var(--leading-tight) var(--font-display); letter-spacing: -0.015em; color: var(--text-primary); }
+.sv-h2      { font: var(--weight-bold) var(--text-h2)/var(--leading-snug) var(--font-display); color: var(--text-primary); }
+.sv-h3      { font: var(--weight-semibold) var(--text-h3)/var(--leading-snug) var(--font-display); color: var(--text-primary); }
+.sv-body-lg { font: var(--weight-regular) var(--text-body-lg)/var(--leading-normal) var(--font-body); color: var(--text-secondary); }
+.sv-body    { font: var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-body); color: var(--text-secondary); }
+.sv-sm      { font: var(--weight-regular) var(--text-sm)/var(--leading-normal) var(--font-body); color: var(--text-secondary); }
+.sv-label   { font: var(--weight-bold) var(--text-label)/var(--leading-snug) var(--font-body); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--text-brand); }

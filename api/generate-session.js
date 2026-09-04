@@ -6,7 +6,11 @@
 // Devuelve la respuesta normalizada en la misma forma que espera el cliente:
 // { content: [ { type: "text", text: "..." } ] }
 
-const GEMINI_MODEL = process.env.GEMINI_MAIN_MODEL || "gemini-3.6-flash";
+import { Errors, sendError } from "./_lib/errors.js";
+import { requireUser } from "./_lib/supabase.js";
+import { generateJson } from "./_lib/gemini.js";
+import { withCredit, chargesCreditForModule } from "./_lib/credits.js";
+import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 
 const SESSION_SCHEMA = {
   type: "object",
@@ -181,36 +185,43 @@ No crees un apartado independiente llamado procesos pedagógicos o procesos did�
   return `${context}\nAlineación: ${JSON.stringify(previous.alignment || {})}\nSecuencia: ${JSON.stringify(previous.sequence || {})}\nEvaluación: ${JSON.stringify(previous.assessment || {})}\nPropón exactamente tres anexos textuales utilizables en clase y coherentes con la evidencia: una ficha o texto base, una actividad para estudiantes y un recurso de apoyo. No afirmes que incluyes imágenes que no fueron generadas. El contenido debe estar listo para copiar a Word y adecuado al grado.`;
 }
 
+const SYSTEM_INSTRUCTION =
+  "Eres un especialista peruano en planificación curricular y CNEB. Respeta la competencia y capacidades seleccionadas. Formula criterios de evaluación como acciones observables derivadas de las capacidades, el propósito y el tema. Organiza inicio, desarrollo y cierre con procesos pedagógicos y los procesos didácticos pertinentes al área, sin convertirlos en una lista mecánica. Adapta el contexto a la región sin inventar datos locales. Entrega siempre JSON válido.";
+
+/** Tope defensivo de tamaño de entrada: evita inflar el prompt y el coste. */
+const MAX_BODY_CHARS = 60_000;
+
+function approxSize(body) {
+  try {
+    return JSON.stringify(body || {}).length;
+  } catch {
+    return 0;
+  }
+}
+
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    res.status(405).json({ error: "Método no permitido" });
-    return;
-  }
-
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    res.status(500).json({ error: "Falta configurar GEMINI_API_KEY en Vercel" });
-    return;
-  }
-
-  const accessToken = req.headers.authorization?.replace(/^Bearer\s+/i, "");
-  const supabaseUrl = process.env.VITE_SUPABASE_URL;
-  const supabaseKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
-  if (!accessToken || !supabaseUrl || !supabaseKey) {
-    res.status(401).json({ error: "Inicia sesión para utilizar el generador" });
-    return;
-  }
-
-  const authCheck = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: { apikey: supabaseKey, Authorization: `Bearer ${accessToken}` },
-  });
-  if (!authCheck.ok) {
-    res.status(401).json({ error: "Tu sesión venció. Vuelve a iniciar sesión." });
-    return;
-  }
+  let auth = null;
 
   try {
-    const { messages, mode, field, form = {}, instrumentType, module: moduleName, previous = {} } = req.body || {};
+    if (req.method !== "POST") throw Errors.methodNotAllowed();
+
+    // 1) Autenticación (verificada contra Supabase Auth).
+    auth = await requireUser(req);
+    const rlKey = clientKey(req, auth.user.id);
+
+    const {
+      messages,
+      mode,
+      field,
+      form = {},
+      instrumentType,
+      module: moduleName,
+      previous = {},
+    } = req.body || {};
+
+    // 2) Validación de entrada, antes de gastar nada.
+    if (approxSize(req.body) > MAX_BODY_CHARS) throw Errors.payloadTooLarge();
+
     const suggestionMode = mode === "suggestion";
     const instrumentMode = mode === "instrument";
     const moduleMode = mode === "module";
@@ -218,14 +229,24 @@ export default async function handler(req, res) {
     const allowedFields = ["proposito", "contexto", "evidencia"];
 
     if (suggestionMode && !allowedFields.includes(field)) {
-      res.status(400).json({ error: "Tipo de sugerencia no válido" });
-      return;
+      throw Errors.badRequest("Tipo de sugerencia no válido.");
     }
     if (moduleMode && !MODULE_SCHEMAS[moduleName]) {
-      res.status(400).json({ error: "Módulo de generación no válido" });
-      return;
+      throw Errors.badRequest("Módulo de generación no válido.");
+    }
+    if (instrumentMode && !["rubric", "checklist"].includes(instrumentType)) {
+      throw Errors.badRequest("Tipo de instrumento no válido.");
     }
 
+    // 3) Limitación de ráfagas (ver limitaciones en _lib/rate-limit.js).
+    enforceRateLimit({
+      key: rlKey,
+      bucket: suggestionMode ? "ai-suggestion" : "ai-generation",
+      ...(suggestionMode ? RateLimits.aiSuggestion : RateLimits.aiGeneration),
+    });
+
+    // 4) Construcción del prompt.
+    //    Los textos pedagógicos son EXACTAMENTE los mismos de antes.
     const capacities = Array.isArray(form.capacidades) ? form.capacidades.join("; ") : "";
     const suggestionInstructions = {
       proposito: "Redacta un propósito de aprendizaje breve en una sola oración. Debe expresar qué acción realizará el estudiante, qué contenido movilizará, en qué condición y para qué será útil.",
@@ -251,79 +272,103 @@ Nivel y grado: ${form.nivel || "No indicado"} · ${form.grado || "No indicado"}.
 Región o contexto: ${form.region || "No indicado"}. Duración: ${form.duracion || "45"} minutos. Estudiantes: ${form.estudiantes || "No indicado"}. Integrantes por equipo: ${form.integrantes || "4"}.
 Materiales disponibles: ${form.materiales || "materiales sencillos del aula"}. Competencia solicitada: ${form.competencia || "selecciona la competencia CNEB más pertinente"}.
 El reto debe exigir colaboración real, asignar roles complementarios y terminar en un producto, solución o prototipo observable. Describe acciones concretas y numeradas. Formula criterios observables derivados de la competencia, el tema y el producto. Adapta el contexto sin inventar nombres, cifras, costumbres ni problemas locales específicos. Incluye apoyos DUA y evita actividades peligrosas o que requieran materiales difíciles de conseguir.`;
-    const promptText = challengeMode ? challengePrompt : suggestionMode ? suggestionPrompt : instrumentMode ? instrumentPrompt : moduleMode ? modulePrompt(moduleName, form, previous) : (messages?.[0]?.content || "");
+
+    const promptText = challengeMode
+      ? challengePrompt
+      : suggestionMode
+        ? suggestionPrompt
+        : instrumentMode
+          ? instrumentPrompt
+          : moduleMode
+            ? modulePrompt(moduleName, form, previous)
+            : messages?.[0]?.content || "";
 
     if (!promptText.trim()) {
-      res.status(400).json({ error: "Falta información para generar la propuesta" });
-      return;
+      throw Errors.badRequest("Falta información para generar la propuesta.");
     }
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": apiKey,
+    const responseSchema = challengeMode
+      ? CHALLENGE_SCHEMA
+      : suggestionMode
+        ? SUGGESTION_SCHEMA
+        : instrumentMode
+          ? INSTRUMENT_SCHEMA
+          : moduleMode
+            ? MODULE_SCHEMAS[moduleName]
+            : SESSION_SCHEMA;
+
+    const maxOutputTokens = suggestionMode
+      ? 800
+      : challengeMode
+        ? 4500
+        : instrumentMode
+          ? 5000
+          : moduleMode
+            ? moduleName === "annexes"
+              ? 6500
+              : 4500
+            : 8192;
+
+    const runGeneration = () =>
+      generateJson({
+        prompt: promptText,
+        systemInstruction: SYSTEM_INSTRUCTION,
+        responseSchema,
+        maxOutputTokens,
+      });
+
+    // 5) Cobro de créditos.
+    //
+    //    UNA creación entregada al docente = UN crédito.
+    //
+    //    Una sesión son 4 llamadas encadenadas (alignment -> sequence ->
+    //    assessment -> annexes) pero una sola creación para la docente: por eso
+    //    solo el primer módulo cobra. Antes NINGUNA de las cuatro cobraba y el
+    //    límite semanal quedaba completamente eludido.
+    //
+    //    Las sugerencias de campo no cobran (800 tokens); las frena el rate limit.
+    const charges =
+      challengeMode ||
+      instrumentMode ||
+      (moduleMode && chargesCreditForModule(moduleName)) ||
+      (!moduleMode && !suggestionMode);
+
+    let generation;
+    let credits = null;
+
+    if (charges) {
+      // Consume, ejecuta y devuelve el crédito si falla. Todo del lado servidor:
+      // el cliente no puede saltarse el cobro ni forzar una devolución.
+      const outcome = await withCredit(
+        {
+          token: auth.token,
+          url: auth.url,
+          key: auth.key,
+          reason: `generate-session:${mode || "session"}`,
         },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: promptText }] }],
-          systemInstruction: { parts: [{ text: "Eres un especialista peruano en planificación curricular y CNEB. Respeta la competencia y capacidades seleccionadas. Formula criterios de evaluación como acciones observables derivadas de las capacidades, el propósito y el tema. Organiza inicio, desarrollo y cierre con procesos pedagógicos y los procesos didácticos pertinentes al área, sin convertirlos en una lista mecánica. Adapta el contexto a la región sin inventar datos locales. Entrega siempre JSON válido." }] },
-          generationConfig: {
-            maxOutputTokens: suggestionMode ? 800 : challengeMode ? 4500 : instrumentMode ? 5000 : moduleMode ? (moduleName === "annexes" ? 6500 : 4500) : 8192,
-            responseMimeType: "application/json",
-            responseSchema: challengeMode ? CHALLENGE_SCHEMA : suggestionMode ? SUGGESTION_SCHEMA : instrumentMode ? INSTRUMENT_SCHEMA : moduleMode ? MODULE_SCHEMAS[moduleName] : SESSION_SCHEMA,
-          },
-        }),
-      }
-    );
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      res.status(response.status).json({ error: data.error?.message || "Error de la API de Gemini" });
-      return;
+        runGeneration
+      );
+      generation = outcome.result;
+      credits = outcome.credits;
+    } else {
+      generation = await runGeneration();
     }
 
-    const candidate = data.candidates?.[0];
-    const text = candidate?.content?.parts?.map((p) => p.text).join("") || "";
-    if (!text) {
-      res.status(500).json({ error: "Gemini no devolvió contenido" });
-      return;
-    }
+    const { data, model } = generation;
 
-    if (candidate?.finishReason === "MAX_TOKENS") {
-      res.status(502).json({ error: "La sesión fue demasiado extensa y quedó incompleta. Intenta generarla nuevamente." });
-      return;
-    }
-
-    if (suggestionMode) {
-      const parsed = JSON.parse(text);
-      res.status(200).json({ suggestion: parsed.suggestion });
-      return;
-    }
-
-    if (challengeMode) {
-      const challenge = JSON.parse(text);
-      res.status(200).json({ challenge, model: GEMINI_MODEL });
-      return;
-    }
-
-    if (instrumentMode) {
-      const instrument = JSON.parse(text);
-      res.status(200).json({ instrument });
-      return;
-    }
-
+    // 6) Respuesta con la misma forma que ya esperaba el cliente.
+    if (suggestionMode) return res.status(200).json({ suggestion: data.suggestion });
+    if (challengeMode) return res.status(200).json({ challenge: data, model, _credits: credits });
+    if (instrumentMode) return res.status(200).json({ instrument: data, _credits: credits });
     if (moduleMode) {
-      const moduleResult = JSON.parse(text);
-      res.status(200).json({ module: moduleName, result: moduleResult, model: GEMINI_MODEL });
-      return;
+      return res.status(200).json({ module: moduleName, result: data, model, _credits: credits });
     }
-
-    const session = JSON.parse(text);
-    res.status(200).json({ session });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof SyntaxError ? "Gemini devolvió una respuesta incompleta. Intenta generarla nuevamente." : "Error interno al generar la sesión" });
+    return res.status(200).json({ session: data, _credits: credits });
+  } catch (error) {
+    return sendError(res, error, {
+      endpoint: "generate-session",
+      mode: req.body?.mode,
+      module: req.body?.module,
+    });
   }
 }

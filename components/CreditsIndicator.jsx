@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { supabase } from "../supabaseClient.js";
+import "../credit-widget.css";
 
 function prettyDate(value) {
   if (!value) return "";
@@ -46,12 +47,20 @@ export default function CreditsIndicator({
         },
       });
 
-      if (!response.ok) throw new Error("No se pudieron cargar los créditos");
+      // En preview local no hay funciones serverless: /api/credits devuelve
+      // el index.html del SPA. Sin esta comprobación, response.json() lanzaba
+      // un SyntaxError por cada intento y llenaba la consola de ruido.
+      const contentType = response.headers.get("content-type") || "";
+      if (!response.ok || !contentType.includes("application/json")) {
+        setCredits(null);
+        return;
+      }
 
-      const data = await response.json();
-      setCredits(data);
+      const data = await response.json().catch(() => null);
+      if (data) setCredits(data);
     } catch (error) {
-      console.error(error);
+      // Un fallo al consultar créditos no debe romper la interfaz.
+      if (import.meta.env.DEV) console.warn("[sciverse] créditos no disponibles:", error?.message);
     } finally {
       setLoading(false);
     }
@@ -105,7 +114,7 @@ export default function CreditsIndicator({
     <section className="credit-widget">
       <div className="credit-widget__head">
         <div>
-          <span className="credit-widget__eyebrow">PLAN GRATIS</span>
+          <span className="credit-widget__eyebrow">PLAN {String(credits.plan || "gratuito").toUpperCase()}</span>
           <h3>Tus creaciones con IA</h3>
         </div>
         <Sparkles size={22} />
@@ -123,6 +132,10 @@ export default function CreditsIndicator({
       <p>
         Se renuevan el {prettyDate(credits.next_reset)}.
       </p>
+
+      {remaining > 0 && remaining <= 1 && (
+        <p className="credit-widget__warn">Te queda {remaining} creación esta semana.</p>
+      )}
 
       {remaining === 0 && (
         <button type="button" onClick={onUpgrade}>

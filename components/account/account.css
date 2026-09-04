@@ -1,0 +1,103 @@
+/* ==========================================================================
+   MI CUENTA
+   ========================================================================== */
+.acc { display: grid; gap: var(--space-5); }
+@media (min-width: 780px) { .acc { grid-template-columns: 210px 1fr; gap: var(--space-8); } }
+
+/* ----------------------------------------------------------------- TABS */
+.acc__tabs { display: flex; gap: var(--space-1); overflow-x: auto; scrollbar-width: none; }
+.acc__tabs::-webkit-scrollbar { display: none; }
+.acc__tabs button {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  min-height: 42px; padding: var(--space-2) var(--space-3);
+  border: 0; border-radius: var(--radius-md); background: transparent;
+  font-family: var(--font-body); font-size: var(--text-sm); font-weight: var(--weight-medium);
+  color: var(--text-secondary); white-space: nowrap; cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.acc__tabs button:hover { background: var(--bg-sunken); color: var(--text-primary); }
+.acc__tabs button.is-active { background: var(--teal-50); color: var(--teal-800); font-weight: var(--weight-semibold); }
+@media (min-width: 780px) {
+  .acc__tabs { flex-direction: column; overflow: visible; border-right: 1px solid var(--border-subtle); padding-right: var(--space-3); }
+  .acc__tabs button { justify-content: flex-start; }
+}
+
+.acc__panel { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.acc__intro { margin: 0; font-size: var(--text-body); color: var(--text-secondary); }
+
+/* ------------------------------------------------------------- IDENTIDAD */
+.acc__identity { display: grid; grid-template-columns: auto 1fr; gap: var(--space-4); align-items: center; }
+.acc__avatar {
+  display: grid; place-items: center; width: 58px; height: 58px;
+  border-radius: var(--radius-full); background: var(--teal-700); color: #fff;
+  font-family: var(--font-display); font-size: var(--text-h3); font-weight: var(--weight-bold);
+}
+.acc__identity h3 { margin: 0 0 2px; font-family: var(--font-display); font-size: var(--text-h3); font-weight: var(--weight-bold); color: var(--text-primary); }
+.acc__identity p { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
+.acc__idbadges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+/* ------------------------------------------------------------------ DATOS */
+.acc__rows { display: flex; flex-direction: column; gap: 0; margin: 0; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
+.acc__rows > div { display: grid; grid-template-columns: 1fr; gap: 2px; padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--border-subtle); }
+.acc__rows > div:last-child { border-bottom: 0; }
+.acc__rows dt { font-size: var(--text-label); color: var(--text-tertiary); }
+.acc__rows dd { margin: 0; font-size: var(--text-body); color: var(--text-primary); }
+.acc__rows dd.is-capitalize { text-transform: capitalize; }
+.acc__empty { color: var(--text-tertiary); font-style: italic; }
+@media (min-width: 560px) { .acc__rows > div { grid-template-columns: 170px 1fr; align-items: center; gap: var(--space-4); } }
+
+/* --------------------------------------------------------------- FORMULARIO */
+.acc__form { display: grid; gap: var(--space-4); grid-template-columns: 1fr; }
+@media (min-width: 560px) { .acc__form { grid-template-columns: 1fr 1fr; } .acc__form .is-wide { grid-column: 1 / -1; } }
+.acc__form label { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.acc__form input, .acc__form select {
+  height: 44px; padding: 0 var(--space-3);
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--bg-surface); font-family: var(--font-body);
+  font-size: var(--text-body); font-weight: var(--weight-regular); color: var(--text-primary);
+}
+.acc__form input:focus, .acc__form select:focus { outline: none; border-color: var(--border-focus); box-shadow: var(--elev-focus); }
+.acc__formactions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); }
+
+/* -------------------------------------------------------------------- PLAN */
+.acc__planhead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.acc__planhead h3 { margin: var(--space-1) 0 0; font-family: var(--font-display); font-size: var(--text-h2); font-weight: var(--weight-bold); color: var(--text-primary); }
+.acc__plans { display: grid; gap: var(--space-3); grid-template-columns: 1fr; }
+@media (min-width: 620px) { .acc__plans { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); } }
+.acc__plans article { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-surface); }
+.acc__plans article.is-featured { border-color: var(--teal-300); box-shadow: var(--elev-1); }
+.acc__plans h4 { margin: 0; font-family: var(--font-display); font-size: var(--text-h3); font-weight: var(--weight-bold); color: var(--text-primary); }
+.acc__planprice { margin: 0; font-family: var(--font-display); font-size: 1.9rem; font-weight: var(--weight-bold); color: var(--text-primary); line-height: 1; }
+.acc__planprice small { font-size: .95rem; color: var(--text-secondary); }
+.acc__planprice span { display: block; margin-top: var(--space-1); font-family: var(--font-body); font-size: var(--text-label); font-weight: var(--weight-regular); color: var(--text-secondary); }
+.acc__plans ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); flex: 1; }
+.acc__plans li { font-size: var(--text-sm); color: var(--text-secondary); }
+.acc__plans li::before { content: "\2713  "; color: var(--teal-600); font-weight: var(--weight-bold); }
+
+/* ------------------------------------------------------------ CAPACITACIÓN */
+.acc__trainhero { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.acc__trainhero h3 { margin: 0; font-family: var(--font-display); font-size: var(--text-h2); font-weight: var(--weight-bold); color: var(--text-primary); }
+.acc__trainhero p { margin: 0; font-size: var(--text-body); color: var(--text-secondary); }
+.acc__trainpoints { display: grid; gap: var(--space-3); }
+.acc__trainpoints > div { display: grid; grid-template-columns: auto 1fr; gap: var(--space-3); align-items: start; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--bg-sunken); }
+.acc__trainpoints span { display: grid; place-items: center; width: 34px; height: 34px; border-radius: var(--radius-md); background: var(--bg-surface); color: var(--teal-700); }
+.acc__trainpoints strong { display: block; font-size: var(--text-body); color: var(--text-primary); }
+.acc__trainpoints p { margin: 2px 0 0; font-size: var(--text-sm); color: var(--text-secondary); }
+
+/* ------------------------------------------------ PRÓXIMAMENTE / INTEGRACIONES */
+.acc__soonlist { display: flex; flex-direction: column; }
+.acc__soonlist button {
+  display: flex; align-items: center; gap: var(--space-3);
+  min-height: 52px; padding: var(--space-3) 0;
+  border: 0; border-bottom: 1px solid var(--border-subtle); background: transparent;
+  font-family: var(--font-body); font-size: var(--text-body);
+  color: var(--text-primary); text-align: left; cursor: pointer;
+}
+.acc__soonlist button svg { color: var(--teal-700); }
+.acc__soonlist button:hover { color: var(--teal-700); }
+
+.acc__integrations { display: flex; flex-direction: column; gap: var(--space-3); }
+.acc__integrations > div { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); }
+.acc__integrations span:first-child { display: grid; place-items: center; width: 38px; height: 38px; border-radius: var(--radius-md); background: var(--bg-sunken); color: var(--text-secondary); }
+.acc__integrations strong { display: block; font-size: var(--text-body); color: var(--text-primary); }
+.acc__integrations p { margin: 2px 0 0; font-size: var(--text-sm); color: var(--text-secondary); }

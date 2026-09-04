@@ -1,0 +1,134 @@
+/* ==========================================================================
+   HOME DOCENTE
+   ========================================================================== */
+
+.dash { display: flex; flex-direction: column; gap: var(--space-10); max-width: 1080px; }
+
+/* -------------------------------------------------------------- SALUDO */
+.dash__hello { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.dash__greet { margin: 0 0 var(--space-2); font-size: var(--text-body-lg); color: var(--text-secondary); }
+.dash__title {
+  margin: 0; max-width: 24ch;
+  font-family: var(--font-display); font-size: var(--text-h1);
+  font-weight: var(--weight-bold); line-height: var(--leading-tight);
+  letter-spacing: -.02em; color: var(--text-primary); text-wrap: balance;
+}
+
+/* ------------------------------------------------ CONTINUAR DONDE LO DEJASTE */
+.dash__continue {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--teal-200); border-radius: var(--radius-lg);
+  background: linear-gradient(120deg, var(--teal-50), var(--bg-surface) 70%);
+}
+.dash__continue.is-loading { border-color: var(--border-subtle); background: var(--bg-surface); }
+.dash__continueicon {
+  display: grid; place-items: center; width: 44px; height: 44px; flex-shrink: 0;
+  border-radius: var(--radius-md); background: var(--bg-surface); color: var(--teal-700);
+  box-shadow: var(--elev-1);
+}
+.dash__continuebody { flex: 1; min-width: 200px; }
+.dash__continuebody h2 {
+  margin: var(--space-1) 0; font-family: var(--font-display);
+  font-size: var(--text-h3); font-weight: var(--weight-bold); color: var(--text-primary);
+}
+.dash__continuemeta { margin: 0; font-size: var(--text-sm); color: var(--text-secondary); }
+.dash__continueactions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+/* ------------------------------------------------------- ACCIÓN PRINCIPAL */
+.dash__primary {
+  position: relative; display: grid; gap: var(--space-5); align-items: center;
+  padding: var(--space-8); overflow: hidden;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 12% 20%, rgba(62,198,192,.16), transparent 55%),
+    radial-gradient(circle at 90% 85%, rgba(255,187,0,.13), transparent 50%),
+    var(--bg-surface);
+  box-shadow: var(--elev-1);
+}
+.dash__primarycopy { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.dash__primarycopy h2 {
+  margin: 0; font-family: var(--font-display); font-size: var(--text-h2);
+  font-weight: var(--weight-bold); color: var(--text-primary);
+}
+.dash__primarycopy p { margin: 0; max-width: 52ch; font-size: var(--text-body); color: var(--text-secondary); }
+.dash__primarysteps { display: flex; flex-wrap: wrap; gap: var(--space-2); list-style: none; margin: 0 0 var(--space-2); padding: 0; }
+.dash__primarysteps li {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: 5px 11px; border-radius: var(--radius-full);
+  background: var(--bg-surface); border: 1px solid var(--border-subtle);
+  font-size: var(--text-label); font-weight: var(--weight-semibold); color: var(--teal-700);
+}
+.dash__primarykantu { display: none; justify-self: end; }
+@media (min-width: 900px) {
+  .dash__primary { grid-template-columns: 1fr auto; }
+  .dash__primarykantu { display: block; }
+}
+
+/* ------------------------------------------------------------- SECCIONES */
+.dash__sectionhead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); margin-bottom: var(--space-4); }
+.dash__sectionhead h2 { margin: 0; font-family: var(--font-display); font-size: var(--text-h3); font-weight: var(--weight-bold); color: var(--text-primary); }
+.dash__seeall {
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  min-height: 36px; padding: 0 var(--space-2); border-radius: var(--radius-sm);
+  border: 0; background: none; font-family: var(--font-body);
+  font-size: var(--text-sm); font-weight: var(--weight-semibold);
+  color: var(--teal-700); cursor: pointer; white-space: nowrap;
+}
+.dash__seeall:hover { color: var(--teal-800); }
+
+/* -------------------------------------------------------- ACCIONES RÁPIDAS */
+.dash__quick { display: grid; gap: var(--space-3); grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+.dash__quickcard {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-1);
+  padding: var(--space-4); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); background: var(--bg-surface);
+  text-align: left; cursor: pointer;
+  transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.dash__quickcard:hover { transform: translateY(-2px); border-color: var(--border-brand); box-shadow: var(--elev-2); }
+.dash__quickcard > span {
+  display: grid; place-items: center; width: 38px; height: 38px; margin-bottom: var(--space-2);
+  border-radius: var(--radius-md); background: var(--bg-brand-soft); color: var(--teal-700);
+}
+.dash__quickcard strong { font-size: var(--text-body); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.dash__quickcard small { font-size: var(--text-label); color: var(--text-secondary); }
+
+/* ---------------------------------------------------------------- RECIENTES */
+.dash__recent { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); background: var(--bg-surface); overflow: hidden; }
+.dash__recentitem {
+  display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3);
+  align-items: center; padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.dash__recentitem:last-child { border-bottom: 0; }
+.dash__recenticon { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-md); background: var(--bg-sunken); color: var(--teal-700); }
+.dash__recentmain { min-width: 0; border: 0; background: none; padding: 0; text-align: left; cursor: pointer; }
+.dash__recentmain strong { display: block; font-size: var(--text-body); font-weight: var(--weight-semibold); color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash__recentmain small { display: block; font-size: var(--text-label); color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dash__recentmain:hover strong { color: var(--teal-700); }
+.dash__recentitem time { display: none; font-size: var(--text-label); color: var(--text-tertiary); white-space: nowrap; }
+.dash__recentdl {
+  display: grid; place-items: center; width: 40px; height: 40px;
+  border: 0; border-radius: var(--radius-md); background: transparent;
+  color: var(--text-secondary); cursor: pointer;
+}
+.dash__recentdl:hover { background: var(--bg-sunken); color: var(--teal-700); }
+@media (min-width: 640px) {
+  .dash__recentitem { grid-template-columns: auto 1fr auto auto; }
+  .dash__recentitem time { display: block; }
+}
+
+/* ---------------------------------------------------------------- TARJETAS */
+.dash__side { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.dash__card {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2);
+  padding: var(--space-5); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); background: var(--bg-surface);
+}
+.dash__cardicon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: var(--space-1); border-radius: var(--radius-md); }
+.dash__cardicon--teal  { background: var(--teal-50);  color: var(--teal-700); }
+.dash__cardicon--amber { background: var(--amber-50); color: var(--amber-700); }
+.dash__cardicon--coral { background: var(--coral-50); color: var(--coral-700); }
+.dash__card h3 { margin: 0; font-family: var(--font-display); font-size: var(--text-body-lg); font-weight: var(--weight-semibold); color: var(--text-primary); }
+.dash__card p { margin: 0 0 var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); flex: 1; }

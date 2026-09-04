@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0F3D3A"/><stop offset="1" stop-color="#177C77"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="78%" cy="24%" r="46%">
+      <stop offset="0" stop-color="#3EC6C0" stop-opacity=".45"/><stop offset="1" stop-color="#3EC6C0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <rect width="1200" height="630" fill="url(#glow)"/>
+  <g transform="translate(88,140)">
+    <rect width="88" height="88" rx="26" fill="#fff" fill-opacity=".12"/>
+    <ellipse cx="44" cy="44" rx="29" ry="13" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" transform="rotate(-28 44 44)"/>
+    <circle cx="44" cy="44" r="10.5" fill="#fff"/>
+    <circle cx="65" cy="32" r="5.5" fill="#FB6542"/>
+  </g>
+  <text x="88" y="330" font-family="Space Grotesk, sans-serif" font-size="66" font-weight="700" fill="#ffffff">Tus sesiones alineadas</text>
+  <text x="88" y="404" font-family="Space Grotesk, sans-serif" font-size="66" font-weight="700" fill="#3EC6C0">al CNEB, en minutos</text>
+  <text x="88" y="470" font-family="Inter, sans-serif" font-size="27" fill="#A8E5E1">Sesiones · Rúbricas · Fichas · Proyectos STEAM — listos para Word</text>
+  <text x="88" y="548" font-family="Inter, sans-serif" font-size="23" font-weight="600" fill="#ffffff" fill-opacity=".72">SciVerse — una iniciativa de Teaching TIC</text>
+</svg>

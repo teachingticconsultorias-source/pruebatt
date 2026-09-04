@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 236 56" role="img" aria-label="SciVerse">
+  <title>SciVerse</title>
+  <defs>
+    <linearGradient id="lg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3EC6C0"/><stop offset="1" stop-color="#177C77"/>
+    </linearGradient>
+  </defs>
+  <g>
+    <rect x="0" y="4" width="48" height="48" rx="14" fill="url(#lg)"/>
+    <ellipse cx="24" cy="28" rx="15.5" ry="7" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" transform="rotate(-28 24 28)"/>
+    <circle cx="24" cy="28" r="5.6" fill="#fff"/>
+    <circle cx="35.5" cy="21.5" r="3" fill="#FB6542"/>
+  </g>
+  <text x="60" y="27" font-family="Space Grotesk, Inter, sans-serif" font-size="21" font-weight="700" fill="#0F2E2C">SciVerse</text>
+  <text x="60.5" y="42" font-family="Inter, sans-serif" font-size="10.5" font-weight="500" fill="#6B8280">una iniciativa de Teaching TIC</text>
+</svg>

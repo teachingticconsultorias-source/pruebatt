@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="Biblioteca vacía">
+  <title>Biblioteca vacía</title>
+  <ellipse cx="120" cy="158" rx="78" ry="10" fill="#E8EFEF"/>
+  <rect x="52" y="42" width="88" height="108" rx="10" fill="#fff" stroke="#D5E2E1" stroke-width="2"/>
+  <rect x="66" y="62" width="52" height="6" rx="3" fill="#D3F2F0"/>
+  <rect x="66" y="78" width="40" height="6" rx="3" fill="#E8EFEF"/>
+  <rect x="66" y="94" width="46" height="6" rx="3" fill="#E8EFEF"/>
+  <rect x="96" y="30" width="88" height="108" rx="10" fill="#fff" stroke="#A8E5E1" stroke-width="2"/>
+  <rect x="110" y="50" width="56" height="6" rx="3" fill="#3EC6C0" opacity=".55"/>
+  <rect x="110" y="66" width="42" height="6" rx="3" fill="#E8EFEF"/>
+  <rect x="110" y="82" width="50" height="6" rx="3" fill="#E8EFEF"/>
+  <rect x="110" y="98" width="34" height="6" rx="3" fill="#E8EFEF"/>
+  <circle cx="186" cy="46" r="16" fill="#FFF4D1"/>
+  <path d="M186 38v16M178 46h16" stroke="#FFBB00" stroke-width="3.2" stroke-linecap="round"/>
+</svg>
