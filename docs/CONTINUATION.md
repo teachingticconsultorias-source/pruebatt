@@ -15,7 +15,9 @@ repetir ese paso al inicio de cada sesión de QA.
 - Rama: `feat/visual-overhaul`
 - Bloque Visual: **100% terminado**
 - Working tree limpio.
-- No se hizo push, deploy, merge a `main`, ni cambios en Supabase/Vercel.
+- Rama publicada en `origin` y desplegada como **Vercel Preview** (ver el bloque
+  de despliegue al final).
+- No se hizo merge a `main`, ni deploy a producción, ni cambios en Supabase.
 
 ## BLOQUE VISUAL — CIERRE
 
