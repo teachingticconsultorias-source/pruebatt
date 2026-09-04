@@ -3,6 +3,9 @@ import { supabase } from "./supabaseClient.js";
 import AuthGate from "./AuthGate.jsx";
 import { GUIDE_ACTIVITIES } from "./steamGuideActivities.js";
 import CreditsIndicator from "./components/CreditsIndicator.jsx";
+import Landing from "./components/landing/Landing.jsx";
+import "./components/landing/landing.css";
+import { PLANS, FREE_WEEKLY_AI_LIMIT, whatsappLink } from "./config/plans.js";
 import "./library.css";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
@@ -2993,42 +2996,7 @@ function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreati
 /* Fuente única de verdad para los planes: se usa en el landing (sección
    #planes) y en el perfil del docente (TeacherAccountModal), para que
    ambos siempre muestren los mismos precios y beneficios. */
-/* ----------------------------------------------------------------------
-   FUENTE ÚNICA DE PLANES Y PRECIOS
-   ----------------------------------------------------------------------
-   ⚠️ REQUIERE CONFIRMACIÓN COMERCIAL
-   La auditoría encontró una contradicción que NO puede resolverse desde el
-   código, porque depende de una decisión de negocio:
-
-     • El copy del plan gratuito prometía "5 actividades + 5 instrumentos +
-       5 materiales" semanales, es decir 15 creaciones.
-     • La base de datos concede UN SOLO cupo compartido de 5 por semana
-       (docentes.ai_weekly_limit, por defecto 5).
-
-   Mientras no se confirme la intención comercial, el texto describe lo que
-   el sistema realmente entrega (5 creaciones semanales en total), para no
-   prometer al docente algo que no va a recibir.
-
-   Si la intención es 15/semana, el cambio correcto NO es el copy: es subir
-   ai_weekly_limit en Supabase. Registrado en docs/audit/19-IMPROVEMENT-BACKLOG.md (B-016).
-
-   El número real que ve la docente sale siempre de la API de créditos
-   (CreditsIndicator), no de esta constante.
-   ---------------------------------------------------------------------- */
-
-/** Contacto comercial único: antes estaba repetido en 8 sitios. */
-const WHATSAPP_NUMBER = "51921090875";
-export function whatsappLink(message) {
-  return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
-}
-
-/** Cupo semanal del plan gratuito según la base de datos. */
-const FREE_WEEKLY_AI_LIMIT = 5;
-
-const PLANS = [
-  { name: "Gratuito", price: "0", period: "para conocer SciVerse", saving: "Sin tarjeta", featured: false, benefits: [`${FREE_WEEKLY_AI_LIMIT} creaciones con IA por semana (sesiones, instrumentos o materiales)`, "Banco de actividades STEAM completo", "Retos grupales y plantillas", "Exportación a Word", "Acceso a comunidad WhatsApp"] },
-  { name: "Mensual", price: "20", period: "por 1 mes", saving: "Todo ilimitado", featured: true, benefits: ["Sesiones de aprendizaje ilimitadas", "Actividades STEAM y recursos CNEB ilimitados", "Instrumentos de evaluación ilimitados", "Materiales editables sin límite", "Exportación Word, PDF, PPT sin marca de agua", "Plantillas y fichas personalizables", "Primaria y Secundaria", "Soporte prioritario por WhatsApp"] },
-];
+// PLANS, whatsappLink y FREE_WEEKLY_AI_LIMIT viven ahora en config/plans.js
 
 const TESTIMONIALS = [
   { name: "Patricia Quispe", role: "Docente de Primaria", initials: "PQ", quote: "Al inicio no le tenía fe, pero cuando vi que la sesión salía alineada al CNEB, me pareció que es lo que todo docente necesita." },
@@ -4142,7 +4110,7 @@ function MaterialViewerModal({item,typeLabel,onClose,onDownload,onDuplicate,onDe
 /* ---------------------------------------------------------------------- */
 
 export default function SciVerseDocentes() {
-  return <AuthGate LandingComponent={ImprovedLanding}>{(profile, onLogout) => <SciVerseApp profile={profile} onLogout={onLogout} />}</AuthGate>;
+  return <AuthGate LandingComponent={Landing}>{(profile, onLogout) => <SciVerseApp profile={profile} onLogout={onLogout} />}</AuthGate>;
 }
 
 function TeacherAccountModal({ profile, onClose }) {
