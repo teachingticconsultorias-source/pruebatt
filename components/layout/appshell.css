@@ -144,11 +144,11 @@
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: 3px; min-height: 52px; padding: var(--space-1);
   border: 0; background: transparent; cursor: pointer;
-  font-family: var(--font-body); font-size: 11px; font-weight: var(--weight-medium);
+  font-family: var(--font-body); font-size: var(--text-label); font-weight: var(--weight-medium);
   color: var(--text-tertiary);
   transition: color var(--dur-fast) var(--ease-out);
 }
-.shell__mobile button span { font-size: 11px; }
+.shell__mobile button span { font-size: var(--text-label); }
 .shell__mobile button.is-active { color: var(--teal-700); font-weight: var(--weight-semibold); }
 
 /* ---------------------------------------------------------- HOJA "MÁS" */
