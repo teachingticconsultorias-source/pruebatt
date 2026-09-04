@@ -1,5 +1,8 @@
 # 16 — Deuda técnica
 
+> ⚠️ **Una afirmación de este documento es incorrecta.** Lo que se dice aquí sobre el modelo `gemini-3.6-flash` (que no existiría y rompería la IA) es **falso**: es un modelo válido y estable de la API de Gemini. El resto del documento se mantiene. Detalle en [`25-AUDIT-CORRECTIONS.md`](25-AUDIT-CORRECTIONS.md) §C-1.
+
+
 Inventario consolidado con rutas y líneas reales.
 
 **Escala de esfuerzo:** XS < 2 h · S = medio día · M = 1-3 días · L = 1-2 semanas · XL > 2 semanas

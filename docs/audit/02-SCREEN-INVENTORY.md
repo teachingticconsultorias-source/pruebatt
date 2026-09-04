@@ -1,5 +1,8 @@
 # 02 — Inventario de pantallas
 
+> ⚠️ **Una afirmación de este documento es incorrecta.** Lo que se dice aquí sobre `onChoosePlan` (que elegir un plan de pago llevaría al registro) es **falso**: `PlansModal` ya abre WhatsApp correctamente. El resto del documento se mantiene. Detalle en [`25-AUDIT-CORRECTIONS.md`](25-AUDIT-CORRECTIONS.md) §C-2.
+
+
 Inventario completo. Ninguna pantalla queda sin analizar.
 
 **Advertencia metodológica.** El build ejecuta `apply-sciverse-v2.mjs`, que reemplaza por completo `CreateStudio` y el dashboard. Por eso hay dos conjuntos de pantallas:

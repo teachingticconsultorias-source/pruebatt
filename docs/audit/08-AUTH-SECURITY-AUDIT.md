@@ -1,5 +1,8 @@
 # 08 — Auditoría de autenticación y seguridad
 
+> ⚠️ **Una afirmación de este documento es incorrecta.** Lo que se dice aquí sobre el modelo `gemini-3.6-flash` (que no existiría y rompería la IA) es **falso**: es un modelo válido y estable de la API de Gemini. El resto del documento se mantiene. Detalle en [`25-AUDIT-CORRECTIONS.md`](25-AUDIT-CORRECTIONS.md) §C-1.
+
+
 Auditoría defensiva. **No se explotó ninguna vulnerabilidad**: todo se determinó leyendo el código.
 
 ### Clasificación

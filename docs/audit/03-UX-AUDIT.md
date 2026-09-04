@@ -1,5 +1,8 @@
 # 03 — Auditoría UX
 
+> ⚠️ **Una afirmación de este documento es incorrecta.** Lo que se dice aquí sobre `onChoosePlan` (que elegir un plan de pago llevaría al registro) es **falso**: `PlansModal` ya abre WhatsApp correctamente. El resto del documento se mantiene. Detalle en [`25-AUDIT-CORRECTIONS.md`](25-AUDIT-CORRECTIONS.md) §C-2.
+
+
 Evaluada desde la perspectiva de una docente real: tiempo escaso, conexión irregular, trabajo entre clases, y la necesidad de entregar documentos a dirección con formato oficial.
 
 Cada hallazgo indica **qué pasa · dónde · por qué importa · impacto en la docente · propuesta · prioridad · esfuerzo**.

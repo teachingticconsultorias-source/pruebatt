@@ -1,5 +1,8 @@
 # 10 — Inventario funcional
 
+> ⚠️ **Una afirmación de este documento es incorrecta.** Lo que se dice aquí sobre `onChoosePlan` (que elegir un plan de pago llevaría al registro) es **falso**: `PlansModal` ya abre WhatsApp correctamente. El resto del documento se mantiene. Detalle en [`25-AUDIT-CORRECTIONS.md`](25-AUDIT-CORRECTIONS.md) §C-2.
+
+
 Inventario de todas las funcionalidades del producto, con estado verificado en el código.
 
 ### Estados

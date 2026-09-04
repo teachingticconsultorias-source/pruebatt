@@ -1,5 +1,8 @@
 # 24 — Baseline del entorno real
 
+> ⚠️ **Una afirmación de este documento es incorrecta.** Lo que se dice aquí sobre el modelo `gemini-3.6-flash` (que no existiría y rompería la IA) es **falso**: es un modelo válido y estable de la API de Gemini. El resto del documento se mantiene. Detalle en [`25-AUDIT-CORRECTIONS.md`](25-AUDIT-CORRECTIONS.md) §C-1.
+
+
 Inventario de lo que **debe verificarse contra los servicios reales** antes de la siguiente fase.
 
 **Fecha:** 3 de septiembre de 2026
