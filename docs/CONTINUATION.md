@@ -270,6 +270,48 @@ intacto, créditos intactos, `ADMIN_SECRET` no rotado.
 Revisar la Preview visualmente y decidir el merge a `main`. El merge sigue
 sin hacerse a propósito: producción continúa sirviendo el código anterior.
 
+## MERGE A MAIN Y DEPLOY DE PRODUCCIÓN — 2026-09-04
+
+| Concepto | Valor |
+|---|---|
+| main anterior | `e49c68c` |
+| main final | `1f70a59` (merge `--no-ff` de `feat/visual-overhaul`) |
+| Conflictos | ninguno: `origin/main` era ancestro estricto de la rama |
+| Push | `e49c68c..1f70a59`, sin force, sin reescribir historial |
+| Validación previa | tests 22/22 · build OK · `git diff --check` limpio · sin mutación de fuentes |
+| Deployment de producción | **success** para `1f70a59` |
+| URL del deployment | https://pruebatt-na8i5e912-teaching-tic.vercel.app |
+| Inspector | https://vercel.com/teaching-tic/pruebatt/2Qmhj3eQJER1Vw2iHwbg6uX4drgb |
+
+### El dominio público todavía no sirve el rediseño
+
+`pruebatt.vercel.app` responde 200 pero sigue entregando `index-DGkFS7QB.js`,
+el bundle anterior. No es caché del edge: el asset del build nuevo,
+`/assets/index-CMRTgi7D.js`, devuelve **404** en ese dominio, mientras el
+antiguo devuelve 200. Un alias apuntando al deployment nuevo serviría el
+asset nuevo.
+
+Conclusión: **`pruebatt.vercel.app` no es el alias de producción de este
+proyecto**. Apunta a otro proyecto de Vercel o está fijado a un deployment
+antiguo. Hay que revisarlo en Vercel → Settings → Domains.
+
+El deployment correcto de `main` sí existe y compiló, pero su URL está
+detrás de Deployment Protection (302 → `vercel.com/login`), así que no se
+pudo verificar su contenido desde aquí.
+
+### Qué falta para ver el rediseño en el dominio principal
+
+1. En Vercel → Settings → Domains, comprobar a qué proyecto/deployment está
+   asignado `pruebatt.vercel.app` y apuntarlo al proyecto `teaching-tic/pruebatt`.
+2. O bien desactivar Deployment Protection para poder abrir la URL del
+   deployment de producción directamente.
+
+### Backend
+
+Sin cambios: Supabase no tocado, `001_material_types.sql` sin ejecutar,
+RLS/RPC/tablas intactos, Gemini y créditos intactos, `ADMIN_SECRET` no rotado,
+variables de Vercel sin modificar.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque
