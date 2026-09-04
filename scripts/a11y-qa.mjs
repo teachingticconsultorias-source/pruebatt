@@ -116,11 +116,15 @@ async function tabWalk(page, limit = 60) {
 const browser = await chromium.launch();
 const problems = [];
 
-for (const [name, viewport, auth] of [
+for (const [name, viewport, auth, nav] of [
   ["landing", { width: 1440, height: 900 }, false],
   ["landing-movil", { width: 375, height: 812 }, false],
   ["panel", { width: 1440, height: 900 }, true],
   ["panel-movil", { width: 375, height: 812 }, true],
+  ["actividades", { width: 1440, height: 900 }, true, "Actividades STEAM"],
+  ["retos", { width: 1440, height: 900 }, true, "Retos grupales"],
+  ["biblioteca", { width: 1440, height: 900 }, true, "Mi biblioteca"],
+  ["herramientas", { width: 1440, height: 900 }, true, "Herramientas"],
 ]) {
   const ctx = await browser.newContext({ viewport });
   if (auth) {
@@ -129,6 +133,10 @@ for (const [name, viewport, auth] of [
   const page = await ctx.newPage();
   await page.goto(BASE, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(1800);
+  if (nav) {
+    await page.locator(".shell__link").filter({ hasText: nav }).first().click().catch(() => {});
+    await page.waitForTimeout(1400);
+  }
 
   const contrast = await page.evaluate(AUDIT);
   const kb = await tabWalk(page);

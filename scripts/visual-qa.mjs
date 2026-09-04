@@ -25,7 +25,7 @@
 
    EXCEPCIÓN CONOCIDA
    ------------------
-   Los enlaces "términos y condiciones" y "política de privacidad" del
+   Los botones en línea "términos y condiciones" y "política de privacidad" del
    registro miden 143x20 y 132x20. Son objetivos EN LÍNEA dentro de una
    frase: WCAG 2.5.8 los exceptúa expresamente y agrandarlos rompería el
    párrafo. No es un defecto.
@@ -96,12 +96,17 @@ const APP_SCREENS = [
 ];
 
 async function clickText(page, text) {
-  // >> visible=true descarta la sidebar oculta, que contiene los mismos textos
-  const el = page.locator(`text="${text}" >> visible=true`).first();
-  if (!(await el.count())) return false;
-  try { await el.click({ timeout: 2500 }); } catch { return false; }
-  await page.waitForTimeout(500);
-  return true;
+  // Hay copias del mismo texto en la navegación móvil oculta. Recorremos los
+  // candidatos para accionar únicamente el que participa del layout actual.
+  const candidates = page.getByText(text, { exact: true });
+  for (let index = 0; index < await candidates.count(); index++) {
+    const el = candidates.nth(index);
+    if (!(await el.isVisible().catch(() => false))) continue;
+    try { await el.click({ timeout: 2500 }); } catch { return false; }
+    await page.waitForTimeout(500);
+    return true;
+  }
+  return false;
 }
 async function navTo(page, desktopLabel, mobileLabel) {
   // Escritorio: enlace de la barra lateral
@@ -166,6 +171,9 @@ async function audit(page) {
     if (de.clientWidth <= 768) {
       const seen = new Set();
       for (const el of document.querySelectorAll("button, a[href], [role=button]")) {
+        // Excepción WCAG 2.5.8: objetivos en línea dentro de una oración cuyo
+        // tamaño está limitado por la altura de línea del texto circundante.
+        if (el.closest(".auth__consent")) continue;
         const r = el.getBoundingClientRect();
         if (!r.width || !r.height) continue;
         if (r.height < 24 || r.width < 24) {
@@ -203,11 +211,16 @@ for (const vp of VIEWPORTS) {
     const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height } });
     const page = await ctx.newPage();
     wire(page, vp.name, screen.id);
-    await page.goto(BASE, { waitUntil: "networkidle" });
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(400);
     await screen.go(page);
     await page.waitForTimeout(400);
-    report.push({ vp: vp.name, screen: screen.id, problems: await audit(page) });
+    const problems = await audit(page);
+    const publicWhere = screen.id === "landing"
+      ? "landing"
+      : await page.locator(".auth__title").first().textContent().catch(() => "landing");
+    problems.push({ type: "info-where", detail: (publicWhere || "?").trim() });
+    report.push({ vp: vp.name, screen: screen.id, problems });
     if (SHOTS) await page.screenshot({ path: `${OUT}/${screen.id}-${vp.name}.png` });
     await ctx.close();
   }
@@ -228,7 +241,9 @@ for (const vp of VIEWPORTS) {
 
     await screen.go(page);
     await page.waitForTimeout(600);
-    let crumb = await page.locator(".shell__crumb:visible, .shell__mobile button.is-active span:visible").first().textContent().catch(() => "");
+    // El breadcrumb conserva el destino actual aunque se oculte visualmente en
+    // móvil, donde Retos y Herramientas viven dentro de la hoja «Más».
+    let crumb = await page.locator(".shell__crumb").first().textContent().catch(() => "");
     if (await page.locator(".acc__tabs").count()) crumb = "cuenta";
     const problems = await audit(page);
     problems.push({ type: "info-where", detail: (crumb || "?").trim() });
@@ -267,7 +282,18 @@ for (const c of uniq.values()) console.log(`  [${c.type}] x${c.count} ${c.text}`
 console.log(`\nTOTAL problemas: ${total}`);
 
 console.log("\n===== COBERTURA REAL =====");
-const MAP = { dashboard: "inicio", crear: "crear", biblioteca: "biblioteca", actividades: "actividades", retos: "retos", cuenta: "cuenta", herramientas: "herramientas" };
+const MAP = {
+  landing: "landing",
+  login: "bienvenida",
+  registro: "crea tu cuenta",
+  dashboard: "inicio",
+  crear: "crear",
+  biblioteca: "biblioteca",
+  actividades: "actividades",
+  retos: "retos",
+  cuenta: "cuenta",
+  herramientas: "herramientas",
+};
 const bad = coverage.filter((c) => {
   const [key, where] = c.split(" -> ");
   const screen = key.split("@")[0];

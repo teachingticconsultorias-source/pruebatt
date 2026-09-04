@@ -280,6 +280,7 @@
 
 /* ------------------------------------------------------------- CTA FINAL */
 .lp-final {
+  width: calc(100% - (2 * var(--content-pad)));
   max-width: var(--content-max); margin: 0 auto var(--space-16);
   padding: var(--space-12) var(--content-pad);
   display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--space-3);
@@ -293,7 +294,6 @@
 .lp-final img { margin-bottom: var(--space-2); }
 .lp-final h2 { margin: 0; font-size: var(--text-h1); text-wrap: balance; }
 .lp-final p { margin: 0 0 var(--space-4); font-size: var(--text-body-lg); max-width: 52ch; }
-@media (min-width: 768px) { .lp-final { margin-inline: var(--content-pad); } }
 
 /* ================================================================= FOOTER */
 .lp-footer { border-top: 1px solid var(--border-subtle); background: var(--bg-surface); }
