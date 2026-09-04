@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 180" role="img" aria-label="Sin resultados">
+  <title>Sin resultados</title>
+  <ellipse cx="120" cy="158" rx="70" ry="9" fill="#E8EFEF"/>
+  <circle cx="110" cy="80" r="44" fill="#fff" stroke="#A8E5E1" stroke-width="3"/>
+  <circle cx="110" cy="80" r="30" fill="#ECFAF9"/>
+  <path d="M143 113l26 26" stroke="#177C77" stroke-width="9" stroke-linecap="round"/>
+  <path d="M96 74h28M96 88h18" stroke="#B4C6C4" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="168" cy="48" r="6" fill="#FB6542" opacity=".8"/>
+</svg>
