@@ -595,6 +595,50 @@ Se retiró `002_secure_ai_credits.sql` (sustituida por 003).
 5. Verificar una generación real.
 6. `004_material_types.sql` → verificar guardado de los cuatro tipos.
 
+## CENSO DE PLANES · PASO PREVIO · 2026-09-06
+
+**Bloqueado: este entorno no puede conectar a producción.** Hay proyecto
+enlazado en `supabase/.temp` (ref `sqsovhfzcsaxuqtftvbi`), pero la URL del
+pooler **no lleva contraseña** —comprobado sin imprimir su valor: no hay campo
+de credencial entre el usuario y el host—, no hay `DATABASE_URL`, el Supabase
+CLI no está instalado y `.env.local` sigue apuntando al proyecto ficticio.
+
+Entregado para desbloquear: `supabase/inspect/005_census_planes.sql`. Una
+sola sentencia de solo lectura que devuelve valores de `plan`, recuentos,
+normalización y un veredicto directo sobre si 002 puede ejecutarse. No expone
+ningún dato personal.
+
+### Dos defectos corregidos en las migraciones propias
+
+Encontrados en la revisión previa, antes de ejecutar nada:
+
+1. **`002` abortaba con cadena vacía o con espacios.** La guarda comparaba
+   `lower(plan)` sin recortar, así que `''` y `' gratuito '` se contaban como
+   planes desconocidos y habrían parado la migración por un problema de
+   calidad de dato, no de negocio. Ahora normaliza con `btrim`: NULL, vacío y
+   sólo-espacios significan gratuito.
+2. **`004` dejaba `touch_updated_at()` heredando EXECUTE para `anon`.** Los
+   privilegios por defecto del proyecto la habrían expuesto en el esquema de
+   PostgREST. Se añade el `revoke`, igual que en 002 y 003. El riesgo
+   práctico era nulo —una función de trigger no es invocable directamente—
+   pero rompía el criterio aplicado en el resto.
+
+### Nota de higiene, sin urgencia
+
+`supabase/.temp/` está versionado en un repositorio **público**. No contiene
+secretos —lo verifiqué campo por campo—, pero es estado local del CLI y no
+debería estar en el repositorio. Añadir a `.gitignore` cuando toque.
+
+### Estado de las tres migraciones
+
+Revisadas sin ejecutar. Orden, dependencias, transacción única, grants
+explícitos, RLS, SECURITY DEFINER con `search_path` vacío, índices y
+constraints: correctos. Las tres terminan con permisos explícitos, que es lo
+que exige el proyecto por sus privilegios por defecto.
+
+Quedan **listas salvo el censo**: 002 no puede ejecutarse hasta saber que no
+hay planes sin equivalencia.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque

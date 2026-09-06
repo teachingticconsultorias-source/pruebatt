@@ -154,6 +154,12 @@ end;
 $$;
 
 drop trigger if exists materiales_docente_touch_updated_at on public.materiales_docente;
+-- Los ALTER DEFAULT PRIVILEGES del proyecto conceden EXECUTE a anon y
+-- authenticated sobre cada función nueva de public. Una función de trigger no
+-- es invocable directamente, pero no debe quedar expuesta en el esquema de
+-- PostgREST ni romper el criterio aplicado en 002 y 003.
+revoke all on function public.touch_updated_at() from public, anon, authenticated;
+
 create trigger materiales_docente_touch_updated_at
   before update on public.materiales_docente
   for each row execute procedure public.touch_updated_at();

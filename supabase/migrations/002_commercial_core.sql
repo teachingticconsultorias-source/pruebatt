@@ -51,11 +51,14 @@ begin
 
   -- Cualquier plan que no sepamos traducir se para aquí. Degradar en silencio
   -- a alguien que paga sería peor que no ejecutar nada.
+  -- NULL, cadena vacía y sólo-espacios significan gratuito: no deben abortar.
+  -- Se normaliza con btrim + lower antes de comparar, para que ' Gratuito '
+  -- no se confunda con un plan de pago desconocido.
   select string_agg(distinct plan, ', ')
     into v_desconocidos
     from public.docentes
-   where plan is not null
-     and lower(plan) not in ('gratuito', 'free');
+   where nullif(btrim(coalesce(plan, '')), '') is not null
+     and lower(btrim(plan)) not in ('gratuito', 'free');
 
   if v_desconocidos is not null then
     raise exception
