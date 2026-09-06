@@ -2731,17 +2731,50 @@ __________________________________________________
 2. ¿Qué enseñanza del texto podrías aplicar en tu entorno?
 __________________________________________________`;
     }
-    const questions=(resource.secciones||[]).flatMap(s=>(s.actividades||[]).filter(a=>["pregunta","respuesta_larga"].includes(a.tipo)).map(a=>a.texto)).slice(0,8);
-    return `FICHA DE TRABAJO · PREGUNTAS Y RESPUESTAS
+    // NUNCA se inventa contenido. Antes esto renderizaba ocho huecos fijos y
+    // rellenaba los que faltaban con `Pregunta sobre ${tema}`, así que una
+    // ficha con cuatro preguntas reales se mostraba —y se guardaba— con
+    // cuatro frases inventadas que ningún modelo había escrito.
+    //
+    // Además se descartaban cuatro de los seis tipos de actividad: una tabla
+    // o una lista generadas se tiraban, y luego "faltaban" preguntas. Ahora se
+    // respeta la ficha tal como llegó, con sus secciones.
+    const linea = "__________________________________________________";
+    const cuerpo = (resource.secciones||[])
+      .filter(s => (s.actividades||[]).length)
+      .map((s, si) => {
+        const acts = (s.actividades||[]).map((a, ai) => {
+          const n = String(ai+1).padStart(2,"0");
+          const texto = a?.texto || "";
+          if (a?.tipo === "texto") return texto;
+          if (a?.tipo === "tabla") {
+            const cols = (a.columnas||[]).join("   |   ");
+            return `${n} ${texto}\n${cols}\n${linea}\n${linea}`;
+          }
+          if (a?.tipo === "lista" || a?.tipo === "pasos") {
+            const items = (a.opciones||[]).map((o,i)=>`   ${i+1}) ${o}`).join("\n");
+            return items ? `${n} ${texto}\n${items}` : `${n} ${texto}\n${linea}`;
+          }
+          return `${n} ${texto}\n${linea}\n${linea}`;
+        }).join("\n\n");
+        return `${si+1}. ${(s.titulo||"").toUpperCase()}${s.indicacion?`\n${s.indicacion}`:""}\n\n${acts}`;
+      })
+      .join("\n\n");
+
+    const metacognicion = (resource.metacognicion||[]).length
+      ? `\n\nPARA PENSAR\n${resource.metacognicion.map((m,i)=>`${i+1}. ${m}\n${linea}`).join("\n")}`
+      : "";
+
+    return `FICHA DE TRABAJO · ${resource.tipoFicha || "PREGUNTAS Y RESPUESTAS"}
 
 Nombre y apellidos: ______________________________
 Institución educativa: ____________________________
 Grado y sección: __________________  Área / tema: ${form.area} / ${form.tema}
 Fecha: ____ / ____ / ____
 
-Instrucciones: Lee cada pregunta con atención y responde de forma clara y completa.
+Instrucciones: ${resource.instrucciones || "Lee cada actividad con atención y responde de forma clara y completa."}
 
-${Array.from({length:8},(_,i)=>`${String(i+1).padStart(2,"0")} ${questions[i]||`Pregunta sobre ${form.tema}`}\n__________________________________________________\n__________________________________________________`).join("\n\n")}`;
+${cuerpo}${metacognicion}`;
   }
   return <div className="resource-ai-v2">
     {!resource?<div className="wizard-card"><div className="wizard-card__title"><span>{isReading?<BookOpen size={18}/>:<FileText size={18}/>}</span><div><h4>{isReading?"Ficha de lectura":"Ficha de trabajo"}</h4><p>{isReading?"Genera una lectura original con preguntas por niveles de comprensión.":"Genera una ficha de preguntas y respuestas lista para tus estudiantes."}</p></div></div><div className="wizard-fields">

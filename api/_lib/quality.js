@@ -145,6 +145,60 @@ export function validateWorksheet(resource, { questionCount, questionTypes = [] 
 }
 
 /**
+ * Comprueba una ficha por secciones (`/api/generate-session-resource`).
+ *
+ * Aquí el problema observado NO era relleno del modelo: la ficha llegaba bien
+ * y era la interfaz la que inventaba preguntas para llenar ocho huecos fijos.
+ * Aun así conviene garantizar un mínimo real de preguntas, porque si llegan
+ * cuatro la ficha se queda coja y antes eso se tapaba con texto inventado.
+ *
+ * @param {object} resource
+ * @param {{minQuestions?:number}} expected
+ * @returns {{ ok: boolean, problems: string[] }}
+ */
+export function validateSessionResource(resource, { minQuestions = 6 } = {}) {
+  const problems = [];
+
+  if (!resource || typeof resource !== "object") {
+    return { ok: false, problems: ["la respuesta no es un objeto"] };
+  }
+
+  const secciones = Array.isArray(resource.secciones) ? resource.secciones : [];
+  if (!secciones.length) problems.push("la ficha no trae secciones");
+
+  if (looksLikePlaceholder(resource.titulo)) problems.push("el título es de relleno o está vacío");
+
+  const actividades = secciones.flatMap((s) =>
+    Array.isArray(s?.actividades) ? s.actividades : []
+  );
+
+  secciones.forEach((s, i) => {
+    if (looksLikePlaceholder(s?.titulo)) problems.push(`la sección ${i + 1} no tiene título real`);
+    if (!Array.isArray(s?.actividades) || !s.actividades.length) {
+      problems.push(`la sección ${i + 1} está vacía`);
+    }
+  });
+
+  actividades.forEach((a, i) => {
+    if (looksLikePlaceholder(a?.texto)) problems.push(`la actividad ${i + 1} es de relleno`);
+  });
+
+  const preguntas = actividades
+    .filter((a) => ["pregunta", "respuesta_larga"].includes(a?.tipo))
+    .map((a) => a?.texto);
+
+  if (preguntas.length < minQuestions) {
+    problems.push(`sólo llegaron ${preguntas.length} preguntas de ${minQuestions} mínimas`);
+  }
+
+  for (const { index, duplicaA } of findNearDuplicates(preguntas)) {
+    problems.push(`la pregunta ${index + 1} repite la ${duplicaA + 1}`);
+  }
+
+  return { ok: problems.length === 0, problems };
+}
+
+/**
  * Error de calidad. Lleva `code` para que `sendGenerationError` lo traduzca
  * sin tener que adivinar por el texto, y los detalles quedan sólo en el log.
  */

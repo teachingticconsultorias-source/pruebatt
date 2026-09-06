@@ -7,6 +7,7 @@
 import { getGeminiModel } from "./_lib/gemini.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 import { sendGenerationError } from "./_lib/errors.js";
+import { validateSessionResource, qualityError } from "./_lib/quality.js";
 
 const GEMINI_MODEL = getGeminiModel();
 
@@ -257,13 +258,23 @@ Logro: Inicio, En proceso, Logrado, Destacado.`;
 Genera una FICHA DE TRABAJO PARA EL ESTUDIANTE.
 No debe parecer planificación docente.
 Debe tener 3 a 5 secciones con actividades listas para responder.
+Entre todas las secciones debe haber AL MENOS 8 actividades de tipo
+"pregunta" o "respuesta_larga". Las de tipo tabla, lista, pasos o texto son
+adicionales, no sustituyen a las preguntas.
+Ordena las preguntas de menor a mayor dificultad.
 Adapta el tipo de ficha al área:
 Ciencia y Tecnología: indagación/investigación/diseño.
 Comunicación: comprensión/producción.
 Matemática: resolución de problemas.
 Personal Social: análisis/reflexión.
 Incluye espacios de respuesta y tabla cuando sea pedagógicamente útil.
-Finaliza con metacognición.`;
+Finaliza con metacognición.
+
+PROHIBIDO — si incumples esto la ficha se descarta y hay que regenerarla:
+- Texto de relleno: "Pregunta sobre ...", "Escribe aquí", "Completar", "Por definir".
+- Repetir o parafrasear una actividad ya escrita.
+- Preguntas genéricas que servirían para cualquier tema.
+- Dejar una sección sin actividades.`;
 
   if(type==="reading") return `${base}
 Genera una LECTURA PEDAGÓGICA original y adecuada al grado, vinculada al propósito.
@@ -322,26 +333,58 @@ export default async function handler(req,res){
 
     const c=context(req.body||{});
     const p=prompt(type,c,req.body?.options||{});
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,{
-      method:"POST",
-      headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-      body:JSON.stringify({
-        contents:[{parts:[{text:p}]}],
-        systemInstruction:{parts:[{text:"Eres especialista peruano en CNEB. Entrega JSON válido y pedagógicamente aplicable."}]},
-        generationConfig:{
-          maxOutputTokens:type==="worksheet"||type==="reading"?6000:4500,
-          responseMimeType:"application/json",
-          responseSchema:SCHEMAS[type]
-        }
-      })
-    });
-    const data=await r.json();
-    if(!r.ok) throw Object.assign(new Error(data?.error?.message || "Error de Gemini"),{status:r.status});
-    const candidate=data?.candidates?.[0];
-    const text=candidate?.content?.parts?.map(x=>x.text).join("") || "";
-    if(!text) throw new Error("Gemini no devolvió contenido");
-    if(candidate?.finishReason==="MAX_TOKENS") throw new Error("El recurso quedó incompleto. Intenta nuevamente.");
-    const resource=JSON.parse(text);
+
+    async function intentar(reforzar){
+      const texto = reforzar
+        ? `${p}
+El intento anterior dejó secciones vacías o menos preguntas de las pedidas. Escribe todas las actividades completas, distintas entre sí y específicas del tema.`
+        : p;
+
+      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,{
+        method:"POST",
+        headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
+        body:JSON.stringify({
+          contents:[{parts:[{text:texto}]}],
+          systemInstruction:{parts:[{text:"Eres especialista peruano en CNEB. Entrega JSON válido y pedagógicamente aplicable."}]},
+          generationConfig:{
+            // La ficha por secciones necesita más margen: con 6000 el modelo
+            // llegaba justo y recortaba actividades.
+            maxOutputTokens:type==="worksheet"?9000:(type==="reading"?6000:4500),
+            responseMimeType:"application/json",
+            responseSchema:SCHEMAS[type]
+          }
+        })
+      });
+      const data=await r.json();
+      if(!r.ok) throw Object.assign(new Error(data?.error?.message || "Error de Gemini"),{status:r.status});
+      const candidate=data?.candidates?.[0];
+      const text=candidate?.content?.parts?.map(x=>x.text).join("") || "";
+      if(!text) throw new Error("Gemini no devolvió contenido");
+      if(candidate?.finishReason==="MAX_TOKENS") throw qualityError(["la respuesta se cortó por longitud"]);
+      return JSON.parse(text);
+    }
+
+    // Sólo la ficha de trabajo se valida por ahora: es la que se mostraba
+    // rellena con texto inventado. Un único reintento; si el segundo también
+    // sale corto, el catch devuelve el crédito.
+    let resource=null;
+    if(type==="worksheet"){
+      let problems=[];
+      for(const reforzar of [false,true]){
+        const candidato=await intentar(reforzar);
+        // El prompt pide 8; aquí se rechaza por debajo de 6. El margen es
+        // deliberado: descartar una ficha usable de 7 preguntas le cuesta a la
+        // docente dos esperas y un error, más caro que aceptarla.
+        const check=validateSessionResource(candidato,{minQuestions:6});
+        if(check.ok){ resource=candidato; break; }
+        problems=check.problems;
+        console.warn("[sciverse:worksheet-quality]",JSON.stringify({intento:reforzar?2:1,problems}));
+      }
+      if(!resource) throw qualityError(problems);
+    } else {
+      resource=await intentar(false);
+    }
+
     return res.status(200).json({resource,type,_credits:quota,model:GEMINI_MODEL});
   }catch(e){
     if(consumptionId){

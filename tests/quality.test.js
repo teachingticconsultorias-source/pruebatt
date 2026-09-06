@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   validateWorksheet,
+  validateSessionResource,
   looksLikePlaceholder,
   similarity,
   findNearDuplicates,
@@ -127,6 +128,79 @@ describe("calidad · detección de relleno", () => {
     expect(similarity("¿Cómo se forman las NUBES?", "como se forman las nubes")).toBe(1);
     expect(similarity("El ciclo del agua", "La fotosíntesis vegetal")).toBeLessThan(0.2);
     expect(findNearDuplicates(["hola mundo", "otra cosa", "hola mundo"])).toHaveLength(1);
+  });
+});
+
+/* ============================================================================
+   Ficha por secciones · /api/generate-session-resource
+   Éste es el generador donde apareció el problema real: la ficha llegaba con
+   cuatro preguntas y la INTERFAZ inventaba otras cuatro para llenar ocho
+   huecos fijos. El relleno nunca fue del modelo.
+   ========================================================================== */
+describe("calidad · ficha por secciones", () => {
+  function fichaSecciones(numPreguntas = 8) {
+    const enunciados = [
+      "¿Qué ocurre con el agua de los ríos cuando el sol la calienta?",
+      "Explica cómo se forman las nubes sobre la cordillera.",
+      "¿Por qué la lluvia vuelve a los ríos tras caer en los cerros?",
+      "Describe el cambio de estado del vapor al enfriarse en la altura.",
+      "¿Qué pasaría si dejara de llover en tu comunidad durante un año?",
+      "Compara la evaporación en la costa y en la sierra peruana.",
+      "¿Cómo aprovecha tu familia el agua de lluvia en temporada húmeda?",
+      "Propón una forma de cuidar el agua en tu institución educativa.",
+    ];
+    return {
+      titulo: "El viaje del agua en nuestra región",
+      tipoFicha: "INDAGACIÓN",
+      instrucciones: "Resuelve cada sección con calma.",
+      secciones: [
+        {
+          titulo: "Observamos",
+          indicacion: "Responde a partir de lo trabajado en clase.",
+          actividades: enunciados.slice(0, numPreguntas).map((texto) => ({
+            tipo: "pregunta", texto, opciones: [], columnas: [],
+          })),
+        },
+      ],
+      metacognicion: ["¿Qué aprendí hoy sobre el agua?"],
+    };
+  }
+
+  it("acepta una ficha con secciones y preguntas suficientes", () => {
+    const r = validateSessionResource(fichaSecciones(8), { minQuestions: 6 });
+    expect(r.ok).toBe(true);
+  });
+
+  it("RECHAZA la ficha que provocó el fallo: solo 4 preguntas reales", () => {
+    const r = validateSessionResource(fichaSecciones(4), { minQuestions: 6 });
+    expect(r.ok).toBe(false);
+    expect(r.problems.join(" ")).toContain("4 preguntas de 6");
+  });
+
+  it("acepta 7 preguntas: el margen evita descartar fichas usables", () => {
+    expect(validateSessionResource(fichaSecciones(7), { minQuestions: 6 }).ok).toBe(true);
+  });
+
+  it("RECHAZA una sección vacía", () => {
+    const ficha = fichaSecciones(8);
+    ficha.secciones.push({ titulo: "Aplicamos", indicacion: "", actividades: [] });
+    const r = validateSessionResource(ficha, { minQuestions: 6 });
+    expect(r.ok).toBe(false);
+    expect(r.problems.join(" ")).toContain("vacía");
+  });
+
+  it("RECHAZA actividades de relleno dentro de una sección", () => {
+    const ficha = fichaSecciones(8);
+    ficha.secciones[0].actividades[3].texto = "Pregunta sobre el ciclo del agua";
+    const r = validateSessionResource(ficha, { minQuestions: 6 });
+    expect(r.ok).toBe(false);
+    expect(r.problems.join(" ")).toContain("relleno");
+  });
+
+  it("RECHAZA una ficha sin secciones", () => {
+    const r = validateSessionResource({ titulo: "Algo", secciones: [] }, { minQuestions: 6 });
+    expect(r.ok).toBe(false);
+    expect(r.problems.join(" ")).toContain("secciones");
   });
 });
 
