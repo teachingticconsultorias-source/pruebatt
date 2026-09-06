@@ -9,9 +9,9 @@
 // administrador, y otra vez dentro de la RPC contra admin_users. Si un fallo
 // en este archivo dejara pasar a alguien, la base seguiría rechazándolo.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireAdmin, callAdminRpc } from "../_lib/admin.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const REASON_MAX = 300;

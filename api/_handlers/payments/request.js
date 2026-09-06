@@ -4,9 +4,9 @@
 // duración los lee `request_plan` desde `public.plans` dentro de la propia
 // transacción, así que manipular la petición no abarata nada.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireUser, callRpc } from "../_lib/supabase.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireUser, callRpc } from "../../_lib/supabase.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 const METODOS = ["yape", "plin", "transferencia", "efectivo", "otro"];
 const REF_MAX = 80;

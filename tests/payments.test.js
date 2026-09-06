@@ -44,7 +44,7 @@ describe("pagos · el importe lo fija el servidor", () => {
   });
 
   it("el endpoint del docente no reenvía ningún importe", () => {
-    const js = fs.readFileSync("api/payments/request.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/payments/request.js", "utf8");
     const cuerpo = js.slice(js.indexOf("callRpc"));
     expect(cuerpo).toContain("p_plan");
     expect(cuerpo).not.toMatch(/amount|price|cents|p_months/i);
@@ -208,7 +208,7 @@ describe("pagos · rechazo", () => {
   });
 
   it("la API también lo exige antes de llamar", () => {
-    const js = fs.readFileSync("api/admin/payment-actions.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/payment-actions.js", "utf8");
     expect(js).toContain("Escribe el motivo del rechazo.");
   });
 
@@ -259,7 +259,7 @@ describe("pagos · privacidad", () => {
    ========================================================================== */
 describe("pagos · mensajes", () => {
   it("ningún mensaje del docente filtra detalle técnico", () => {
-    const js = fs.readFileSync("api/payments/request.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/payments/request.js", "utf8");
     const mensajes = [...js.matchAll(/\d{3},\s*"([^"]+)"/g)].map((m) => m[1]);
     expect(mensajes.length).toBeGreaterThan(0);
     for (const m of mensajes) {
@@ -268,7 +268,7 @@ describe("pagos · mensajes", () => {
   });
 
   it("ningún mensaje del administrador filtra detalle técnico", () => {
-    const js = fs.readFileSync("api/admin/payment-actions.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/payment-actions.js", "utf8");
     const mensajes = [...js.matchAll(/\d{3},\s*"([^"]+)"/g)].map((m) => m[1]);
     for (const m of mensajes) {
       expect(m).not.toMatch(/PGRST|postgres|SQL|constraint|supabase|uuid|RPC|_[A-Z]{3,}/i);
@@ -276,7 +276,7 @@ describe("pagos · mensajes", () => {
   });
 
   it("cada excepción de la base tiene traducción", () => {
-    const js = fs.readFileSync("api/admin/payment-actions.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/payment-actions.js", "utf8");
     for (const codigo of ["REQUEST_NOT_PENDING", "REQUEST_NOT_FOUND",
                           "REASON_REQUIRED", "CONCURRENT_CHANGE"]) {
       expect(js, codigo).toContain(codigo);

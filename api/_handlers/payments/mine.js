@@ -1,9 +1,9 @@
 // api/payments/mine.js — historial de solicitudes del propio docente.
 // Nunca incluye las notas internas del administrador.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireUser, callRpc } from "../_lib/supabase.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireUser, callRpc } from "../../_lib/supabase.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 export default async function handler(req, res) {
   try {

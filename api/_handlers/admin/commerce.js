@@ -5,9 +5,9 @@
 // Devuelve también los planes INACTIVOS, que la política de `plans` esconde
 // al navegador: sin ellos no habría forma de volver a encender uno.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireAdmin, callAdminRpc } from "../_lib/admin.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 export default async function handler(req, res) {
   try {

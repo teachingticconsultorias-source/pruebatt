@@ -4,9 +4,9 @@
 // tabla entera. El tamaño de página se acota aquí Y en la función SQL, para
 // que ninguna de las dos capas dependa de la otra.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireAdmin, callAdminRpc, scopeForRole } from "../_lib/admin.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireAdmin, callAdminRpc, scopeForRole } from "../../_lib/admin.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 const PAGE_SIZE_DEFAULT = 25;
 const PAGE_SIZE_MAX = 100;

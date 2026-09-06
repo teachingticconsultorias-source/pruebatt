@@ -9,9 +9,9 @@
 // Una clave no reconocida se rechaza; no se ignora en silencio, porque un
 // campo ignorado parece guardado y no lo está.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireAdmin, callAdminRpc } from "../_lib/admin.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 const REASON_MAX = 300;
 

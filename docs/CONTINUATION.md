@@ -929,11 +929,77 @@ siendo nuestro.
 `ADMIN_SECRET`, `api/list-docentes.js`, `AdminPanel.jsx` y `?admin=legacy` se
 conservan. Sin renovación automática, sin pasarela, sin comprobantes de pago.
 
+## FALLO DE DEPLOYMENT · LÍMITE DE FUNCTIONS DE VERCEL HOBBY · 2026-09-06
+
+`566fef2` compilaba («Build Completed in /vercel/output») y fallaba **después**
+del build. La causa no estaba en el código: eran demasiadas Serverless
+Functions para el plan Hobby, que permite **12**.
+
+### La prueba, contada
+
+| Commit | Entrypoints bajo `/api` | Deployment |
+|---|---|---|
+| `7f81049` | **12** | correcto, justo en el límite |
+| `8582e3e` | 16 (+4 de pagos) | — |
+| `566fef2` | **19** (+3 comerciales) | **falla tras el build** |
+
+`api/_lib/` nunca contó: en `7f81049` había 8 ficheros ahí y, de haber contado,
+el total habría sido 20 y ese deployment también habría fallado. Vercel ignora
+todo lo que empieza por `_`, y eso queda ahora demostrado con un caso real, no
+con documentación.
+
+### La solución: rutas dinámicas, no rewrites
+
+Los diez endpoints de administración pasan a `api/admin/[action].js` y los dos
+del docente a `api/payments/[action].js`. Los manejadores se mudan a
+`api/_handlers/`, que no es un entrypoint.
+
+**Ni una URL cambia.** `/api/admin/summary` sigue siendo `/api/admin/summary`.
+Por eso no hizo falta `vercel.json`, ni rewrites, ni tocar el frontend.
+
+Se descartó el `vercel.json` con rewrites a propósito: el proyecto no tiene
+ninguno hoy y el fallback del SPA lo resuelve el preset de Vite. Añadir uno
+sólo para reescribir rutas habría metido en juego una pieza que hoy funciona
+sola, a cambio de nada.
+
+### 19 → 8
+
+```
+api/admin/[action].js          ← 10 endpoints
+api/payments/[action].js       ←  2 endpoints
+api/credits.js
+api/generate-session.js
+api/generate-session-resource.js
+api/generate-linked-worksheet.js
+api/generate-project-steam.js
+api/list-docentes.js
+```
+
+Los cuatro generadores siguen separados a propósito: cada uno tiene su propio
+tiempo de ejecución, sus logs y su manejo de créditos, y agruparlos habría
+hecho más difícil diagnosticar precisamente lo que hay que poder diagnosticar.
+
+`api/generate-with-quota.js` se retira: huérfano desde la auditoría, sin una
+sola referencia en el frontend ni en otro endpoint. Ocupaba un sitio de doce.
+
+`api/list-docentes.js` se conserva: lo usa `?admin=legacy`.
+
+### El despachador no decide nada
+
+No autoriza, no valida y no toca la base. Cada manejador conserva su
+`requireAdmin`, su rate limit, su rol mínimo y su traducción de errores. El
+mapa es explícito y se consulta con `hasOwnProperty`, así que `constructor` o
+`__proto__` como ruta dan 404 y no un error raro.
+
+`tests/routing.test.js` lo comprueba ruta por ruta: cada URL pública responde
+401 —no 404—, el método sigue devolviendo 405 donde debe, y hay un test que
+falla si alguien vuelve a pasar de 10 entrypoints. Ese fallo ya no puede
+aparecer sólo en el deployment.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
-Aplicar `supabase/migrations/008_commercial_settings.sql` en el SQL Editor y
-pegar el Results de `supabase/inspect/011_verify_commercial_settings.sql`
-(trece OK). Sólo después, `git push origin main`.
+`main` local está un commit por delante de `origin/main`, con la reducción de
+Serverless Functions de 19 a 8. Falta `git push origin main` y comprobar que
+el deployment de producción llega a **Ready**.
 
-No hacer push antes de que 008 esté aplicada: el panel llamaría a funciones
-que todavía no existen.
+Supabase no necesita nada: `008` ya está aplicada y verificada (13/13).

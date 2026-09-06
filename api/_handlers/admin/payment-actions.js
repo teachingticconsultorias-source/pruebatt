@@ -4,9 +4,9 @@
 // lo vuelve a comprobar contra admin_users. Aprobar es una sola transacción:
 // marca el pago, cierra la suscripción anterior, crea la nueva y audita.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireAdmin, callAdminRpc } from "../_lib/admin.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const NOTAS_MAX = 300;

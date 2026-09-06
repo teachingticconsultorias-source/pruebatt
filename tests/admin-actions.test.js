@@ -80,7 +80,7 @@ describe("admin 2 · quién puede mutar", () => {
    Lo que lanza Postgres no puede llegar a la pantalla de un administrador.
    ========================================================================== */
 describe("admin 2 · errores para el administrador", () => {
-  // Misma tabla que api/admin/actions.js.
+  // Misma tabla que api/_handlers/admin/actions.js.
   const MENSAJES = [
     [/ADMIN_REQUIRED/i, 403, "Tu cuenta ya no tiene permisos de administración."],
     [/ADMIN_ROLE_INSUFFICIENT/i, 403, "Tu rol no permite realizar esta acción."],

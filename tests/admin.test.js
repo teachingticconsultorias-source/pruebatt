@@ -145,7 +145,7 @@ describe("admin · paginación y búsqueda", () => {
   const PAGE_SIZE_MAX = 100;
   const SEARCH_MAX = 80;
 
-  // Misma función que usa api/admin/docentes.js.
+  // Misma función que usa api/_handlers/admin/docentes.js.
   function entero(valor, porDefecto, { min, max }) {
     const n = Number.parseInt(valor, 10);
     if (!Number.isFinite(n)) return porDefecto;

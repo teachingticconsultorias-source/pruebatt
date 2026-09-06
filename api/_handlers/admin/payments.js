@@ -1,9 +1,9 @@
 // api/admin/payments.js — bandeja de solicitudes. SOLO LECTURA.
 // `support` puede verla: sirve para responder consultas sin poder aprobar.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireAdmin, callAdminRpc } from "../_lib/admin.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 const ESTADOS = ["pending", "approved", "rejected", "cancelled"];
 const PAGE_SIZE_MAX = 100;

@@ -3,9 +3,9 @@
 // Autorización por identidad real: sesión de Supabase + fila en
 // sciverse_private.admin_users. Sin ADMIN_SECRET, sin claves en la URL.
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireAdmin, callAdminRpc } from "../_lib/admin.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
 
 export default async function handler(req, res) {
   try {

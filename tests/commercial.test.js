@@ -109,7 +109,7 @@ describe("comercial · el navegador no fija precios", () => {
     expect(c).toContain("manual_payments_enabled");
     expect(c).toContain("METHOD_NOT_AVAILABLE");
     // Y la API lo traduce a algo legible.
-    expect(fs.readFileSync("api/payments/request.js", "utf8")).toContain("PAYMENTS_CLOSED");
+    expect(fs.readFileSync("api/_handlers/payments/request.js", "utf8")).toContain("PAYMENTS_CLOSED");
   });
 
   it("la solicitud sigue guardando la instantánea del catálogo", () => {
@@ -120,7 +120,7 @@ describe("comercial · el navegador no fija precios", () => {
   });
 
   it("el endpoint del docente no reenvía importes", () => {
-    const js = fs.readFileSync("api/payments/request.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/payments/request.js", "utf8");
     const llamada = js.slice(js.indexOf("callRpc"));
     expect(llamada).toContain("p_plan");
     expect(llamada).not.toMatch(/amount|price|cents|p_months|p_limit/i);
@@ -164,7 +164,7 @@ describe("comercial · sólo se pueden cambiar los campos previstos", () => {
   });
 
   it("la API repite la lista blanca antes de llegar a Postgres", () => {
-    const js = fs.readFileSync("api/admin/commerce-actions.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/commerce-actions.js", "utf8");
     expect(js).toContain("CAMPOS_PLAN");
     expect(js).toContain("limpiarParche");
     // Una clave de más se rechaza, no se ignora: un campo ignorado parece
@@ -222,17 +222,17 @@ describe("comercial · quién puede cambiar la configuración", () => {
   });
 
   it("la API de escritura pide minRole admin", () => {
-    const js = fs.readFileSync("api/admin/commerce-actions.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/commerce-actions.js", "utf8");
     expect(js).toContain('requireAdmin(req, { minRole: "admin" })');
   });
 
   it("la API de lectura acepta support", () => {
-    const js = fs.readFileSync("api/admin/commerce.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/commerce.js", "utf8");
     expect(js).toContain('requireAdmin(req, { minRole: "support" })');
   });
 
   it("la subida del QR exige admin", () => {
-    const js = fs.readFileSync("api/admin/payment-qr.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/payment-qr.js", "utf8");
     expect(js).toContain('requireAdmin(req, { minRole: "admin" })');
   });
 });
@@ -419,7 +419,7 @@ describe("comercial · QR", () => {
   });
 
   it("al reemplazar, el fichero anterior se borra DESPUÉS de guardarlo", () => {
-    const js = fs.readFileSync("api/admin/payment-qr.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/payment-qr.js", "utf8");
     const iSubir = js.indexOf("await uploadObject");
     const iRegistrar = js.indexOf("admin_set_payment_qr", iSubir);
     const iBorrar = js.indexOf("registro?.anterior");
@@ -431,7 +431,7 @@ describe("comercial · QR", () => {
   });
 
   it("si la base rechaza la ruta, el fichero recién subido no queda huérfano", () => {
-    const js = fs.readFileSync("api/admin/payment-qr.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/admin/payment-qr.js", "utf8");
     expect(js).toMatch(/catch \(error\) \{[\s\S]*?deleteObjectQuietly[\s\S]*?throw error;/);
   });
 });
@@ -523,7 +523,7 @@ describe("comercial · idempotencia", () => {
    ERRORES QUE NO CUENTAN DE MÁS
    ========================================================================== */
 describe("comercial · lo que ve quien se equivoca", () => {
-  const actions = fs.readFileSync("api/admin/commerce-actions.js", "utf8");
+  const actions = fs.readFileSync("api/_handlers/admin/commerce-actions.js", "utf8");
 
   it("los errores de Postgres se traducen antes de salir", () => {
     expect(actions).toContain("function traducir");
@@ -550,16 +550,16 @@ describe("comercial · lo que ve quien se equivoca", () => {
    ========================================================================== */
 describe("comercial · rate limit", () => {
   it("solicitar un plan tiene su propio presupuesto, por IP y por usuario", () => {
-    const js = fs.readFileSync("api/payments/request.js", "utf8");
+    const js = fs.readFileSync("api/_handlers/payments/request.js", "utf8");
     expect(js).toContain("RateLimits.paymentRequest");
     expect(js).toContain("clientKey(req, auth.user.id)");
     expect(js).not.toContain("RateLimits.readOwn");
   });
 
   it("las escrituras comerciales y la subida del QR tienen cubos propios", () => {
-    expect(fs.readFileSync("api/admin/commerce-actions.js", "utf8"))
+    expect(fs.readFileSync("api/_handlers/admin/commerce-actions.js", "utf8"))
       .toContain("RateLimits.adminWrite");
-    expect(fs.readFileSync("api/admin/payment-qr.js", "utf8"))
+    expect(fs.readFileSync("api/_handlers/admin/payment-qr.js", "utf8"))
       .toContain("RateLimits.adminUpload");
   });
 });

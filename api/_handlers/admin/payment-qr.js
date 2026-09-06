@@ -17,11 +17,11 @@
 
 import { randomUUID } from "node:crypto";
 
-import { sendError, Errors } from "../_lib/errors.js";
-import { requireAdmin, callAdminRpc } from "../_lib/admin.js";
-import { clientKey, enforceRateLimit, RateLimits } from "../_lib/rate-limit.js";
-import { decodeQrUpload, qrObjectPath } from "../_lib/image.js";
-import { uploadObject, deleteObjectQuietly } from "../_lib/storage.js";
+import { sendError, Errors } from "../../_lib/errors.js";
+import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
+import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
+import { decodeQrUpload, qrObjectPath } from "../../_lib/image.js";
+import { uploadObject, deleteObjectQuietly } from "../../_lib/storage.js";
 
 const METODOS = new Set(["yape", "plin", "transferencia", "efectivo", "otro"]);
 
