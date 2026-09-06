@@ -527,6 +527,74 @@ D admin_users+auditoría · E panel en solo lectura · F pagos y activación ·
 G acciones · H mover contador · I medición · J Mi cuenta · K retirar
 ADMIN_SECRET · L profile sync.
 
+## NÚCLEO COMERCIAL + CRÉDITOS · REORDENADO · 2026-09-06
+
+Decisión del usuario: **no aplicar la 002 anterior.** Como no se había
+ejecutado, se evita nacer con las columnas `ai_*` en `docentes` sabiendo
+que habría que moverlas. Los créditos nacen ya sobre la arquitectura del
+documento 27.
+
+### Migraciones diseñadas · NINGUNA EJECUTADA
+
+Renumeradas para que el número sea el orden real de ejecución:
+
+| Fichero | Contenido |
+|---|---|
+| `002_commercial_core.sql` | `plans`, `subscriptions`, plan Free sembrado, resolución del plan efectivo, trigger de suscripción automática |
+| `003_secure_ai_credits.sql` | contador y libro en `sciverse_private`, las tres RPC, lista blanca de columnas de `docentes` |
+| `004_material_types.sql` | renombrada desde `001_material_types.sql`; contenido intacto |
+
+Pruebas: `supabase/inspect/004_test_commercial_and_credits.sql`.
+Se retiró `002_secure_ai_credits.sql` (sustituida por 003).
+
+### Qué cambió respecto a la 002 anterior
+
+1. `docentes` **no recibe ninguna columna**.
+2. El **límite** sale de `plans.ai_weekly_limit` vía `effective_plan()`:
+   cambiarlo en el plan lo cambia para todos sin tocar filas de docente.
+3. El **contador** vive en `sciverse_private.ai_usage_counters`.
+4. El libro pasa a `ai_generations` — nombre definitivo, para que el bloque
+   de medición le añada modelo, tokens y duración sin renombrar nada.
+5. `get_ai_credit_status()` **deja de escribir**: el indicador se consulta a
+   menudo y no debe provocar contención. Una semana caducada se lee como 0.
+6. Se conserva todo lo demás: FOR UPDATE, ventana de 30 min, vale de un solo
+   uso, mismo usuario, sin negativos, idempotencia, lista blanca de columnas.
+
+### Decisiones de diseño que conviene recordar
+
+- **Free por defecto: trigger + fallback, los dos.** El trigger sobre
+  `public.docentes` materializa la suscripción; su bloque EXCEPTION impide
+  que un fallo tumbe el registro; y `effective_plan()` cae a `free` si no
+  encuentra suscripción válida. Ninguno de los dos cubre solo todos los casos.
+  No se tocó `crear_perfil_docente()`.
+- **Vencimiento por evaluación perezosa**, no por cron: no hay `pg_cron` y un
+  job dejaría una ventana con el plan vencido dando acceso.
+- **Bloqueo del contador con `INSERT … ON CONFLICT DO UPDATE`**: crea la fila
+  si falta y la deja bloqueada en ambos casos. Resuelve de un golpe la carrera
+  del primer consumo y la de dos pestañas.
+- El paso 0 de 002 **aborta** si algún docente tiene un `plan` que no sepa
+  traducir, para no degradar a nadie que ya pague. Comprobarlo antes con el
+  censo del inspector consolidado.
+
+### Cambios de código indispensables (aún NO aplicados)
+
+| Archivo | Cambio |
+|---|---|
+| `api/_lib/credits.js` | `refundCredit` acepta `consumptionId` y lo envía como `body:{p_consumption}`; `withCredit` se lo pasa desde `credits.consumption_id` |
+| `api/generate-linked-worksheet.js` | el helper `rpc()` acepta body; guardar el `consumption_id` y pasarlo al reembolso |
+| `api/generate-session-resource.js` | ídem |
+
+`api/_lib/supabase.js` **no cambia**: `callRpc` ya acepta `body`.
+
+### Orden de despliegue
+
+1. Censo de planes (inspector consolidado, apartado 14).
+2. `002_commercial_core.sql` → bloques A y B de las pruebas.
+3. `003_secure_ai_credits.sql` → bloques A, B y C.
+4. Cambios de código y despliegue **en la misma ventana** que 003.
+5. Verificar una generación real.
+6. `004_material_types.sql` → verificar guardado de los cuatro tipos.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque

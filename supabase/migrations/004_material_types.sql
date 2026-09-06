@@ -1,5 +1,9 @@
 -- ============================================================================
--- 001_material_types.sql
+-- 004_material_types.sql
+--
+-- Renumerada desde 001_material_types.sql: el numero refleja ahora el ORDEN
+-- DE EJECUCION real (002 comercial -> 003 creditos -> 004 tipos). El
+-- contenido no cambio.
 --
 --            ⚠️  PENDIENTE DE VALIDAR CONTRA PRODUCCIÓN  ⚠️
 --
