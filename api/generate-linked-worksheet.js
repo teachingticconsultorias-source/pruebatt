@@ -1,6 +1,7 @@
 import { getGeminiModel } from "./_lib/gemini.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 import { sendGenerationError } from "./_lib/errors.js";
+import { validateWorksheet, qualityError } from "./_lib/quality.js";
 
 const GEMINI_MODEL = getGeminiModel();
 
@@ -111,31 +112,62 @@ REGLAS:
 - No incluyas claves ni respuestas dentro del texto de la pregunta.
 - El título debe ser atractivo y relacionado con la sesión.
 - Devuelve únicamente JSON válido según el esquema.
+- Ordena las preguntas de menor a mayor dificultad.
+- Cada pregunta debe nombrar algo concreto del tema y responderse con lo trabajado en la sesión.
+- Escribe en español de Perú, claro y directo, como hablaría una docente en aula.
+
+PROHIBIDO — si incumples esto la ficha se descarta y hay que regenerarla:
+- Texto de relleno: "Pregunta sobre ...", "Escribe aquí", "Completar", "Por definir", "Pregunta 3".
+- Repetir o parafrasear una pregunta ya formulada.
+- Preguntas genéricas que servirían para cualquier tema.
+- Dejar vacío cualquier campo obligatorio.
 `;
 
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        systemInstruction: { parts: [{ text: "Eres especialista peruano en CNEB. Entrega JSON válido, claro y aplicable en aula." }] },
-        generationConfig: {
-          maxOutputTokens: 7500,
-          responseMimeType: "application/json",
-          responseSchema: SCHEMA
-        }
-      })
-    });
+    // El presupuesto crecía poco con muchas preguntas y el modelo acababa
+    // rellenando para cerrar el esquema. Se escala con la cantidad pedida.
+    const maxOutputTokens = Math.min(16000, Math.max(7500, questionCount * 700));
 
-    const data = await r.json();
-    if (!r.ok) throw Object.assign(new Error(data?.error?.message || "Error de Gemini"), { status: r.status });
-    const candidate = data?.candidates?.[0];
-    const text = candidate?.content?.parts?.map(x => x.text).join("") || "";
-    if (!text) throw new Error("Gemini no devolvió contenido");
-    if (candidate?.finishReason === "MAX_TOKENS") throw new Error("La ficha quedó incompleta. Intenta nuevamente.");
-    const resource = JSON.parse(text);
-    resource.preguntas = arr(resource.preguntas).slice(0, questionCount);
-    if (resource.preguntas.length !== questionCount) throw new Error("La ficha no llegó con la cantidad solicitada de preguntas. Intenta nuevamente.");
+    async function intentar(reforzar) {
+      const texto = reforzar
+        ? `${prompt}
+El intento anterior incluyó preguntas de relleno o repetidas. Escríbelas todas completas, distintas entre sí y específicas del tema.`
+        : prompt;
+
+      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: texto }] }],
+          systemInstruction: { parts: [{ text: "Eres especialista peruano en CNEB. Entrega JSON válido, claro y aplicable en aula." }] },
+          generationConfig: { maxOutputTokens, responseMimeType: "application/json", responseSchema: SCHEMA }
+        })
+      });
+
+      const data = await r.json();
+      if (!r.ok) throw Object.assign(new Error(data?.error?.message || "Error de Gemini"), { status: r.status });
+      const candidate = data?.candidates?.[0];
+      const text = candidate?.content?.parts?.map(x => x.text).join("") || "";
+      if (!text) throw new Error("Gemini no devolvió contenido");
+      if (candidate?.finishReason === "MAX_TOKENS") throw qualityError(["la respuesta se cortó por longitud"]);
+
+      const resource = JSON.parse(text);
+      resource.preguntas = arr(resource.preguntas).slice(0, questionCount);
+      return resource;
+    }
+
+    // Un solo reintento. Si el segundo también sale mal, el catch devuelve el
+    // crédito: no se muestra como éxito algo que no sirve en un aula.
+    let resource = null;
+    let problems = [];
+    for (const reforzar of [false, true]) {
+      const candidato = await intentar(reforzar);
+      const check = validateWorksheet(candidato, { questionCount, questionTypes });
+      if (check.ok) { resource = candidato; break; }
+      problems = check.problems;
+      console.warn("[sciverse:worksheet-quality]", JSON.stringify({ intento: reforzar ? 2 : 1, problems }));
+    }
+    if (!resource) throw qualityError(problems);
+
     return res.status(200).json({ resource, model: GEMINI_MODEL, _credits: quota });
   } catch (e) {
     if (consumptionId) {

@@ -180,6 +180,15 @@ export function sendGenerationError(res, error, pieza = "el material", devuelto 
     });
   }
 
+  // Fallo de calidad detectado por _lib/quality.js: llega con code explícito
+  // para no tener que adivinarlo por el texto del mensaje.
+  if (error?.code === "GENERATION_INCOMPLETE") {
+    return res.status(502).json({
+      error: `La respuesta llegó incompleta. Vuelve a intentarlo.${nota}`,
+      code: "GENERATION_INCOMPLETE",
+    });
+  }
+
   // JSON mal formado o respuesta truncada de Gemini.
   if (error instanceof SyntaxError || /MAX_TOKENS|incompleta|no devolvió contenido/i.test(crudo)) {
     return res.status(502).json({
