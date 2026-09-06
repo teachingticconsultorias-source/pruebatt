@@ -258,3 +258,24 @@
   border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
   background: var(--bg-surface);
 }
+
+/* ---------------------------------------------------- ACCIONES ADMIN */
+.adm__acciones { border-color: var(--border-default); }
+.adm__botonera { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+
+.adm__form { display: flex; flex-direction: column; gap: var(--space-4); }
+.adm__form label {
+  display: flex; flex-direction: column; gap: var(--space-1);
+  font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--text-primary);
+}
+.adm__form label small { font-weight: var(--weight-regular); color: var(--text-secondary); }
+.adm__form input, .adm__form select, .adm__form textarea {
+  min-height: 44px; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--bg-surface); font-family: var(--font-body);
+  font-size: var(--text-body); font-weight: var(--weight-regular); color: var(--text-primary);
+}
+.adm__form textarea { min-height: 64px; resize: vertical; }
+.adm__form input:focus, .adm__form select:focus, .adm__form textarea:focus {
+  outline: none; border-color: var(--border-focus); box-shadow: var(--elev-focus);
+}

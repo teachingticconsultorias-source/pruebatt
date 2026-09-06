@@ -722,6 +722,59 @@ orden que minimiza la ventana incompatible:
 3. Hoy no hay nada que perder: la generación ya está caída, así que cualquier
    estado intermedio es mejor que el actual.
 
+## ADMIN 2 — GESTIÓN DE DOCENTES Y PLANES · 2026-09-06
+
+Admin 1 quedó validado en producción (SHA `2dcf255`, con
+`SUPABASE_SERVICE_ROLE_KEY` ya configurada en Vercel). Admin 2 está
+**implementado y sin desplegar**: la migración 006 no se ha ejecutado.
+
+### Qué hace
+
+Cuatro acciones sobre la ficha del docente: suspender, reactivar, cambiar de
+plan y extender vigencia. Todas transaccionales y auditadas.
+
+### Dos decisiones que conviene recordar
+
+**La autorización se comprueba dos veces.** La API valida el JWT y el rol, y
+además cada RPC vuelve a mirar `admin_users` con el `p_actor` recibido. Es
+redundante a propósito: si un fallo en la API dejara pasar a alguien, la base
+seguiría rechazándolo. Las funciones se invocan con `service_role`, así que
+`auth.uid()` es NULL y el actor tiene que viajar como parámetro.
+
+**El historial no se sobrescribe.** Cambiar de plan cierra la suscripción
+vigente como `cancelled` y crea una nueva. El índice único parcial de 002
+impide dos activas: si dos administradores pulsan a la vez, el segundo choca
+con el índice, su transacción se deshace entera y recibe
+«Otro administrador acaba de cambiar este plan».
+
+### Suspensión
+
+Poner `docentes.activo = false` basta: `consume_ai_credit()` ya lanza
+`ACCOUNT_INACTIVE` desde 003. No se duplica la comprobación en ningún sitio,
+y no depende de ocultar botones.
+
+### Límite conocido
+
+El catálogo sólo tiene el plan gratuito, así que **«Cambiar plan» todavía no
+tiene nada a lo que cambiar**. No se sembraron planes de pago porque los
+nombres y precios los decide el equipo. La plantilla del INSERT está al final
+de `006_admin_actions.sql`; hasta entonces el modal avisa de que sólo hay un
+plan.
+
+### Orden de despliegue
+
+1. `supabase/migrations/006_admin_actions.sql` en el SQL Editor.
+2. `supabase/inspect/009_verify_admin_actions.sql` → siete OK.
+3. `git push origin main` y esperar a Vercel.
+4. Probar con un docente de prueba, no con una cuenta real.
+
+Al revés no funcionaría: el código llama a RPC que aún no existen.
+
+### Sigue pendiente
+
+`ADMIN_SECRET`, `api/list-docentes.js`, `AdminPanel.jsx` y `?admin=legacy`
+se conservan como red de seguridad hasta validar Admin 2 en producción.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque

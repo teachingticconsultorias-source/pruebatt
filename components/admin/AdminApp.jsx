@@ -2,12 +2,15 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard, Users, Search, ChevronLeft, ChevronRight, ArrowLeft,
   ShieldCheck, ShieldAlert, LogOut, RefreshCw, Mail, MailCheck, Clock,
-  GraduationCap, Sparkles, FolderOpen, AlertCircle,
+  GraduationCap, Sparkles, FolderOpen, AlertCircle, Ban, CheckCircle2,
+  CalendarPlus, ArrowRightLeft, History,
 } from "lucide-react";
 
 import { supabase } from "../../supabaseClient.js";
 import Button from "../ui/Button.jsx";
 import { Skeleton, EmptyState, Badge, Alert } from "../ui/Feedback.jsx";
+import Modal from "../ui/Modal.jsx";
+import { useUI } from "../ui/UIProvider.jsx";
 
 /* ==========================================================================
    PANEL ADMINISTRATIVO · SOLO LECTURA
@@ -57,6 +60,23 @@ async function pedir(ruta, token) {
 
   const data = await res.json().catch(() => null);
   if (!res.ok) throw new Error(data?.error || "No pudimos cargar la información.");
+  return data;
+}
+
+/** Ejecuta una acción administrativa. Devuelve el JSON o lanza con mensaje. */
+async function ejecutar(accion, token) {
+  const res = await fetch("/api/admin/actions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(accion),
+  });
+
+  const tipo = res.headers.get("content-type") || "";
+  if (!tipo.includes("application/json")) {
+    throw new Error("El servicio no está disponible en este momento.");
+  }
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error(data?.error || "No pudimos completar la acción.");
   return data;
 }
 
@@ -143,6 +163,7 @@ export default function AdminApp() {
           <DetalleDocente
             userId={docenteAbierto}
             token={token}
+            role={role}
             onVolver={() => setDocenteAbierto(null)}
             onDenegado={() => setDenegado(true)}
           />
@@ -151,6 +172,7 @@ export default function AdminApp() {
         ) : (
           <ListaDocentes
             token={token}
+            onRole={setRole}
             onAbrir={setDocenteAbierto}
             onDenegado={() => setDenegado(true)}
           />
@@ -312,7 +334,7 @@ function Resumen({ token, onRole, onDenegado }) {
 
 /* ======================================================================= */
 
-function ListaDocentes({ token, onAbrir, onDenegado }) {
+function ListaDocentes({ token, onRole, onAbrir, onDenegado }) {
   const [pagina, setPagina] = useState(1);
   const [texto, setTexto] = useState("");
   const [busqueda, setBusqueda] = useState("");
@@ -324,6 +346,8 @@ function ListaDocentes({ token, onAbrir, onDenegado }) {
   }, [pagina, busqueda]);
 
   const { data, error, cargando, recargar } = useCarga(ruta, token, onDenegado);
+
+  useEffect(() => { if (data?.role) onRole?.(data.role); }, [data, onRole]);
 
   function buscar(e) {
     e.preventDefault();
@@ -452,9 +476,13 @@ function ListaDocentes({ token, onAbrir, onDenegado }) {
 
 /* ======================================================================= */
 
-function DetalleDocente({ userId, token, onVolver, onDenegado }) {
+function DetalleDocente({ userId, token, role, onVolver, onDenegado }) {
   const { data, error, cargando, recargar } =
     useCarga(`/api/admin/docente?userId=${encodeURIComponent(userId)}`, token, onDenegado);
+  // `support` es de solo lectura. Ocultar los botones es comodidad: quien
+  // rechaza de verdad es el backend, que exige rol `admin` como mínimo.
+  const puedeGestionar = role === "admin" || role === "superadmin";
+  const [accion, setAccion] = useState(null);
 
   if (cargando) return <CargandoTarjetas />;
   if (error) {
@@ -566,8 +594,253 @@ function DetalleDocente({ userId, token, onVolver, onDenegado }) {
             </ul>
           </section>
         )}
+        {puedeGestionar && (
+          <section className="adm__panel adm__panel--wide adm__acciones">
+            <h2><ShieldCheck size={16} aria-hidden="true" /> Administrar cuenta</h2>
+            <p className="adm__muted">
+              Cada acción queda registrada con tu nombre, la fecha y el motivo.
+            </p>
+            <div className="adm__botonera">
+              {cuenta.activo ? (
+                <Button variant="danger" size="sm" icon={Ban}
+                        onClick={() => setAccion({ tipo: "suspend" })}>
+                  Suspender cuenta
+                </Button>
+              ) : (
+                <Button variant="secondary" size="sm" icon={CheckCircle2}
+                        onClick={() => setAccion({ tipo: "reactivate" })}>
+                  Reactivar cuenta
+                </Button>
+              )}
+              <Button variant="outline" size="sm" icon={ArrowRightLeft}
+                      onClick={() => setAccion({ tipo: "change_plan" })}>
+                Cambiar plan
+              </Button>
+              <Button variant="outline" size="sm" icon={CalendarPlus}
+                      disabled={!plan.hasta}
+                      onClick={() => setAccion({ tipo: "extend_plan" })}>
+                Extender vigencia
+              </Button>
+            </div>
+            {!plan.hasta && (
+              <p className="adm__muted">
+                El plan actual no vence, así que no hay vigencia que extender.
+              </p>
+            )}
+          </section>
+        )}
+
+        <HistorialAdmin userId={userId} token={token} onDenegado={onDenegado} />
       </div>
+
+      {accion && (
+        <ModalAccion
+          accion={accion}
+          docente={`${perfil.nombres || ""} ${perfil.apellidos || ""}`.trim()}
+          planActual={plan}
+          userId={userId}
+          token={token}
+          onCerrar={() => setAccion(null)}
+          onHecho={() => { setAccion(null); recargar(); }}
+        />
+      )}
     </>
+  );
+}
+
+/* ======================================================================= */
+
+/** Auditoría de este docente. Se carga aparte para no retrasar la ficha. */
+function HistorialAdmin({ userId, token, onDenegado }) {
+  const { data } = useCarga(
+    `/api/admin/audit?userId=${encodeURIComponent(userId)}`, token, onDenegado);
+  const lineas = data?.items || [];
+  if (!lineas.length) return null;
+
+  return (
+    <section className="adm__panel adm__panel--wide">
+      <h2><History size={16} aria-hidden="true" /> Historial administrativo</h2>
+      <ul className="adm__matlist">
+        {lineas.map((l, i) => (
+          <li key={i}>
+            <strong>{ETIQUETA_ACCION[l.accion] || l.accion}</strong>
+            <small>{l.actor} · {l.rol}{l.motivo ? ` · ${l.motivo}` : ""}</small>
+            <time>{fecha(l.fecha, true)}</time>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+const ETIQUETA_ACCION = {
+  ADMIN_SUSPENDED_USER: "Cuenta suspendida",
+  ADMIN_REACTIVATED_USER: "Cuenta reactivada",
+  ADMIN_CHANGED_PLAN: "Plan cambiado",
+  ADMIN_EXTENDED_PLAN: "Vigencia extendida",
+};
+
+/* ======================================================================= */
+
+/* ==========================================================================
+   MODAL DE CONFIRMACIÓN
+
+   Cada acción dice EXACTAMENTE qué va a pasar —«pasará al plan Mensual hasta
+   el 6 de octubre»— y no un genérico «¿estás seguro?». Suspender pide además
+   escribir el nombre: es la única de las cuatro que corta el servicio.
+   ========================================================================== */
+const TEXTOS = {
+  suspend: {
+    titulo: "Suspender cuenta",
+    icono: Ban,
+    variante: "danger",
+    boton: "Suspender",
+    efecto: (n) => `${n} dejará de poder generar contenido con IA de inmediato. Podrá entrar, pero no crear nada. Se puede revertir cuando quieras.`,
+    exito: "Cuenta suspendida.",
+  },
+  reactivate: {
+    titulo: "Reactivar cuenta",
+    icono: CheckCircle2,
+    variante: "default",
+    boton: "Reactivar",
+    efecto: (n) => `${n} volverá a poder generar contenido con los créditos de su plan.`,
+    exito: "Cuenta reactivada.",
+  },
+  change_plan: {
+    titulo: "Cambiar de plan",
+    icono: ArrowRightLeft,
+    variante: "default",
+    boton: "Cambiar plan",
+    efecto: () => "La suscripción actual se cerrará y se creará una nueva. El historial se conserva.",
+    exito: "Plan actualizado correctamente.",
+  },
+  extend_plan: {
+    titulo: "Extender vigencia",
+    icono: CalendarPlus,
+    variante: "default",
+    boton: "Extender",
+    efecto: () => "Se añadirán meses a la fecha de vencimiento del plan actual.",
+    exito: "Vigencia extendida.",
+  },
+};
+
+function ModalAccion({ accion, docente, planActual, userId, token, onCerrar, onHecho }) {
+  const t = TEXTOS[accion.tipo];
+  const { toast } = useUI();
+  const [motivo, setMotivo] = useState("");
+  const [plan, setPlan] = useState(planActual?.code || "free");
+  const [meses, setMeses] = useState("");
+  const [confirmacion, setConfirmacion] = useState("");
+  const [planes, setPlanes] = useState([]);
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState("");
+
+  const exigeNombre = accion.tipo === "suspend";
+  const nombreOk = !exigeNombre || confirmacion.trim().toLowerCase() === docente.toLowerCase();
+
+  useEffect(() => {
+    if (accion.tipo !== "change_plan" || !supabase) return;
+    supabase.from("plans").select("code,name,billing_period_months")
+      .eq("is_active", true).order("sort_order")
+      .then(({ data }) => setPlanes(data || []));
+  }, [accion.tipo]);
+
+  async function confirmar() {
+    setEnviando(true);
+    setError("");
+    try {
+      const r = await ejecutar({
+        action: accion.tipo,
+        userId,
+        reason: motivo.trim() || null,
+        ...(accion.tipo === "change_plan" ? { plan, months: meses || null } : {}),
+        ...(accion.tipo === "extend_plan" ? { months: meses } : {}),
+      }, token);
+
+      // La firma real es { tone, title, description }.
+      toast?.({
+        tone: "success",
+        title: r?.sin_cambios ? "No había nada que cambiar." : t.exito,
+      });
+      onHecho();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const puedeEnviar = nombreOk &&
+    (accion.tipo !== "extend_plan" || Number(meses) >= 1);
+
+  return (
+    <Modal
+      open
+      onClose={enviando ? undefined : onCerrar}
+      dismissible={!enviando}
+      title={t.titulo}
+      description={t.efecto(docente || "Este docente")}
+      icon={t.icono}
+      variant={t.variante}
+      actions={
+        <>
+          <Button variant="ghost" onClick={onCerrar} disabled={enviando}>Cancelar</Button>
+          <Button
+            variant={t.variante === "danger" ? "danger" : "primary"}
+            loading={enviando}
+            disabled={!puedeEnviar}
+            onClick={confirmar}
+          >
+            {t.boton}
+          </Button>
+        </>
+      }
+    >
+      <div className="adm__form">
+        {accion.tipo === "change_plan" && (
+          <>
+            <label>Plan
+              <select value={plan} onChange={(e) => setPlan(e.target.value)}>
+                {planes.length === 0 && <option value="free">Gratuito</option>}
+                {planes.map((p) => <option key={p.code} value={p.code}>{p.name}</option>)}
+              </select>
+            </label>
+            <label>Duración en meses
+              <input type="number" min="1" max="36" value={meses}
+                     placeholder="Vacío = sin vencimiento"
+                     onChange={(e) => setMeses(e.target.value)} />
+            </label>
+            {planes.length <= 1 && (
+              <Alert tone="info" title="Solo hay un plan en el catálogo">
+                Cuando definas los planes de pago aparecerán aquí para elegir.
+              </Alert>
+            )}
+          </>
+        )}
+
+        {accion.tipo === "extend_plan" && (
+          <label>Meses a añadir
+            <input type="number" min="1" max="36" value={meses} autoFocus
+                   onChange={(e) => setMeses(e.target.value)} />
+          </label>
+        )}
+
+        <label>Motivo <small>(queda en la auditoría)</small>
+          <textarea value={motivo} maxLength={300} rows={2}
+                    placeholder="Ej.: pago verificado por WhatsApp"
+                    onChange={(e) => setMotivo(e.target.value)} />
+        </label>
+
+        {exigeNombre && (
+          <label>Para confirmar, escribe <strong>{docente}</strong>
+            <input value={confirmacion} autoComplete="off"
+                   onChange={(e) => setConfirmacion(e.target.value)} />
+          </label>
+        )}
+
+        {error && <p className="adm__error" role="alert">{error}</p>}
+      </div>
+    </Modal>
   );
 }
 
