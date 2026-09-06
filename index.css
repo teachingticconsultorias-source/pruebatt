@@ -392,3 +392,7 @@ html, body { overflow-x: hidden; }
    Objetivo táctil mínimo razonable en móvil. */
 .challenge-card footer button { min-height: 40px; padding: 0 var(--space-2); border-radius: var(--radius-sm); }
 .challenge-card footer > div { gap: var(--space-1); }
+
+/* Contador de caracteres del texto libre enviado a la IA. */
+.field-count{display:block;margin-top:4px;font-size:var(--text-label);color:var(--text-tertiary)}
+.field-count.is-near{color:var(--amber-700);font-weight:var(--weight-semibold)}

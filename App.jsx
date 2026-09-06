@@ -109,6 +109,11 @@ const C = {
   cyan: "#1F9E98", // secundaria
 };
 
+// Topes del texto libre. Deben coincidir con api/_lib/input-guard.js:
+// el navegador ayuda a no pasarse, el backend es quien manda.
+const LIMITE_TEMA = 180;
+const LIMITE_CONTEXTO = 800;
+
 const CNEB = {
   indaga: "Indaga mediante métodos científicos para construir sus conocimientos",
   explica:
@@ -2781,8 +2786,12 @@ ${cuerpo}${metacognicion}`;
       <label>Nivel *<select value={form.nivel} onChange={e=>setForm(prev=>({...prev,nivel:e.target.value,grado:"1.º"}))}><option>Primaria</option><option>Secundaria</option></select></label>
       <label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
       <label className="wide">Área curricular *<select value={form.area} onChange={e=>update("area",e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
-      <label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder={isReading?"Ej.: Las festividades de mi comunidad":"Ej.: El ciclo del agua"}/></label>
-      <label className="wide">Contexto o indicación adicional<textarea value={form.contexto} onChange={e=>update("contexto",e.target.value)} placeholder="Opcional: contexto rural, festividad, situación del aula..."/></label>
+      <label className="wide">Tema *<input value={form.tema} maxLength={LIMITE_TEMA} onChange={e=>update("tema",e.target.value)} placeholder={isReading?"Ej.: Las festividades de mi comunidad":"Ej.: El ciclo del agua"}/></label>
+      <label className="wide">Contexto o indicación adicional<textarea value={form.contexto} maxLength={LIMITE_CONTEXTO} onChange={e=>update("contexto",e.target.value)} placeholder="Opcional: contexto rural, festividad, situación del aula..."/>
+        <small className={form.contexto.length > LIMITE_CONTEXTO - 80 ? "field-count is-near" : "field-count"}>
+          {form.contexto.length} / {LIMITE_CONTEXTO} · complementa el tema y el área; no los reemplaza
+        </small>
+      </label>
     </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar con Kantu"}</button></div></div>
     :<div className="instrument-result"><div className="instrument-result__actions"><div><small>{isReading?"FICHA DE LECTURA":"FICHA DE TRABAJO"}</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadWord(`${isReading?"ficha-lectura":"ficha-trabajo"}.docx`,resourceText(),resource.titulo)}><Download size={14}/> Word</button></div></div><SaveStatus state={resourceSave.state} onRetry={resourceSave.retry} onDownload={()=>downloadWord(`${isReading?"ficha-lectura":"ficha-trabajo"}.docx`,resourceText(),resource.titulo)} /><pre className="resource-document-preview">{resourceText()}</pre></div>}
   </div>;
