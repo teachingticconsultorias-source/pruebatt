@@ -65,9 +65,9 @@ describe("créditos · consumo y devolución", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1); // solo consume
   });
 
-  it("DEVUELVE el crédito si la generación falla", async () => {
+  it("DEVUELVE el crédito si la generación falla, usando el vale del consumo", async () => {
     mockRpc([
-      { ok: true, body: { ok: true, remaining: 4 } }, // consume_ai_credit
+      { ok: true, body: { ok: true, remaining: 4, consumption_id: "11111111-2222-3333-4444-555555555555" } },
       { ok: true, body: { ok: true, remaining: 5 } }, // refund_ai_credit
     ]);
     await expect(
@@ -75,8 +75,22 @@ describe("créditos · consumo y devolución", () => {
     ).rejects.toThrow();
 
     expect(global.fetch).toHaveBeenCalledTimes(2); // consume + refund
-    const refundUrl = global.fetch.mock.calls[1][0];
+    const [refundUrl, refundInit] = global.fetch.mock.calls[1];
     expect(refundUrl).toContain("refund_ai_credit");
+    // Desde 003 el reembolso va atado a un consumo concreto: sin vale no hay
+    // devolución posible, que es lo que impide fabricar créditos.
+    expect(JSON.parse(refundInit.body)).toEqual({
+      p_consumption: "11111111-2222-3333-4444-555555555555",
+    });
+  });
+
+  it("NO intenta devolver nada si el consumo no entregó vale", async () => {
+    mockRpc([{ ok: true, body: { ok: true, remaining: 4 } }]); // sin consumption_id
+    await expect(
+      withCredit(auth, async () => { throw Errors.aiUnavailable("gemini caído"); })
+    ).rejects.toThrow();
+    // Sólo el consumo: sin vale no se llama al reembolso.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
   it("no ejecuta la generación si no quedan créditos", async () => {

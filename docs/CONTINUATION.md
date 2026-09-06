@@ -675,6 +675,53 @@ revisarlo antes de seguir.
 003 no se prepara hasta que 002 esté verificada. Los cambios de código de la
 API tampoco: van con 003, en la misma ventana.
 
+## 002 CERRADA EN PRODUCCIÓN · 003 PREPARADA · 2026-09-06
+
+`002_commercial_core.sql` **aplicada y verificada**: las cuatro filas del
+veredicto de `006` en OK. No volver a auditarla.
+
+### Código adaptado al contrato de 003
+
+**Fueron cuatro archivos, no tres.** El inventario anterior se dejaba
+`api/generate-with-quota.js`, que tenía su propio `callRpc` y dos llamadas a
+`refund_ai_credit` sin vale.
+
+| Archivo | Cambio |
+|---|---|
+| `api/_lib/credits.js` | `refundCredit` exige `consumptionId` y lo envía como `body:{p_consumption}`; sin vale registra y se salta. `withCredit` lo pasa desde `credits.consumption_id` |
+| `api/_lib/errors.js` | nuevo `sendGenerationError`: traduce el fallo a un mensaje para la docente y manda el detalle al log |
+| `api/generate-linked-worksheet.js` | `rpc()` acepta body · guarda y pasa el vale · deja de devolver `e.message` |
+| `api/generate-session-resource.js` | ídem · el 429 deja de decir «5 creaciones», que ahora sale del plan |
+| `api/generate-with-quota.js` | **cobraba dos créditos**: consumía uno y llamaba a `generate-session`, que consume otro con `withCredit`. Se retira su bloque de créditos y su `callRpc`; delega en el interno, que ya devuelve `_credits` |
+
+Ese endpoint además **no lo llama nadie** desde el frontend: cero referencias.
+Queda funcional y sin el doble cobro, pero conviene decidir si se elimina.
+
+### Pruebas
+
+23/23. La prueba de reembolso se actualizó al contrato nuevo y se **amplió**:
+ahora comprueba que el cuerpo lleva `p_consumption` con el vale, y se añade
+una que verifica que **sin vale no se llama al reembolso**. Build OK.
+
+### Verificación posterior
+
+`supabase/inspect/007_verify_ai_credits.sql`: una sola sentencia, solo
+lectura, y **no invoca consume ni refund**, así que no gasta créditos de
+nadie. Ocho comprobaciones en «00 VEREDICTO».
+
+### Despliegue coordinado
+
+003 cambia el contrato del reembolso, y Vercel despliega desde `main`. El
+orden que minimiza la ventana incompatible:
+
+1. **003 primero, código después.** Con la RPC nueva y el código viejo, la
+   generación **funciona** y sólo se pierde el reembolso automático ante un
+   fallo de Gemini. Al revés —código nuevo sin RPC— la generación seguiría
+   caída.
+2. La ventana dura lo que tarde el build de Vercel, minutos.
+3. Hoy no hay nada que perder: la generación ya está caída, así que cualquier
+   estado intermedio es mejor que el actual.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque

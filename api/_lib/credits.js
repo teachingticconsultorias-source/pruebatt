@@ -33,9 +33,23 @@ export async function consumeCredit({ token, url, key }) {
  * el error original que provocó la devolución, pero SÍ queda registrado
  * para poder compensar manualmente al docente.
  */
-export async function refundCredit({ token, url, key, reason = "unknown" }) {
+export async function refundCredit({ token, url, key, consumptionId, reason = "unknown" }) {
+  // Desde 003 el reembolso exige el vale que devolvió el consumo. Sin él no
+  // hay nada que devolver: se registra y se sigue, porque un fallo aquí no
+  // debe ocultar el error original.
+  if (!consumptionId) {
+    console.error(
+      "[sciverse:credit-refund-skipped]",
+      JSON.stringify({ reason, detail: "sin consumption_id" })
+    );
+    return false;
+  }
   try {
-    await callRpc({ name: "refund_ai_credit", token, url, key });
+    await callRpc({
+      name: "refund_ai_credit",
+      token, url, key,
+      body: { p_consumption: consumptionId },
+    });
     return true;
   } catch (error) {
     console.error(
@@ -78,7 +92,11 @@ export async function withCredit(auth, operation) {
     return { result, credits };
   } catch (error) {
     // La generación no entregó nada: el crédito se devuelve.
-    await refundCredit({ ...auth, reason: auth.reason || "generation_failed" });
+    await refundCredit({
+      ...auth,
+      consumptionId: credits?.consumption_id,
+      reason: auth.reason || "generation_failed",
+    });
     throw error;
   }
 }

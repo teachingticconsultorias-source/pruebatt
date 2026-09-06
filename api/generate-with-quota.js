@@ -25,32 +25,6 @@
 
 import generateSessionHandler from "./generate-session.js";
 
-async function callRpc({ name, token, supabaseUrl, supabaseKey }) {
-  const response = await fetch(`${supabaseUrl}/rest/v1/rpc/${name}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: supabaseKey,
-      Authorization: `Bearer ${token}`,
-    },
-    body: "{}",
-  });
-
-  let data = {};
-  try {
-    data = await response.json();
-  } catch {
-    data = {};
-  }
-
-  if (!response.ok) {
-    const error = new Error(data?.message || `RPC ${name} falló`);
-    error.status = response.status;
-    throw error;
-  }
-
-  return data;
-}
 
 function createCapturedResponse() {
   let statusCode = 200;
@@ -94,72 +68,24 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Inicia sesión para utilizar la IA" });
   }
 
-  let creditConsumed = false;
-
   try {
-    const quota = await callRpc({
-      name: "consume_ai_credit",
-      token: accessToken,
-      supabaseUrl,
-      supabaseKey,
-    });
-
-    if (!quota?.ok) {
-      return res.status(429).json({
-        error: "Has utilizado tus 5 creaciones gratuitas de esta semana.",
-        code: quota?.reason || "WEEKLY_LIMIT_REACHED",
-        credits: quota,
-      });
-    }
-
-    creditConsumed = true;
-
-    // Ejecutamos exactamente el generador que ya existe en el proyecto.
+    // Los créditos los gestiona ÍNTEGRAMENTE generate-session con withCredit:
+    // consume, ejecuta y devuelve si falla. Este envoltorio consumía además
+    // uno por su cuenta, de modo que una sola creación habría cobrado DOS
+    // créditos. Se retira ese consumo y se delega en el interno, que ya
+    // incluye `_credits` en su respuesta.
     const innerRes = createCapturedResponse();
     await generateSessionHandler(req, innerRes);
 
-    const successful =
-      innerRes.statusCode >= 200 &&
-      innerRes.statusCode < 300 &&
-      innerRes.payload;
-
-    if (!successful) {
-      await callRpc({
-        name: "refund_ai_credit",
-        token: accessToken,
-        supabaseUrl,
-        supabaseKey,
-      }).catch((refundError) =>
-        console.error("No se pudo devolver el crédito:", refundError)
-      );
-
-      return res
-        .status(innerRes.statusCode || 500)
-        .json(innerRes.payload || { error: "No se pudo completar la generación" });
-    }
-
-    // Adjuntamos información de créditos sin modificar las estructuras
-    // existentes (session, instrument, challenge, result, etc.).
-    return res.status(innerRes.statusCode).json({
-      ...innerRes.payload,
-      _credits: quota,
-    });
+    return res
+      .status(innerRes.statusCode || 500)
+      .json(innerRes.payload || { error: "No se pudo completar la generación" });
   } catch (error) {
-    console.error("generate-with-quota error:", error);
-
-    if (creditConsumed) {
-      await callRpc({
-        name: "refund_ai_credit",
-        token: accessToken,
-        supabaseUrl,
-        supabaseKey,
-      }).catch(() => {});
-    }
-
-    return res.status(error?.status || 500).json({
-      error:
-        error?.message ||
-        "No se pudo validar el límite semanal de generaciones",
+    // El detalle va al log; a la docente, un mensaje claro.
+    console.error("[sciverse:with-quota-failed]", error?.message);
+    return res.status(500).json({
+      error: "No pudimos generar el contenido. Inténtalo nuevamente.",
+      code: "GENERATION_ERROR",
     });
   }
 }

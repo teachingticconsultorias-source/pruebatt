@@ -6,6 +6,7 @@
 
 import { getGeminiModel } from "./_lib/gemini.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
+import { sendGenerationError } from "./_lib/errors.js";
 
 const GEMINI_MODEL = getGeminiModel();
 
@@ -277,11 +278,11 @@ Debe evaluar lo que realmente se trabajó en la sesión.
 Incluye respuesta esperada para uso docente, aunque la interfaz del estudiante no la muestre.`;
 }
 
-async function rpc(name, token, url, key){
+async function rpc(name, token, url, key, body = {}){
   const r = await fetch(`${url}/rest/v1/rpc/${name}`, {
     method:"POST",
     headers:{"Content-Type":"application/json",apikey:key,Authorization:`Bearer ${token}`},
-    body:"{}"
+    body: JSON.stringify(body)
   });
   const d = await r.json().catch(()=>({}));
   if(!r.ok){ const e=new Error(d?.message || `Error ${name}`); e.status=r.status; throw e; }
@@ -301,7 +302,7 @@ export default async function handler(req,res){
   if(!apiKey) return res.status(500).json({error:"Falta GEMINI_API_KEY"});
   if(!token || !supabaseUrl || !supabaseKey) return res.status(401).json({error:"Inicia sesión para continuar"});
 
-  let consumed=false;
+  let consumptionId=null;
   try{
     const auth=await fetch(`${supabaseUrl}/auth/v1/user`,{headers:{apikey:supabaseKey,Authorization:`Bearer ${token}`}});
     if(!auth.ok) return res.status(401).json({error:"Tu sesión venció. Vuelve a iniciar sesión."});
@@ -311,11 +312,13 @@ export default async function handler(req,res){
 
     const quota=await rpc("consume_ai_credit",token,supabaseUrl,supabaseKey);
     if(!quota?.ok) return res.status(429).json({
-      error:"Has utilizado tus 5 creaciones gratuitas de esta semana.",
+      // El número de creaciones sale del plan, no de un literal: desde 003
+      // el límite lo define public.plans y puede no ser 5.
+      error:"Ya usaste tus creaciones de esta semana. Se renuevan el lunes.",
       code:quota?.reason || "WEEKLY_LIMIT_REACHED",
       credits:quota
     });
-    consumed=true;
+    consumptionId=quota.consumption_id;
 
     const c=context(req.body||{});
     const p=prompt(type,c,req.body?.options||{});
@@ -341,7 +344,10 @@ export default async function handler(req,res){
     const resource=JSON.parse(text);
     return res.status(200).json({resource,type,_credits:quota,model:GEMINI_MODEL});
   }catch(e){
-    if(consumed) await rpc("refund_ai_credit",token,supabaseUrl,supabaseKey).catch(()=>{});
-    return res.status(e?.status||500).json({error:e instanceof SyntaxError?"Gemini devolvió una respuesta incompleta.":e?.message||"No se pudo generar"});
+    if(consumptionId){
+      await rpc("refund_ai_credit",token,supabaseUrl,supabaseKey,
+                {p_consumption:consumptionId}).catch(()=>{});
+    }
+    return sendGenerationError(res, e, "el recurso", Boolean(consumptionId));
   }
 }

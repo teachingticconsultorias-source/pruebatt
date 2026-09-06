@@ -134,3 +134,70 @@ export function sendError(res, error, context = {}) {
   }
   return res.status(status).json(body);
 }
+
+
+/**
+ * Traduce el fallo de una generación a un mensaje que la docente pueda
+ * entender, sin filtrar texto de Gemini, PostgREST ni Postgres.
+ *
+ * Lo usan los dos endpoints que tienen su propio manejo de créditos en línea
+ * (generate-linked-worksheet, generate-session-resource). El resto pasa por
+ * `sendError`, que ya cumple lo mismo.
+ *
+ * @param {object} res
+ * @param {unknown} error
+ * @param {string} pieza      cómo llamar a lo que se intentaba crear
+ * @param {boolean} devuelto  si el crédito ya se devolvió, para decírselo
+ */
+export function sendGenerationError(res, error, pieza = "el material", devuelto = false) {
+  const crudo = String(error?.message || "");
+  const nota = devuelto ? " No se te descontó ninguna creación." : "";
+
+  // El detalle técnico va al log del servidor, nunca a la respuesta.
+  console.error(
+    "[sciverse:generation-failed]",
+    JSON.stringify({ pieza, status: error?.status ?? null, detail: crudo.slice(0, 300) })
+  );
+
+  if (/ACCOUNT_INACTIVE/i.test(crudo)) {
+    return res.status(403).json({
+      error: "Tu cuenta está desactivada. Escríbenos y la reactivamos.",
+      code: "ACCOUNT_INACTIVE",
+    });
+  }
+
+  if (/AUTH_REQUIRED/i.test(crudo) || error?.status === 401) {
+    return res.status(401).json({
+      error: "Tu sesión venció. Vuelve a iniciar sesión.",
+      code: "AUTH_REQUIRED",
+    });
+  }
+
+  if (/PROFILE_NOT_FOUND/i.test(crudo)) {
+    return res.status(409).json({
+      error: "Tu perfil no terminó de crearse. Escríbenos y lo activamos.",
+      code: "PROFILE_MISSING",
+    });
+  }
+
+  // JSON mal formado o respuesta truncada de Gemini.
+  if (error instanceof SyntaxError || /MAX_TOKENS|incompleta|no devolvió contenido/i.test(crudo)) {
+    return res.status(502).json({
+      error: `La respuesta llegó incompleta. Vuelve a intentarlo.${nota}`,
+      code: "GENERATION_INCOMPLETE",
+    });
+  }
+
+  // Fallo transitorio del proveedor: 429/500/503 de Gemini, o timeout.
+  if (error?.name === "TimeoutError" || error?.status === 429 || (error?.status >= 500 && error?.status <= 599)) {
+    return res.status(503).json({
+      error: `No pudimos generar ${pieza} en este momento. Inténtalo de nuevo en unos minutos.${nota}`,
+      code: "GENERATION_UNAVAILABLE",
+    });
+  }
+
+  return res.status(500).json({
+    error: `No pudimos generar ${pieza}. Inténtalo nuevamente.${nota}`,
+    code: "GENERATION_ERROR",
+  });
+}
