@@ -775,6 +775,77 @@ Al revés no funcionaría: el código llama a RPC que aún no existen.
 `ADMIN_SECRET`, `api/list-docentes.js`, `AdminPanel.jsx` y `?admin=legacy`
 se conservan como red de seguridad hasta validar Admin 2 en producción.
 
+## ADMIN 3 — PLANES COMERCIALES Y PAGOS MANUALES · 2026-09-06
+
+Admin 2 quedó validado en producción (SHA `7f81049`): superadmin, admin y
+docente normal comprobados. Admin 3 está **implementado y sin desplegar**: la
+migración 007 no se ha ejecutado.
+
+### Qué hace
+
+El docente ve su plan, pide uno de pago y sigue su solicitud. La
+administración tiene una bandeja donde aprobar o rechazar, y aprobar activa el
+plan en la misma transacción.
+
+### Tres decisiones que conviene recordar
+
+**El precio nunca viaja desde el navegador.** `request_plan` recibe solo el
+código del plan; el importe, la moneda y la duración los lee de `public.plans`
+dentro de la propia función. Manipular la petición no abarata nada. Hay una
+prueba que comprueba que la firma no admite ningún parámetro de dinero.
+
+**La solicitud guarda una instantánea.** Importe, moneda, nombre y periodo se
+copian al solicitar. Si mañana sube el precio, el historial sigue diciendo lo
+que se pidió. Aprobar usa el periodo guardado, no el catálogo de hoy.
+
+**Aprobar es una sola transacción.** Marca el pago, cierra la suscripción
+anterior, crea la nueva y audita. El bloqueo de la solicitud más la
+comprobación de que sigue `pending` impiden que dos administradores creen dos
+suscripciones.
+
+### Nada inventado
+
+El plan Pro se siembra **inactivo**, con precio y límite a 0 y marcados como
+CONFIGURACIÓN PENDIENTE: no aparece en el catálogo del docente. Las
+instrucciones de pago se siembran **sin configurar**, y la aplicación lo dice
+en vez de enseñar un número de cuenta falso. Las plantillas de los dos UPDATE
+están al final de `007_payments.sql`.
+
+### Un evento menos, a propósito
+
+Se piden cuatro eventos de auditoría, pero `subscription_activated` sería el
+mismo hecho que `payment_approved`, en la misma transacción y el mismo instante.
+El evento de aprobación ya lleva en `after_data` el plan, las fechas y el id de
+la suscripción creada. Si prefieres el evento aparte, es una línea.
+
+### Renovación: pendiente y deliberado
+
+`request_plan` rechaza con `PLAN_ALREADY_ACTIVE` si ya se tiene ese plan
+vigente: es la salvaguarda contra cobrar dos veces. Renovar de verdad exige
+distinguir alta de renovación —sumar meses en vez de crear suscripción— y no
+se adelanta porque todavía no hay ni un plan de pago activo.
+
+### Comprobantes
+
+No se implementó subida de archivos. Exige bucket privado, políticas, límites
+de tamaño y MIME y URLs firmadas; va en su propio sub-bloque. Por ahora la
+solicitud lleva un campo de número de operación.
+
+### Orden de despliegue
+
+1. `supabase/migrations/007_payments.sql` en el SQL Editor.
+2. `supabase/inspect/010_verify_payments.sql` → ocho OK.
+3. Decidir precio y límite del plan Pro, y las instrucciones de pago.
+4. `git push origin main` y esperar a Vercel.
+
+Los pasos 3 y 4 son independientes: se puede desplegar antes de fijar precios,
+y el docente simplemente verá que aún no hay planes de pago.
+
+### Sigue pendiente
+
+`ADMIN_SECRET`, `api/list-docentes.js`, `AdminPanel.jsx` y `?admin=legacy` se
+conservan hasta validar Admin 3 en producción.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque

@@ -9,6 +9,7 @@ import Button from "../ui/Button.jsx";
 import { Badge, Alert, EmptyState } from "../ui/Feedback.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
 import CreditsIndicator from "../CreditsIndicator.jsx";
+import PlanSection from "./PlanSection.jsx";
 import { PLANS, whatsappLink } from "../../config/plans.js";
 
 /* ==========================================================================
@@ -168,47 +169,10 @@ export default function Account({
           )}
 
           {/* ====================================================== PLAN */}
-          {tab === "plan" && (
-            <>
-              <div className="acc__planhead">
-                <div>
-                  <span className="sv-label">Plan actual</span>
-                  <h3 className="is-capitalize">{plan}</h3>
-                </div>
-                <Badge tone={plan === "gratuito" ? "neutral" : "success"}>
-                  {plan === "gratuito" ? "Sin costo" : "Activo"}
-                </Badge>
-              </div>
-
-              {/* Única fuente de uso: la API de créditos. */}
-              <CreditsIndicator />
-
-              <div className="acc__plans">
-                {PLANS.filter((item) => item.id !== plan).map((item) => (
-                  <article key={item.id} className={item.featured ? "is-featured" : ""}>
-                    <h4>{item.name}</h4>
-                    <p className="acc__planprice"><small>S/</small>{item.price}<span>{item.period}</span></p>
-                    <ul>{item.benefits.slice(0, 4).map((benefit) => <li key={benefit}>{benefit}</li>)}</ul>
-                    <Button
-                      as="a"
-                      variant={item.featured ? "primary" : "secondary"}
-                      size="sm"
-                      fullWidth
-                      href={whatsappLink(`Hola Teaching TIC, deseo adquirir el Plan ${item.name} de SciVerse por S/${item.price}.`)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Elegir plan {item.name.toLowerCase()}
-                    </Button>
-                  </article>
-                ))}
-              </div>
-
-              <Alert tone="info" icon={CreditCard} title="Pago por Plin o Yape">
-                La activación se confirma por WhatsApp con Teaching TIC. No hay renovación automática.
-              </Alert>
-            </>
-          )}
+          {/* El catálogo, las instrucciones de pago y el historial vienen de
+              la base, no de config/plans.js: cambiar un precio no debe exigir
+              un despliegue, y el importe nunca lo decide el navegador. */}
+          {tab === "plan" && <PlanSection />}
 
           {/* =============================================== CAPACITACIÓN */}
           {tab === "capacitacion" && (

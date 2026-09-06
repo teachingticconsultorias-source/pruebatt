@@ -279,3 +279,38 @@
 .adm__form input:focus, .adm__form select:focus, .adm__form textarea:focus {
   outline: none; border-color: var(--border-focus); box-shadow: var(--elev-focus);
 }
+
+/* ------------------------------------------------------------------ PAGOS */
+.adm__filtros { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.adm__chip {
+  min-height: 34px; padding: 0 var(--space-3);
+  border: 1px solid var(--border-default); border-radius: var(--radius-full);
+  background: var(--bg-surface); font-family: var(--font-body);
+  font-size: var(--text-sm); font-weight: var(--weight-medium);
+  color: var(--text-secondary); cursor: pointer;
+  transition: all var(--dur-fast) var(--ease-out);
+}
+.adm__chip:hover { border-color: var(--border-strong); color: var(--text-primary); }
+.adm__chip.is-active {
+  border-color: var(--teal-700); background: var(--teal-50);
+  color: var(--teal-800); font-weight: var(--weight-semibold);
+}
+.adm__pagos { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.adm__pago {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-lg);
+  background: var(--bg-surface);
+}
+.adm__pagohead {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  justify-content: space-between; gap: var(--space-3);
+}
+.adm__pagohead strong { display: block; font-size: var(--text-body); font-weight: var(--weight-semibold); }
+.adm__pagohead small { display: block; font-size: var(--text-label); color: var(--text-secondary); word-break: break-all; }
+.adm__pagodatos { display: grid; gap: var(--space-2); }
+@media (min-width: 720px) { .adm__pagodatos { grid-template-columns: repeat(2, 1fr); gap: var(--space-2) var(--space-6); } }
+.adm__resumenpago {
+  display: grid; gap: var(--space-2); padding: var(--space-4);
+  border-radius: var(--radius-md); background: var(--bg-sunken);
+}

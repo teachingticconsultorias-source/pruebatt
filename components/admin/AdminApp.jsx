@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Users, Search, ChevronLeft, ChevronRight, ArrowLeft,
   ShieldCheck, ShieldAlert, LogOut, RefreshCw, Mail, MailCheck, Clock,
   GraduationCap, Sparkles, FolderOpen, AlertCircle, Ban, CheckCircle2,
-  CalendarPlus, ArrowRightLeft, History,
+  CalendarPlus, ArrowRightLeft, History, Receipt, ThumbsUp, ThumbsDown,
 } from "lucide-react";
 
 import { supabase } from "../../supabaseClient.js";
@@ -142,6 +142,13 @@ export default function AdminApp() {
           >
             <Users size={17} aria-hidden="true" /> Docentes
           </button>
+          <button
+            type="button"
+            className={`adm__link${vista === "pagos" ? " is-active" : ""}`}
+            onClick={() => { setVista("pagos"); setDocenteAbierto(null); }}
+          >
+            <Receipt size={17} aria-hidden="true" /> Pagos
+          </button>
         </nav>
 
         <div className="adm__sidefoot">
@@ -169,6 +176,9 @@ export default function AdminApp() {
           />
         ) : vista === "resumen" ? (
           <Resumen token={token} onRole={setRole} onDenegado={() => setDenegado(true)} />
+        ) : vista === "pagos" ? (
+          <Pagos token={token} role={role} onRole={setRole}
+                 onDenegado={() => setDenegado(true)} />
         ) : (
           <ListaDocentes
             token={token}
@@ -681,6 +691,267 @@ const ETIQUETA_ACCION = {
 };
 
 /* ======================================================================= */
+
+/* ==========================================================================
+   PAGOS
+
+   Los pendientes van arriba: son las únicas solicitudes con alguien
+   esperando al otro lado. El importe se muestra tal como quedó guardado en la
+   solicitud, no como esté hoy el catálogo: si el precio cambió, el historial
+   debe seguir diciendo lo que se pidió.
+   ========================================================================== */
+
+const ESTADO_PAGO = {
+  pending:   { texto: "Pendiente", tono: "amber" },
+  approved:  { texto: "Aprobado",  tono: "success" },
+  rejected:  { texto: "Rechazado", tono: "danger" },
+  cancelled: { texto: "Cancelado", tono: "neutral" },
+};
+
+function soles(centimos, moneda = "PEN") {
+  const valor = (Number(centimos) || 0) / 100;
+  return (moneda === "PEN" ? "S/ " : moneda + " ") + valor.toFixed(2);
+}
+
+function Pagos({ token, role, onRole, onDenegado }) {
+  const [estado, setEstado] = useState("pending");
+  const [texto, setTexto] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [pagina, setPagina] = useState(1);
+  const [revisando, setRevisando] = useState(null);
+
+  const puedeRevisar = role === "admin" || role === "superadmin";
+
+  const ruta = useMemo(() => {
+    const q = new URLSearchParams({ page: String(pagina), pageSize: String(PAGE_SIZE) });
+    if (estado) q.set("status", estado);
+    if (busqueda) q.set("search", busqueda);
+    return "/api/admin/payments?" + q.toString();
+  }, [estado, busqueda, pagina]);
+
+  const { data, error, cargando, recargar } = useCarga(ruta, token, onDenegado);
+  useEffect(() => { if (data?.role) onRole?.(data.role); }, [data, onRole]);
+
+  const items = data?.items || [];
+  const paginas = data?.pages ?? 1;
+  const pendientes = data?.pendientes ?? 0;
+
+  return (
+    <>
+      <header className="adm__head">
+        <div>
+          <p className="adm__eyebrow">Pagos</p>
+          <h1>{pendientes} {pendientes === 1 ? "solicitud pendiente" : "solicitudes pendientes"}</h1>
+        </div>
+        <form
+          className="adm__search"
+          role="search"
+          onSubmit={(e) => { e.preventDefault(); setPagina(1); setBusqueda(texto.trim()); }}
+        >
+          <Search size={16} aria-hidden="true" />
+          <input
+            type="search" value={texto} maxLength={80}
+            placeholder="Docente o correo" aria-label="Buscar solicitudes"
+            onChange={(e) => setTexto(e.target.value)}
+          />
+          <Button type="submit" variant="secondary" size="sm">Buscar</Button>
+        </form>
+      </header>
+
+      <div className="adm__filtros" role="group" aria-label="Filtrar por estado">
+        {[["pending", "Pendientes"], ["approved", "Aprobados"],
+          ["rejected", "Rechazados"], ["", "Todos"]].map(([valor, etiqueta]) => (
+          <button
+            key={etiqueta} type="button"
+            className={"adm__chip" + (estado === valor ? " is-active" : "")}
+            onClick={() => { setEstado(valor); setPagina(1); }}
+          >
+            {etiqueta}
+          </button>
+        ))}
+      </div>
+
+      {cargando ? (
+        <CargandoTabla />
+      ) : error ? (
+        <ErrorEstado mensaje={error} onReintentar={recargar} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          title={estado === "pending" ? "Nada por revisar" : "Sin solicitudes"}
+          description={estado === "pending"
+            ? "Cuando una docente solicite un plan, aparecerá aquí."
+            : "No hay solicitudes que coincidan con este filtro."}
+        />
+      ) : (
+        <>
+          <ul className="adm__pagos">
+            {items.map((r) => {
+              const e = ESTADO_PAGO[r.estado] || ESTADO_PAGO.cancelled;
+              return (
+                <li key={r.id} className="adm__pago">
+                  <div className="adm__pagohead">
+                    <div>
+                      <strong>{r.docente}</strong>
+                      <small>{r.email} · {r.ie}</small>
+                    </div>
+                    <Badge tone={e.tono}>{e.texto}</Badge>
+                  </div>
+
+                  <div className="adm__pagodatos">
+                    <Dato etiqueta="Plan" valor={r.plan_nombre} />
+                    <Dato etiqueta="Monto" valor={soles(r.monto_centimos, r.moneda)} />
+                    <Dato etiqueta="Método" valor={r.metodo} />
+                    <Dato etiqueta="Referencia" valor={r.referencia || "—"} />
+                    <Dato etiqueta="Solicitado" valor={fecha(r.solicitado, true)} />
+                    {r.revisado && (
+                      <Dato
+                        etiqueta="Revisado"
+                        valor={fecha(r.revisado, true) + (r.revisor ? " · " + r.revisor : "")}
+                      />
+                    )}
+                    {r.notas && <Dato etiqueta="Notas internas" valor={r.notas} />}
+                  </div>
+
+                  {r.estado === "pending" && puedeRevisar && (
+                    <div className="adm__botonera">
+                      <Button variant="primary" size="sm" icon={ThumbsUp}
+                              onClick={() => setRevisando({ tipo: "approve", r })}>
+                        Aprobar
+                      </Button>
+                      <Button variant="outline" size="sm" icon={ThumbsDown}
+                              onClick={() => setRevisando({ tipo: "reject", r })}>
+                        Rechazar
+                      </Button>
+                    </div>
+                  )}
+                  {r.estado === "pending" && !puedeRevisar && (
+                    <p className="adm__muted">Tu rol permite consultar, no revisar.</p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+
+          {paginas > 1 && (
+            <nav className="adm__pager" aria-label="Paginación">
+              <Button variant="outline" size="sm" icon={ChevronLeft}
+                      disabled={pagina <= 1} onClick={() => setPagina((p) => p - 1)}>
+                Anterior
+              </Button>
+              <span>Página {pagina} de {paginas}</span>
+              <Button variant="outline" size="sm" iconRight={ChevronRight}
+                      disabled={pagina >= paginas} onClick={() => setPagina((p) => p + 1)}>
+                Siguiente
+              </Button>
+            </nav>
+          )}
+        </>
+      )}
+
+      {revisando && (
+        <ModalPago
+          revision={revisando}
+          token={token}
+          onCerrar={() => setRevisando(null)}
+          onHecho={() => { setRevisando(null); recargar(); }}
+        />
+      )}
+    </>
+  );
+}
+
+function ModalPago({ revision, token, onCerrar, onHecho }) {
+  const aprobar = revision.tipo === "approve";
+  const r = revision.r;
+  const { toast } = useUI();
+  const [notas, setNotas] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState("");
+
+  async function confirmar() {
+    setEnviando(true);
+    setError("");
+    try {
+      const res = await fetch("/api/admin/payment-actions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+        body: JSON.stringify({
+          action: revision.tipo, requestId: r.id, notes: notas.trim() || null,
+        }),
+      });
+
+      const tipo = res.headers.get("content-type") || "";
+      if (!tipo.includes("application/json")) {
+        throw new Error("El servicio no está disponible en este momento.");
+      }
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error || "No pudimos completar la acción.");
+
+      toast({
+        tone: "success",
+        title: aprobar ? "Pago aprobado y plan activado." : "Solicitud rechazada.",
+      });
+      onHecho();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  const meses = r.meses ? r.meses + (r.meses === 1 ? " mes" : " meses") : "sin vencimiento";
+
+  return (
+    <Modal
+      open
+      onClose={enviando ? undefined : onCerrar}
+      dismissible={!enviando}
+      title={aprobar ? "Aprobar pago" : "Rechazar solicitud"}
+      description={aprobar
+        ? r.docente + " pasará al plan " + r.plan_nombre + " por " + meses + ", a partir de hoy."
+        : r.docente + " seguirá con el plan que tiene ahora. Nada cambia salvo el estado de esta solicitud."}
+      icon={aprobar ? ThumbsUp : ThumbsDown}
+      variant={aprobar ? "success" : "warning"}
+      actions={
+        <>
+          <Button variant="ghost" onClick={onCerrar} disabled={enviando}>Cancelar</Button>
+          <Button variant={aprobar ? "primary" : "danger"} loading={enviando}
+                  disabled={!aprobar && !notas.trim()} onClick={confirmar}>
+            {aprobar ? "Aprobar y activar" : "Rechazar"}
+          </Button>
+        </>
+      }
+    >
+      <div className="adm__form">
+        <div className="adm__resumenpago">
+          <Dato etiqueta="Docente" valor={r.docente} />
+          <Dato etiqueta="Plan" valor={r.plan_nombre} />
+          <Dato etiqueta="Monto" valor={soles(r.monto_centimos, r.moneda)} />
+          <Dato etiqueta="Método" valor={r.metodo} />
+          <Dato etiqueta="Referencia" valor={r.referencia || "—"} />
+        </div>
+
+        <label>
+          {aprobar ? "Notas internas (opcional)" : "Motivo del rechazo"}
+          <textarea
+            value={notas} maxLength={300} rows={2}
+            placeholder={aprobar
+              ? "Ej.: comprobante verificado en Yape"
+              : "Ej.: no encontramos el pago con esa referencia"}
+            onChange={(e) => setNotas(e.target.value)}
+          />
+          <small>
+            {aprobar
+              ? "Solo la ve el equipo. La docente no verá esta nota."
+              : "Obligatorio. Solo lo ve el equipo."}
+          </small>
+        </label>
+
+        {error && <p className="adm__error" role="alert">{error}</p>}
+      </div>
+    </Modal>
+  );
+}
 
 /* ==========================================================================
    MODAL DE CONFIRMACIÓN
