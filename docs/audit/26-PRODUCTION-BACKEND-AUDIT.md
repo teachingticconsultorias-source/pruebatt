@@ -648,3 +648,154 @@ migración está aplicada.
 
 **Ningún secreto debe pegarse en el chat.** El sitio correcto es `.env.local`,
 que está en `.gitignore` (verificado ✅); yo lo leo sin imprimir valores.
+
+---
+
+# ADENDA · 2026-09-04 — Bloque P0, etapa de verificación
+
+## A.0 La verificación en producción sigue bloqueada
+
+Se volvió a comprobar el acceso al iniciar el bloque P0. Sin cambios:
+
+| Acceso | Estado |
+|---|---|
+| `.env.local` | sigue apuntando al proyecto ficticio `example` |
+| Cadena de conexión (`DATABASE_URL`, `SUPABASE_DB_URL`, `PG*`) | ninguna |
+| Vercel | sin credenciales |
+| Supabase CLI | no instalado · proyecto no enlazado |
+
+Por tanto **CRÍTICO-1 y CRÍTICO-2 siguen siendo ⚠️ DEDUCIDOS.** No se
+convierten en ✅ por repetir la afirmación: hace falta leer la base real.
+
+Para eso se añade `supabase/inspect/001_production_state.sql`: **17 consultas
+de solo lectura** que responden en una pasada a las políticas, los grants por
+tabla y por columna, quién puede ejecutar cada RPC, el cuerpo real de
+`refund_ai_credit()`, los triggers, el CHECK vigente de `tipo`, los tipos ya
+almacenados y si `001` está aplicada. No hace ninguna escritura y no devuelve
+datos personales.
+
+## A.1 ✅ VERIFICADO · La aplicación nunca actualiza `docentes` desde el cliente
+
+Búsqueda exhaustiva de `from("docentes")` en todo el código de navegador:
+
+| Ubicación | Operación | Estado |
+|---|---|---|
+| `App.jsx:3461` | SELECT | dentro de `RegistrationGate` → **código muerto** |
+| `App.jsx:3514` | INSERT | dentro de `RegistrationGate` → **código muerto** |
+| `App.jsx:3554` | SELECT | dentro de `RegistrationGate` → **código muerto** |
+| `App.jsx:4170` | SELECT `plan,activo,nivel,ie` | **viva** |
+| `src/App.jsx:1243` | INSERT | árbol duplicado muerto (ver A.4) |
+
+**No existe ni un solo UPDATE sobre `docentes` en el cliente.**
+
+Esto cambia la evaluación de CRÍTICO-1 en dos sentidos:
+
+1. El privilegio de UPDATE que hace explotable el fallo **no lo usa nadie**.
+   Es superficie de ataque pura, sin contrapartida funcional.
+2. Por lo mismo, **retirarlo no rompe nada**. La corrección es mucho menos
+   arriesgada de lo que sugería la auditoría inicial: basta revocar el UPDATE
+   y retirar la política, sin necesidad de separar tablas ni de tocar el
+   frontend.
+
+## A.2 ✅ VERIFICADO · Los cambios de perfil nunca llegan a `docentes`
+
+`saveProfile` (`App.jsx:4114`) guarda con:
+
+```js
+await supabase.auth.updateUser({ data: { ...form } });
+```
+
+Es decir, escribe en `auth.users.raw_user_meta_data`, **no en la tabla**. Y el
+trigger `al_crear_usuario` sólo se dispara `AFTER INSERT ON auth.users`, nunca
+en UPDATE.
+
+Consecuencia, que es un hallazgo nuevo y no está en el cuerpo de la auditoría:
+
+> Cuando una docente corrige su nivel o su institución en «Mi cuenta», el
+> cambio se guarda en Auth pero `docentes.nivel` y `docentes.ie` **quedan
+> congelados para siempre**. Y `App.jsx:4170` lee precisamente `nivel` e `ie`
+> **de la tabla**. La aplicación acaba mostrando una mezcla de dato nuevo y
+> dato viejo según de dónde lo lea.
+
+**Clasificación: MEDIO** (corrupción silenciosa de datos, sin error visible).
+
+Encaja bien con la corrección de CRÍTICO-1: al sustituir el UPDATE directo por
+una RPC `security definer` de perfil, esa RPC pasa a ser el único camino de
+escritura y puede mantener las dos fuentes sincronizadas.
+
+## A.3 ✅ VERIFICADO · El backend llama a las RPC como `authenticated`
+
+Éste es el detalle que condiciona la corrección de CRÍTICO-2.
+
+`api/_lib/supabase.js:61-70` — `callRpc()` envía:
+
+```
+apikey:        VITE_SUPABASE_PUBLISHABLE_KEY   (clave pública)
+Authorization: Bearer <JWT del usuario>
+```
+
+Y `api/_lib/credits.js` invoca `consume_ai_credit`, `refund_ai_credit` y
+`get_ai_credit_status` por esa vía.
+
+> **A ojos de Postgres, las funciones serverless y el navegador son
+> indistinguibles: ambos son el rol `authenticated` con el mismo JWT.**
+
+Por tanto la corrección "obvia" —`revoke execute on refund_ai_credit from
+authenticated`— **rompería el reembolso legítimo** de `generate-session`,
+`generate-project-steam` y los otros tres generadores. No debe aplicarse tal
+cual.
+
+### Dos caminos posibles
+
+| | A · Llamar el refund con `service_role` | B · Reembolso demostrable con vale de un solo uso |
+|---|---|---|
+| Cambio en BD | `refund_ai_credit(p_user_id uuid)` sólo para `service_role` | Tabla de consumos + `refund_ai_credit(p_vale uuid)` |
+| Cambio en código | `callRpc` con clave de servicio en los 5 generadores | Pasar el vale de consume a refund |
+| Cambio en Vercel | **Sí** — `SUPABASE_SERVICE_ROLE_KEY` tendría que llegar a los generadores, hoy sólo la usa `list-docentes` | **No** |
+| Efecto lateral | Amplía el alcance de la clave más peligrosa del proyecto | Crea la tabla de auditoría de créditos que ya figuraba como P2 |
+
+**Recomendación: camino B.** No exige tocar Vercel —que este bloque prohíbe
+expresamente—, no extiende el uso de la clave `service_role`, y de paso
+resuelve la falta de trazabilidad del consumo.
+
+Diseño propuesto, para aprobación tras la inspección:
+
+- `consume_ai_credit()` registra el consumo y devuelve un `refund_token` uuid.
+- `refund_ai_credit(p_token uuid)` sólo reembolsa si ese vale existe, aún no
+  se ha usado, pertenece a `auth.uid()` y es reciente; después lo marca como
+  gastado.
+- `authenticated` conserva el `EXECUTE`, pero ya no puede fabricar créditos:
+  cada reembolso exige un consumo real previo y sólo puede cobrarse una vez.
+
+## A.4 ✅ VERIFICADO · `src/` es un árbol duplicado muerto
+
+`index.html` carga `/main.jsx` de la raíz, y ese `main.jsx` importa
+`./App.jsx`, también de la raíz. El directorio `src/` contiene una copia
+completa y obsoleta —`App.jsx`, `AdminPanel.jsx`, `main.jsx`, `index.css`,
+`supabaseClient.js`— que **no entra en el build** y a la que nada apunta.
+
+Riesgo: no es de seguridad, es de mantenimiento. Un cambio aplicado por
+error en `src/App.jsx` no tendría ningún efecto y costaría horas de
+depuración. Sumar a la retirada de código muerto (P2).
+
+## A.5 Estado de las tareas del bloque P0
+
+| Paso | Estado |
+|---|---|
+| 1 · Conectar a Supabase real | 🔒 **bloqueado** — sin acceso |
+| 2 · Confirmar CRÍTICO-1 | 🔒 bloqueado · consulta preparada (apartados 6, 7 y 8) |
+| 3 · Confirmar CRÍTICO-2 | 🔒 bloqueado · consulta preparada (apartados 10 y 11) |
+| 4 · Migración `002_secure_ai_credits.sql` | ⏸️ **diseñada, no escrita** — su forma depende de la inspección |
+| 5 · Pruebas de seguridad | ⏸️ requieren una base real contra la que ejecutarse |
+| 6 · CHECK de `tipo` | 🔒 bloqueado · consulta preparada (apartados 3, 13 y 14) |
+| 7 · Trigger de perfil | 🔒 bloqueado · consulta preparada (apartado 12) |
+| 8 · Configuración de Auth | 🔒 bloqueado — sólo visible en el panel |
+| 9 · Correo y SMTP | 🔒 bloqueado — sólo visible en el panel |
+| 10 · Ejecutar migración P0 | ⛔ **no procede** sin confirmar los críticos |
+| 11 · Validación posterior | ⛔ no procede |
+| 12 · `001_material_types.sql` | sigue **sin ejecutar**; el apartado 14 dirá si hace falta |
+
+Deliberadamente **no** se ha escrito `002_secure_ai_credits.sql`. Una
+migración que revoca privilegios y cambia la firma de una función, escrita
+contra un esquema supuesto, es la clase de cambio que rompe producción un
+viernes. Se escribirá cuando la inspección diga qué hay realmente.

@@ -358,6 +358,55 @@ implementación en `App.jsx` es código muerto.
 Ningún secreto debe pegarse en el chat: el sitio es `.env.local`, que está
 en `.gitignore`.
 
+## BLOQUE P0 CRÉDITOS — ETAPA DE VERIFICACIÓN · 2026-09-04
+
+**Bloqueado por acceso.** Se revisó de nuevo al empezar: `.env.local` sigue
+apuntando al proyecto ficticio `example`, no hay cadena de conexión, Vercel
+sin credenciales, Supabase CLI ausente y proyecto no enlazado. Los dos
+críticos de créditos **siguen siendo deducidos**; no se convierten en
+verificados por repetirlos.
+
+Entregado para desbloquear: `supabase/inspect/001_production_state.sql`,
+**17 consultas de solo lectura** que responden en una pasada a políticas,
+grants por tabla y por columna, permisos de EXECUTE, cuerpo real de
+`refund_ai_credit()`, triggers, CHECK vigente de `tipo`, tipos ya
+almacenados y si `001` está aplicada. No escribe nada y no devuelve datos
+personales. Ejecutar en Supabase → SQL Editor y devolver la salida.
+
+### Verificado en esta etapa (sobre el código, no sobre producción)
+
+1. **Ningún UPDATE del cliente sobre `docentes`.** El privilegio que hace
+   explotable CRÍTICO-1 no lo usa nadie: retirarlo no rompe la aplicación.
+   La corrección es mucho menos arriesgada de lo previsto.
+2. **Los cambios de perfil nunca llegan a la tabla.** `saveProfile` usa
+   `supabase.auth.updateUser`, y el trigger solo actúa en INSERT. `nivel` e
+   `ie` quedan congelados en `docentes` mientras la app los lee de ahí.
+   Hallazgo nuevo, nivel MEDIO.
+3. **El backend llama a las RPC como `authenticated`**, con el JWT del
+   usuario y la clave publishable. Postgres no distingue navegador de
+   servidor, así que un `revoke execute` a secas **rompería el reembolso
+   legítimo** de los cinco generadores.
+4. **`src/` es un árbol duplicado muerto** (5 ficheros); `index.html` carga
+   `/main.jsx` de la raíz.
+
+### Corrección de CRÍTICO-2: camino elegido
+
+Descartado usar `service_role` en los generadores, porque exigiría cambiar
+Vercel —prohibido en este bloque— y ampliaría el alcance de la clave más
+peligrosa. Se propone **vale de un solo uso**: `consume_ai_credit()` registra
+el consumo y devuelve un token; `refund_ai_credit(p_token)` solo reembolsa si
+el vale existe, no se ha usado, es del propio usuario y es reciente. Crea de
+paso la tabla de auditoría de créditos que ya figuraba como P2.
+
+### No escrito a propósito
+
+`002_secure_ai_credits.sql` **no se ha escrito**. Una migración que revoca
+privilegios y cambia la firma de una función, redactada contra un esquema
+supuesto, es exactamente lo que rompe producción. Se escribirá con la salida
+de la inspección delante.
+
+`001_material_types.sql` sigue **sin ejecutar**.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque
