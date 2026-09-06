@@ -1,39 +1,48 @@
 -- ============================================================================
--- INSPECCIÓN CONSOLIDADA DEL ESTADO REAL DE PRODUCCIÓN
+-- INSPECCIÓN CONSOLIDADA DEL ESTADO REAL DE PRODUCCIÓN  ·  v2
 --
 --              ✅ ESTRICTAMENTE SOLO LECTURA · UNA SOLA CONSULTA
 --
 -- Es UNA ÚNICA sentencia SELECT (un gran UNION ALL). Por eso el SQL Editor
--- de Supabase muestra un solo panel de Results, en vez de uno por consulta
--- como ocurría con 001_production_state.sql.
+-- de Supabase muestra un solo panel de Results, en vez de uno por consulta.
 --
 -- CÓMO USARLO
 --   Supabase → SQL Editor → New query → pegar TODO → Run
 --   → botón de copiar / exportar del panel de Results → pegar la tabla.
 --
+-- ----------------------------------------------------------------------------
+-- CORRECCIÓN DE LA v1
+-- ----------------------------------------------------------------------------
+-- La v1 abortaba con:
+--     ERROR 42703: column "ai_week_used" of relation "docentes" does not exist
+--
+-- La causa es que `has_column_privilege()` LANZA ERROR cuando la columna no
+-- existe, en vez de devolver false. Y ese error es, en sí mismo, el hallazgo
+-- más importante hasta ahora: **las columnas de créditos no existen en
+-- producción**, así que `supabase-freemium.sql` nunca llegó a aplicarse.
+--
+-- Esta versión comprueba primero qué columnas existen de verdad
+-- (CTE `dcols` / `mcols`) y solo entonces pregunta por sus privilegios.
+-- Todo lo que falte se informa como 'unavailable' o 'NO EXISTE' sin abortar.
+--
 -- GARANTÍAS
 --   · Solo SELECT. Ni INSERT, UPDATE, DELETE, ALTER, DROP, GRANT o REVOKE.
 --   · No invoca ninguna función de la aplicación: no consume ni reembolsa
 --     créditos, no crea perfiles, no dispara triggers.
---   · Lee catálogos del sistema (pg_catalog, information_schema).
---   · Los únicos datos de las tablas de la aplicación son RECUENTOS
---     AGREGADOS. Ninguna fila individual.
+--   · De las tablas de la aplicación solo salen RECUENTOS AGREGADOS.
 --   · NO devuelve nombres, correos, teléfonos, UUID de usuarios ni secretos.
---   · Si algo no existe o no es accesible, devuelve 'unavailable' en lugar
---     de fallar. El script nunca intenta crear lo que falta.
 --
 -- SALIDA
 --   Cuatro columnas: section | object | property | value
---   Ordenadas por un índice interno para que las secciones salgan en orden.
 --
--- EMPIEZA POR LA SECCIÓN «00 VEREDICTO»: responde de un vistazo si los dos
--- fallos críticos de créditos existen de verdad en producción.
+-- EMPIEZA POR «00 VEREDICTO». La sección «01b COLUMNAS CLAVE» dice qué
+-- partes del esquema están realmente instaladas.
 -- ============================================================================
 
 with
 
 -- ¿Existen los objetos? to_regclass / to_regprocedure devuelven NULL en vez
--- de lanzar error, así que sirven de guarda para todo lo demás.
+-- de lanzar error, así que sirven de guarda.
 obj as (
   select
     to_regclass('public.docentes')            as t_docentes,
@@ -42,6 +51,18 @@ obj as (
     to_regprocedure('public.consume_ai_credit()')    as f_consume,
     to_regprocedure('public.get_ai_credit_status()') as f_status,
     to_regclass('supabase_migrations.schema_migrations') as t_migrations
+),
+
+-- Columnas que EXISTEN de verdad. Imprescindible: has_column_privilege
+-- lanza error si se le pregunta por una columna inexistente.
+dcols as (
+  select column_name from information_schema.columns
+  where table_schema = 'public' and table_name = 'docentes'
+),
+
+mcols as (
+  select column_name from information_schema.columns
+  where table_schema = 'public' and table_name = 'materiales_docente'
 ),
 
 -- ¿Hay alguna política de UPDATE sobre docentes que alcance a authenticated?
@@ -54,29 +75,42 @@ pol_update as (
     and (roles::text like '%authenticated%' or roles::text like '%{public}%')
 ),
 
+-- Privilegio efectivo de UPDATE por columna, ya blindado: si la columna no
+-- existe devuelve el aviso en vez de reventar la consulta entera.
+priv as (
+  select
+    col.name as column_name,
+    rol.name as role_name,
+    case
+      when (select t_docentes from obj) is null then 'unavailable — la tabla no existe'
+      when not exists (select 1 from dcols d where d.column_name = col.name)
+        then 'NO EXISTE la columna'
+      else has_column_privilege(rol.name::name,
+                                (select t_docentes from obj),
+                                col.name, 'UPDATE')::text
+    end as puede_update
+  from (values ('ai_week_used'), ('ai_weekly_limit'), ('ai_week_start'),
+               ('plan'), ('activo'), ('nombres'), ('nivel'), ('correo')) as col(name)
+  cross join (values ('authenticated'), ('anon')) as rol(name)
+),
+
 filas as (
 
   -- ==========================================================================
-  -- 00 · VEREDICTO — la respuesta directa a los dos críticos
+  -- 00 · VEREDICTO
   -- ==========================================================================
   select 0 as ord, '00 VEREDICTO' as section, 'CRITICO-1' as object,
          'authenticated puede UPDATE ai_week_used' as property,
-         coalesce(
-           (select case when o.t_docentes is null then 'unavailable'
-                        else has_column_privilege('authenticated', o.t_docentes, 'ai_week_used', 'UPDATE')::text
-                   end from obj o), 'unavailable') as value
+         (select puede_update from priv
+           where column_name = 'ai_week_used' and role_name = 'authenticated') as value
   union all
-  select 1, '00 VEREDICTO', 'CRITICO-1',
-         'authenticated puede UPDATE ai_weekly_limit',
-         coalesce((select case when o.t_docentes is null then 'unavailable'
-                               else has_column_privilege('authenticated', o.t_docentes, 'ai_weekly_limit', 'UPDATE')::text
-                          end from obj o), 'unavailable')
+  select 1, '00 VEREDICTO', 'CRITICO-1', 'authenticated puede UPDATE ai_weekly_limit',
+         (select puede_update from priv
+           where column_name = 'ai_weekly_limit' and role_name = 'authenticated')
   union all
-  select 2, '00 VEREDICTO', 'CRITICO-1',
-         'authenticated puede UPDATE plan',
-         coalesce((select case when o.t_docentes is null then 'unavailable'
-                               else has_column_privilege('authenticated', o.t_docentes, 'plan', 'UPDATE')::text
-                          end from obj o), 'unavailable')
+  select 2, '00 VEREDICTO', 'CRITICO-1', 'authenticated puede UPDATE plan',
+         (select puede_update from priv
+           where column_name = 'plan' and role_name = 'authenticated')
   union all
   select 3, '00 VEREDICTO', 'CRITICO-1',
          'politicas UPDATE sobre docentes que alcanzan authenticated',
@@ -84,49 +118,76 @@ filas as (
   union all
   select 4, '00 VEREDICTO', 'CRITICO-1',
          '>>> EXPLOTABLE (privilegio de columna + politica UPDATE)',
-         coalesce((
-           select case
-             when o.t_docentes is null then 'unavailable'
-             when has_column_privilege('authenticated', o.t_docentes, 'ai_week_used', 'UPDATE')
-              and (select n from pol_update) > 0
-               then 'SI — un docente puede ponerse creditos y plan a voluntad'
-             else 'NO'
-           end from obj o), 'unavailable')
+         case
+           when (select t_docentes from obj) is null then 'unavailable — no hay tabla docentes'
+           when not exists (select 1 from dcols where column_name = 'ai_week_used')
+             then 'NO APLICA — la columna ai_week_used NO EXISTE en produccion'
+           when (select puede_update from priv
+                  where column_name = 'ai_week_used' and role_name = 'authenticated') = 'true'
+            and (select n from pol_update) > 0
+             then 'SI — un docente puede ponerse creditos a voluntad'
+           else 'NO'
+         end
   union all
-  select 5, '00 VEREDICTO', 'CRITICO-2',
-         'authenticated puede EXECUTE refund_ai_credit()',
+  select 5, '00 VEREDICTO', 'CRITICO-1',
+         '>>> puede un docente cambiarse el plan',
+         case
+           when not exists (select 1 from dcols where column_name = 'plan')
+             then 'NO APLICA — la columna plan NO EXISTE'
+           when (select puede_update from priv
+                  where column_name = 'plan' and role_name = 'authenticated') = 'true'
+            and (select n from pol_update) > 0
+             then 'SI'
+           else 'NO'
+         end
+  union all
+  select 6, '00 VEREDICTO', 'CRITICO-2', 'existe refund_ai_credit()',
+         (select case when f_refund is null then 'NO EXISTE' else 'SI' end from obj)
+  union all
+  select 7, '00 VEREDICTO', 'CRITICO-2', 'authenticated puede EXECUTE refund_ai_credit()',
          coalesce((select case when o.f_refund is null then 'unavailable — la funcion no existe'
                                else has_function_privilege('authenticated', o.f_refund, 'EXECUTE')::text
                           end from obj o), 'unavailable')
   union all
-  select 6, '00 VEREDICTO', 'CRITICO-2',
-         'anon puede EXECUTE refund_ai_credit()',
+  select 8, '00 VEREDICTO', 'CRITICO-2', 'anon puede EXECUTE refund_ai_credit()',
          coalesce((select case when o.f_refund is null then 'unavailable'
                                else has_function_privilege('anon', o.f_refund, 'EXECUTE')::text
                           end from obj o), 'unavailable')
   union all
-  select 7, '00 VEREDICTO', 'CRITICO-2',
-         'refund_ai_credit recibe algun parametro',
+  select 9, '00 VEREDICTO', 'CRITICO-2', 'refund_ai_credit recibe algun parametro',
          coalesce((select case
                      when o.f_refund is null then 'unavailable'
                      when pg_get_function_identity_arguments(o.f_refund) = ''
-                       then 'NO — sin argumentos: no puede atarse a una generacion concreta'
+                       then 'NO — sin argumentos: no puede atarse a una generacion'
                      else pg_get_function_identity_arguments(o.f_refund)
                    end from obj o), 'unavailable')
   union all
-  select 8, '00 VEREDICTO', 'CRITICO-2',
-         '>>> EXPLOTABLE (invocable por el navegador y sin prueba de consumo)',
+  select 10, '00 VEREDICTO', 'CRITICO-2',
+         '>>> EXPLOTABLE (invocable por el navegador, sin prueba de consumo)',
          coalesce((
            select case
-             when o.f_refund is null then 'unavailable'
+             when o.f_refund is null then 'NO APLICA — la funcion no existe en produccion'
              when has_function_privilege('authenticated', o.f_refund, 'EXECUTE')
               and pg_get_function_identity_arguments(o.f_refund) = ''
-               then 'SI — creditos ilimitados llamando POST /rest/v1/rpc/refund_ai_credit'
+               then 'SI — creditos ilimitados via POST /rest/v1/rpc/refund_ai_credit'
              else 'NO'
            end from obj o), 'unavailable')
   union all
-  select 9, '00 VEREDICTO', 'MATERIAL TYPES',
-         '>>> estado de 001_material_types.sql',
+  select 11, '00 VEREDICTO', 'SISTEMA DE CREDITOS',
+         '>>> esta instalado el freemium en produccion',
+         case
+           when (select count(*) from dcols
+                  where column_name in ('ai_week_used','ai_weekly_limit','ai_week_start')) = 3
+            and (select f_consume from obj) is not null
+             then 'SI — columnas y RPC presentes'
+           when (select count(*) from dcols
+                  where column_name in ('ai_week_used','ai_weekly_limit','ai_week_start')) = 0
+            and (select f_consume from obj) is null
+             then 'NO — supabase-freemium.sql NUNCA se aplico. Sin columnas ni RPC'
+           else 'PARCIAL — instalacion incompleta, revisar seccion 01b y 09'
+         end
+  union all
+  select 12, '00 VEREDICTO', 'MATERIAL TYPES', '>>> estado de 001_material_types.sql',
          coalesce((
            select case when pg_get_constraintdef(con.oid) like '%challenge%'
                        then 'YA APLICADA — challenge admitido'
@@ -138,8 +199,7 @@ filas as (
              and con.contype = 'c' and pg_get_constraintdef(con.oid) like '%tipo%'
            limit 1), 'unavailable — no se encontro el CHECK de tipo')
   union all
-  select 10, '00 VEREDICTO', 'TRIGGER PERFIL',
-         '>>> al_crear_usuario sobre auth.users',
+  select 13, '00 VEREDICTO', 'TRIGGER PERFIL', '>>> al_crear_usuario sobre auth.users',
          coalesce((
            select case when t.tgenabled = 'D' then 'EXISTE pero DESACTIVADO'
                        else 'EXISTE y activo' end
@@ -163,12 +223,31 @@ filas as (
   select 102, '01 EXISTENCIA', 'supabase_migrations.schema_migrations', 'existe',
          (select case when t_migrations is null then 'NO' else 'SI' end from obj)
   union all
-  select 103, '01 EXISTENCIA', 'otras tablas en public', 'listado',
+  select 103, '01 EXISTENCIA', 'tablas en el esquema public', 'listado',
          coalesce((select string_agg(tablename, ', ' order by tablename)
                    from pg_tables where schemaname = 'public'), '(ninguna)')
 
   -- ==========================================================================
-  -- 02 · COLUMNAS
+  -- 01b · COLUMNAS CLAVE — qué partes del esquema están instaladas
+  -- ==========================================================================
+  union all
+  select 150, '01b COLUMNAS CLAVE', 'docentes', c.name,
+         case when exists (select 1 from dcols d where d.column_name = c.name)
+              then 'EXISTE' else 'NO EXISTE' end
+  from (values ('id'), ('user_id'), ('nombres'), ('apellidos'), ('ie'),
+               ('celular'), ('nivel'), ('correo'), ('plan'), ('activo'),
+               ('created_at'), ('ai_weekly_limit'), ('ai_week_used'),
+               ('ai_week_start')) as c(name)
+  union all
+  select 160, '01b COLUMNAS CLAVE', 'materiales_docente', c.name,
+         case when exists (select 1 from mcols m where m.column_name = c.name)
+              then 'EXISTE' else 'NO EXISTE' end
+  from (values ('id'), ('user_id'), ('tipo'), ('titulo'), ('nivel'), ('grado'),
+               ('area'), ('tema'), ('contenido'), ('created_at'),
+               ('updated_at')) as c(name)
+
+  -- ==========================================================================
+  -- 02 · TODAS LAS COLUMNAS REALES
   -- ==========================================================================
   union all
   select 200 + c.ordinal_position::int, '02 COLUMNAS',
@@ -223,19 +302,12 @@ filas as (
   group by g.table_name, g.grantee
 
   -- ==========================================================================
-  -- 06 · PRIVILEGIOS SOBRE LAS COLUMNAS SENSIBLES
-  --      has_column_privilege tiene en cuenta el GRANT de tabla y el de
-  --      columna a la vez, así que es la prueba definitiva.
+  -- 06 · PRIVILEGIO EFECTIVO DE UPDATE POR COLUMNA
   -- ==========================================================================
   union all
-  select 600, '06 COLUMNAS SENSIBLES', col.name, rol.name || ' · UPDATE',
-         coalesce(
-           (select case when o.t_docentes is null then 'unavailable'
-                        else has_column_privilege(rol.name::name, o.t_docentes, col.name, 'UPDATE')::text
-                   end from obj o), 'unavailable')
-  from (values ('ai_week_used'), ('ai_weekly_limit'), ('ai_week_start'),
-               ('plan'), ('activo'), ('nombres'), ('nivel')) as col(name)
-  cross join (values ('authenticated'), ('anon')) as rol(name)
+  select 600, '06 COLUMNAS SENSIBLES', pr.column_name,
+         pr.role_name || ' · UPDATE', pr.puede_update
+  from priv pr
   union all
   select 601, '06 COLUMNAS SENSIBLES', 'GRANTs explicitos por columna',
          'total definidos para anon/authenticated',
@@ -279,7 +351,7 @@ filas as (
   select 810, '08 CHECK TIPO', 'admitido', t.name,
          coalesce((
            select case when pg_get_constraintdef(con.oid) like '%''' || t.name || '''%'
-                       then 'SI' else 'NO — se guardaria con error' end
+                       then 'SI' else 'NO — fallaria al guardar' end
            from pg_constraint con
            join pg_class rel on rel.oid = con.conrelid
            join pg_namespace ns on ns.oid = rel.relnamespace
@@ -294,8 +366,7 @@ filas as (
   -- 09 · FUNCIONES: SEGURIDAD, PROPIETARIO Y search_path
   -- ==========================================================================
   union all
-  select 900, '09 FUNCIONES', p.proname,
-         'seguridad',
+  select 900, '09 FUNCIONES', p.proname, 'seguridad',
          case when p.prosecdef then 'SECURITY DEFINER' else 'SECURITY INVOKER' end
            || ' · propietario=' || pg_get_userbyid(p.proowner)
            || ' · args=(' || pg_get_function_identity_arguments(p.oid) || ')'
@@ -305,6 +376,11 @@ filas as (
   where n.nspname = 'public'
     and p.proname in ('get_ai_credit_status', 'consume_ai_credit',
                       'refund_ai_credit', 'crear_perfil_docente')
+  union all
+  select 901, '09 FUNCIONES', '(todas las de public)', 'listado',
+         coalesce((select string_agg(distinct p.proname, ', ' order by p.proname)
+                   from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+                   where n.nspname = 'public'), '(ninguna)')
 
   -- ==========================================================================
   -- 10 · QUIÉN PUEDE EJECUTAR CADA FUNCIÓN
@@ -322,7 +398,6 @@ filas as (
 
   -- ==========================================================================
   -- 11 · DEFINICIÓN COMPLETA DE LAS FUNCIONES
-  --      Saltos de línea colapsados para que quepa en una celda copiable.
   -- ==========================================================================
   union all
   select 1100, '11 DEFINICIONES', p.proname, 'cuerpo completo',
@@ -358,73 +433,89 @@ filas as (
     and i.tablename in ('docentes', 'materiales_docente')
 
   -- ==========================================================================
-  -- 14 · CENSO AGREGADO  (solo recuentos · ninguna fila individual)
-  --      query_to_xml se ejecuta únicamente si la tabla existe, gracias a la
-  --      evaluación perezosa del CASE. Si no existe → 'unavailable'.
+  -- 14 · CENSO AGREGADO  (recuentos · ninguna fila individual)
+  --      Cada consulta va dentro de query_to_xml bajo un CASE perezoso y se
+  --      comprueba antes que la tabla y la columna existan.
   -- ==========================================================================
   union all
-  select 1400, '14 CENSO', 'materiales_docente', 'filas por tipo (agregado)',
-         coalesce((
-           select case when o.t_materiales is null then 'unavailable'
-             else (xpath('/table/row/v/text()', query_to_xml(
-               'select coalesce(string_agg(tipo || ''='' || n, '', '' order by n desc), ''(tabla vacia)'') as v
-                  from (select tipo, count(*) as n from public.materiales_docente group by tipo) s',
-               false, false, '')))[1]::text
-           end from obj o), 'unavailable')
+  select 1400, '14 CENSO', 'materiales_docente', 'filas por tipo',
+         case
+           when (select t_materiales from obj) is null then 'unavailable — no hay tabla'
+           when not exists (select 1 from mcols where column_name = 'tipo')
+             then 'unavailable — no hay columna tipo'
+           else (xpath('/table/row/v/text()', query_to_xml(
+             'select coalesce(string_agg(tipo || ''='' || n, '', '' order by n desc), ''(tabla vacia)'') as v
+                from (select tipo, count(*) as n from public.materiales_docente group by tipo) s',
+             false, false, '')))[1]::text
+         end
   union all
   select 1401, '14 CENSO', 'materiales_docente', 'total de filas',
-         coalesce((
-           select case when o.t_materiales is null then 'unavailable'
-             else (xpath('/table/row/v/text()', query_to_xml(
-               'select count(*)::text as v from public.materiales_docente', false, false, '')))[1]::text
-           end from obj o), 'unavailable')
+         case when (select t_materiales from obj) is null then 'unavailable'
+              else (xpath('/table/row/v/text()', query_to_xml(
+                'select count(*)::text as v from public.materiales_docente', false, false, '')))[1]::text
+         end
   union all
   select 1402, '14 CENSO', 'docentes', 'total de filas',
-         coalesce((
-           select case when o.t_docentes is null then 'unavailable'
-             else (xpath('/table/row/v/text()', query_to_xml(
-               'select count(*)::text as v from public.docentes', false, false, '')))[1]::text
-           end from obj o), 'unavailable')
+         case when (select t_docentes from obj) is null then 'unavailable'
+              else (xpath('/table/row/v/text()', query_to_xml(
+                'select count(*)::text as v from public.docentes', false, false, '')))[1]::text
+         end
   union all
   select 1403, '14 CENSO', 'docentes', 'filas sin user_id (perfiles huerfanos)',
-         coalesce((
-           select case when o.t_docentes is null then 'unavailable'
-             else (xpath('/table/row/v/text()', query_to_xml(
-               'select count(*)::text as v from public.docentes where user_id is null', false, false, '')))[1]::text
-           end from obj o), 'unavailable')
+         case
+           when (select t_docentes from obj) is null then 'unavailable'
+           when not exists (select 1 from dcols where column_name = 'user_id')
+             then 'unavailable — no hay columna user_id'
+           else (xpath('/table/row/v/text()', query_to_xml(
+             'select count(*)::text as v from public.docentes where user_id is null',
+             false, false, '')))[1]::text
+         end
   union all
   select 1404, '14 CENSO', 'docentes', 'correos con mayusculas / colisiones al normalizar',
-         coalesce((
-           select case when o.t_docentes is null then 'unavailable'
-             else (xpath('/table/row/v/text()', query_to_xml(
-               'select (count(*) filter (where correo <> lower(correo)))::text || '' / '' ||
-                       (count(*) - count(distinct lower(correo)))::text as v
-                  from public.docentes', false, false, '')))[1]::text
-           end from obj o), 'unavailable')
+         case
+           when (select t_docentes from obj) is null then 'unavailable'
+           when not exists (select 1 from dcols where column_name = 'correo')
+             then 'unavailable — no hay columna correo'
+           else (xpath('/table/row/v/text()', query_to_xml(
+             'select (count(*) filter (where correo <> lower(correo)))::text || '' / '' ||
+                     (count(*) - count(distinct lower(correo)))::text as v
+                from public.docentes', false, false, '')))[1]::text
+         end
   union all
-  select 1405, '14 CENSO', 'docentes', 'distribucion de plan (agregado)',
-         coalesce((
-           select case when o.t_docentes is null then 'unavailable'
-             else (xpath('/table/row/v/text()', query_to_xml(
-               'select coalesce(string_agg(plan || ''='' || n, '', '' order by n desc), ''(tabla vacia)'') as v
-                  from (select plan, count(*) as n from public.docentes group by plan) s',
-               false, false, '')))[1]::text
-           end from obj o), 'unavailable')
+  select 1405, '14 CENSO', 'docentes', 'distribucion de plan',
+         case
+           when (select t_docentes from obj) is null then 'unavailable'
+           when not exists (select 1 from dcols where column_name = 'plan')
+             then 'unavailable — no hay columna plan'
+           else (xpath('/table/row/v/text()', query_to_xml(
+             'select coalesce(string_agg(plan || ''='' || n, '', '' order by n desc), ''(tabla vacia)'') as v
+                from (select plan, count(*) as n from public.docentes group by plan) s',
+             false, false, '')))[1]::text
+         end
+  union all
+  select 1406, '14 CENSO', 'docentes', 'creditos usados (min / max / suma)',
+         case
+           when (select t_docentes from obj) is null then 'unavailable'
+           when not exists (select 1 from dcols where column_name = 'ai_week_used')
+             then 'unavailable — la columna ai_week_used NO EXISTE'
+           else (xpath('/table/row/v/text()', query_to_xml(
+             'select coalesce(min(ai_week_used)::text, ''-'') || '' / '' ||
+                     coalesce(max(ai_week_used)::text, ''-'') || '' / '' ||
+                     coalesce(sum(ai_week_used)::text, ''-'') as v
+                from public.docentes', false, false, '')))[1]::text
+         end
 
   -- ==========================================================================
   -- 15 · MIGRACIONES REGISTRADAS
-  --      Solo existe si se usó Supabase CLI. Si los scripts se ejecutaron a
-  --      mano en el SQL Editor, esta tabla no existirá: es lo esperado.
   -- ==========================================================================
   union all
-  select 1500, '15 MIGRACIONES', 'supabase_migrations.schema_migrations', 'versiones registradas',
-         coalesce((
-           select case when o.t_migrations is null
-             then 'unavailable — la tabla no existe (los scripts se aplicaron a mano)'
-             else (xpath('/table/row/v/text()', query_to_xml(
-               'select coalesce(string_agg(version, '', '' order by version), ''(vacia)'') as v
-                  from supabase_migrations.schema_migrations', false, false, '')))[1]::text
-           end from obj o), 'unavailable')
+  select 1500, '15 MIGRACIONES', 'supabase_migrations.schema_migrations', 'versiones',
+         case when (select t_migrations from obj) is null
+              then 'unavailable — la tabla no existe (los scripts se aplicaron a mano)'
+              else (xpath('/table/row/v/text()', query_to_xml(
+                'select coalesce(string_agg(version, '', '' order by version), ''(vacia)'') as v
+                   from supabase_migrations.schema_migrations', false, false, '')))[1]::text
+         end
 
   -- ==========================================================================
   -- 16 · ENTORNO
