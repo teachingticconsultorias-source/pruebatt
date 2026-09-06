@@ -312,6 +312,52 @@ Sin cambios: Supabase no tocado, `001_material_types.sql` sin ejecutar,
 RLS/RPC/tablas intactos, Gemini y créditos intactos, `ADMIN_SECRET` no rotado,
 variables de Vercel sin modificar.
 
+## BLOQUE BACKEND — AUDITORÍA (etapa 1) · 2026-09-04
+
+Entregable: `docs/audit/26-PRODUCTION-BACKEND-AUDIT.md`. **Solo auditoría.**
+No se modificó base de datos, RLS, RPC, correos, variables ni secretos, y no
+se ejecutó ninguna migración.
+
+### Limitación que define este bloque
+
+La auditoría pedía el estado **real de producción**. Este entorno **no tiene
+acceso**: Vercel sin credenciales, Supabase CLI ausente, y `.env.local` con
+los valores ficticios de QA (`VITE_SUPABASE_URL` apunta a `example`). Por eso
+el documento audita el **código y el SQL versionado**, y marca cada sección
+como ✅ verificado, ⚠️ deducido o 🔒 requiere acceso. El repositorio describe
+la intención; no demuestra qué hay aplicado hoy.
+
+### Hallazgos principales
+
+| Nivel | Hallazgo |
+|---|---|
+| CRÍTICO | La política de UPDATE de `docentes` no restringe columnas: un docente puede ponerse `ai_week_used = 0`, subir `ai_weekly_limit` y cambiar su `plan` por PostgREST |
+| CRÍTICO | `refund_ai_credit()` está concedida a `authenticated` y no comprueba nada: invocable en bucle |
+| ALTO | El rate limit vive en memoria del proceso: en serverless no protege el panel admin |
+| ALTO | `ADMIN_SECRET` estuvo en query string; sigue sin rotar |
+| MEDIO | Tres ficheros SQL redefinen el CHECK de `tipo` con listas distintas y ninguno incluye `challenge`, que la app sí escribe: el reto se pierde con el crédito ya gastado |
+| MEDIO | Dos mensajes de infraestructura visibles al docente en `AuthGate.jsx` |
+
+Limpio y comprobado: sin `service_role` ni secretos en el bundle, sin SQL
+inyectable, sin RLS ausente, sin endpoints admin abiertos.
+
+Mejor de lo esperado: `AuthGate.jsx` ya traduce los errores de Supabase a
+castellano y no filtra texto técnico. El flujo de recuperación vivo se apoya
+en el evento `PASSWORD_RECOVERY`, que es lo robusto; la segunda
+implementación en `App.jsx` es código muerto.
+
+### Para completar la auditoría hace falta
+
+1. Acceso de lectura a Supabase (cadena de conexión en solo lectura, o la
+   salida de consultas a `information_schema` y `pg_policies`).
+2. `vercel login` en este entorno, o la lista de variables con los valores
+   tapados.
+3. Auth → URL Configuration y Email Templates.
+4. Auth → SMTP: proveedor y dominio, sin credenciales.
+
+Ningún secreto debe pegarse en el chat: el sitio es `.env.local`, que está
+en `.gitignore`.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque
