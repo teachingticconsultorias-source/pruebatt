@@ -18,11 +18,12 @@
 //
 // Lógica pura y en `.js` a propósito, para poder probarla sin montar React.
 
-/** Deja el número como lo quiere wa.me: sólo dígitos. */
-export function normalizarNumero(whatsapp) {
-  const solo = String(whatsapp ?? "").replace(/\D+/g, "");
-  return solo.length >= 6 ? solo : null;
-}
+// La normalización NO se reimplementa aquí: es la misma que usa el panel al
+// guardar. Dos versiones del mismo criterio acabarían discrepando justo en el
+// caso raro, y el caso raro aquí es un botón que no abre nada.
+export { normalizarWhatsApp as normalizarNumero } from "../../api/_lib/phone.js";
+
+import { normalizarWhatsApp } from "../../api/_lib/phone.js";
 
 const ETIQUETA_METODO = {
   yape: "Yape",
@@ -64,7 +65,7 @@ export function construirAvisoWhatsApp({
     "Mi solicitud ya está registrada en la plataforma.",
   ];
 
-  if (ref) lineas.push(`Número de operación: ${ref}`);
+  if (ref) lineas.push(`Referencia: ${ref}`);
 
   lineas.push("¿Podrían verificar mi pago y activar mi cuenta?", "Gracias.");
 
@@ -76,7 +77,7 @@ export function construirAvisoWhatsApp({
  * Devolver null es la señal de «no pintes el botón».
  */
 export function enlaceAvisoWhatsApp(whatsapp, datos) {
-  const numero = normalizarNumero(whatsapp);
+  const numero = normalizarWhatsApp(whatsapp);
   if (!numero) return null;
   return `https://wa.me/${numero}?text=${encodeURIComponent(construirAvisoWhatsApp(datos))}`;
 }

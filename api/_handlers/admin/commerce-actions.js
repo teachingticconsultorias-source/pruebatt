@@ -12,6 +12,7 @@
 import { sendError, Errors } from "../../_lib/errors.js";
 import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
 import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
+import { normalizarWhatsApp } from "../../_lib/phone.js";
 
 const REASON_MAX = 300;
 
@@ -89,6 +90,32 @@ function limpiarParche(patch, permitidas) {
   return patch;
 }
 
+/**
+ * Normaliza el WhatsApp ANTES de que llegue a Postgres.
+ *
+ * La restricción de la base acepta dígitos, espacios, guiones y paréntesis:
+ * suficiente para frenar una inyección, insuficiente para frenar «------».
+ * Aquí se exige que sea un número marcable de verdad y se guarda ya en
+ * formato internacional, que es el que necesita wa.me.
+ *
+ * Vacío es un estado válido: significa «todavía no hay número», y entonces
+ * la docente no ve el botón.
+ */
+function normalizarParcheAjustes(patch) {
+  if (!Object.prototype.hasOwnProperty.call(patch, "whatsapp")) return patch;
+
+  const bruto = String(patch.whatsapp ?? "").trim();
+  if (!bruto) return { ...patch, whatsapp: "" };
+
+  const numero = normalizarWhatsApp(bruto);
+  if (!numero) {
+    throw Errors.badRequest(
+      "Ese WhatsApp no parece un número válido. Escribe los 9 dígitos, por ejemplo 931582435."
+    );
+  }
+  return { ...patch, whatsapp: numero };
+}
+
 function codigo(valor) {
   const texto = String(valor ?? "").trim();
   if (!/^[a-z][a-z0-9_]{1,30}$/.test(texto)) {
@@ -126,7 +153,7 @@ export default async function handler(req, res) {
         ...comun,
         body: {
           p_actor: admin.user.id,
-          p_patch: limpiarParche(patch, CAMPOS_AJUSTES),
+          p_patch: normalizarParcheAjustes(limpiarParche(patch, CAMPOS_AJUSTES)),
           p_reason: motivo,
         },
       });

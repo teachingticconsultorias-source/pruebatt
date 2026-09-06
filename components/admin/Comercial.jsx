@@ -14,7 +14,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Tags, Settings, Pencil, RefreshCw, QrCode, Upload, Trash2, Check,
-  Info, Users, Wallet, MessageCircle, EyeOff,
+  Info, Users, Wallet, MessageCircle, EyeOff, Mail,
 } from "lucide-react";
 
 import { supabase } from "../../supabaseClient.js";
@@ -23,6 +23,7 @@ import Modal from "../ui/Modal.jsx";
 import { Badge, Alert, EmptyState, Skeleton } from "../ui/Feedback.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
 import { fecha, soles, enviar, useCarga, Dato, CargandoTabla, ErrorEstado } from "./shared.jsx";
+import { formatearWhatsApp, whatsappValido } from "../../api/_lib/phone.js";
 
 const RUTA = "/api/admin/commerce";
 const BUCKET = "payment-assets";
@@ -328,6 +329,7 @@ export function ConfiguracionPagos({ token, onRole, onDenegado }) {
   const metodos = data?.methods || [];
   const puedeEditar = Boolean(data?.puedeEditar);
   const habilitados = metodos.filter((m) => m.is_enabled);
+  const avisos = data?.notificaciones || { destinatarios: [], proveedor: "none", activo: false };
 
   return (
     <>
@@ -380,7 +382,9 @@ export function ConfiguracionPagos({ token, onRole, onDenegado }) {
           <Dato etiqueta="Estado de la configuración"
                 valor={s.is_configured ? "Configurada" : "Sin configurar"} />
           <Dato etiqueta="WhatsApp de coordinación"
-                valor={s.whatsapp || "Sin definir todavía"} />
+                valor={s.whatsapp
+                  ? formatearWhatsApp(s.whatsapp)
+                  : "Sin definir todavía · la docente no ve el botón"} />
           <Dato etiqueta="Última actualización" valor={fecha(s.updated_at, true)} />
         </div>
 
@@ -388,6 +392,29 @@ export function ConfiguracionPagos({ token, onRole, onDenegado }) {
           <span className="sv-label">Lo que lee la docente</span>
           <p>{s.instructions || "Todavía no hay instrucciones escritas."}</p>
         </div>
+      </section>
+
+      {/* --------------------------------------------------- AVISOS POR CORREO */}
+      <section className="adm__block">
+        <div className="adm__blockhead">
+          <h2><Mail size={17} aria-hidden="true" /> Avisos por correo</h2>
+          <Badge tone={avisos.activo ? "success" : "neutral"}>
+            {avisos.activo ? "Activo" : "Sin configurar"}
+          </Badge>
+        </div>
+
+        <div className="adm__pagodatos">
+          <Dato etiqueta="Destinatarios"
+                valor={(avisos.destinatarios || []).join(", ") || "Ninguno"} />
+          <Dato etiqueta="Proveedor"
+                valor={avisos.proveedor === "none" ? "Sin definir" : avisos.proveedor} />
+        </div>
+
+        <p className="adm__muted">
+          {avisos.activo
+            ? "Cada solicitud nueva llega a ese correo. Se configura desde Vercel, no desde aquí."
+            : "Configurado desde Vercel. Mientras falte, las solicitudes se registran igual y se ven en Pagos: sólo no llega el aviso."}
+        </p>
       </section>
 
       {/* ------------------------------------------------------------ MÉTODOS */}
@@ -606,6 +633,8 @@ function ModalAjustes({ ajustes, token, onCerrar, onHecho }) {
   }));
 
   const apagando = ajustes.manual_payments_enabled && !f.manual_payments_enabled;
+  // El servidor lo vuelve a comprobar; esto sólo evita el viaje de ida y vuelta.
+  const whatsappOk = whatsappValido(f.whatsapp);
 
   async function guardar() {
     setEnviando(true);
@@ -644,7 +673,8 @@ function ModalAjustes({ ajustes, token, onCerrar, onHecho }) {
       actions={
         <>
           <Button variant="ghost" onClick={onCerrar} disabled={enviando}>Cancelar</Button>
-          <Button variant={apagando ? "danger" : "primary"} loading={enviando} onClick={guardar}>
+          <Button variant={apagando ? "danger" : "primary"} loading={enviando}
+                  disabled={!whatsappOk} onClick={guardar}>
             Guardar
           </Button>
         </>
@@ -659,10 +689,15 @@ function ModalAjustes({ ajustes, token, onCerrar, onHecho }) {
 
         <label>WhatsApp de coordinación <small>(opcional)</small>
           <input value={f.whatsapp} maxLength={24} onChange={set("whatsapp")}
-                 placeholder="Déjalo vacío si todavía no hay uno oficial" />
+                 placeholder="9 dígitos, sin espacios" inputMode="tel"
+                 aria-invalid={whatsappOk ? undefined : true} />
           <small>
             <MessageCircle size={12} aria-hidden="true" />{" "}
-            Si está vacío, la aplicación simplemente no menciona WhatsApp.
+            {f.whatsapp.trim() === ""
+              ? "Vacío: la docente no verá el botón de WhatsApp."
+              : whatsappOk
+                ? `Se guardará como ${formatearWhatsApp(f.whatsapp)}.`
+                : "No parece un número válido. Escribe los 9 dígitos del móvil."}
           </small>
         </label>
 

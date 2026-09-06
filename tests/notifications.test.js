@@ -6,6 +6,7 @@ import { notifyNewPaymentRequest, fechaPeru } from "../api/_lib/notifications.js
 import {
   construirAvisoWhatsApp, enlaceAvisoWhatsApp, normalizarNumero,
 } from "../components/account/avisoWhatsApp.js";
+import { formatearWhatsApp, whatsappValido } from "../api/_lib/phone.js";
 
 const HANDLER = fs.readFileSync("api/_handlers/payments/request.js", "utf8");
 const PLANSEC = fs.readFileSync("components/account/PlanSection.jsx", "utf8");
@@ -257,10 +258,23 @@ describe("avisos · WhatsApp del docente", () => {
     expect(enlace).toContain("https://wa.me/51931582435?text=");
   });
 
-  it("normaliza cualquier formato razonable de número", () => {
+  it("completa el código de país de un móvil peruano de 9 dígitos", () => {
+    // Es EL caso del número acordado. `https://wa.me/931582435` no abre ese
+    // contacto: wa.me exige formato internacional, y sin el 51 el botón
+    // lleva a una pantalla de número inválido.
+    expect(normalizarNumero("931582435")).toBe("51931582435");
+    expect(normalizarNumero("(931) 582 435")).toBe("51931582435");
+  });
+
+  it("respeta el número que ya trae código de país", () => {
     expect(normalizarNumero("+51 931-582-435")).toBe("51931582435");
-    expect(normalizarNumero("(931) 582 435")).toBe("931582435");
-    expect(normalizarNumero("abc")).toBeNull();
+    expect(normalizarNumero("+34 600 000 000")).toBe("34600000000");
+  });
+
+  it("rechaza lo que no es un número marcable", () => {
+    for (const basura of ["abc", "-----", "()()()", "12", "1".repeat(16)]) {
+      expect(normalizarNumero(basura), basura).toBeNull();
+    }
   });
 
   it("el mensaje lleva plan, monto y método", () => {
@@ -276,9 +290,9 @@ describe("avisos · WhatsApp del docente", () => {
   });
 
   it("incluye la referencia sólo si existe", () => {
-    expect(construirAvisoWhatsApp(DATOS)).toContain("00123456");
+    expect(construirAvisoWhatsApp(DATOS)).toContain("Referencia: 00123456");
     expect(construirAvisoWhatsApp({ ...DATOS, referencia: "" }))
-      .not.toContain("Número de operación");
+      .not.toContain("Referencia");
   });
 
   it("no lleva información sensible innecesaria", () => {
@@ -291,6 +305,130 @@ describe("avisos · WhatsApp del docente", () => {
   it("usa la etiqueta del método tal como la configuró el equipo", () => {
     const m = construirAvisoWhatsApp({ ...DATOS, metodo: "plin", metodoEtiqueta: "Plin BCP" });
     expect(m).toContain("Plin BCP");
+  });
+});
+
+/* ============================================================================
+   EL WHATSAPP SE EDITA DESDE EL PANEL
+
+   El número acordado —931582435— no está en el código: se escribe una vez en
+   Administración y vive en `payment_settings.whatsapp`. Estos tests
+   comprueban que el camino existe y que no se puede guardar basura.
+   ========================================================================== */
+describe("avisos · WhatsApp editable desde Administración", () => {
+  const ACTIONS = fs.readFileSync("api/_handlers/admin/commerce-actions.js", "utf8");
+  const PANEL = fs.readFileSync("components/admin/Comercial.jsx", "utf8");
+  const SQL = fs.readFileSync("supabase/migrations/008_commercial_settings.sql", "utf8");
+
+  it("el campo existe en el formulario de configuración", () => {
+    expect(PANEL).toContain("WhatsApp de coordinación");
+    expect(PANEL).toContain('set("whatsapp")');
+  });
+
+  it("se guarda en payment_settings.whatsapp", () => {
+    expect(ACTIONS).toContain("CAMPOS_AJUSTES");
+    expect(ACTIONS).toContain('"whatsapp"');
+    expect(SQL).toContain("v_cfg.whatsapp");
+    expect(SQL).toContain("'PAYMENT_SETTINGS_UPDATED'");
+  });
+
+  it("el servidor normaliza antes de escribir en la base", () => {
+    expect(ACTIONS).toContain("normalizarParcheAjustes(limpiarParche(patch, CAMPOS_AJUSTES))");
+    expect(ACTIONS).toContain("normalizarWhatsApp");
+  });
+
+  it("guarda 931582435 en el formato que necesita wa.me", () => {
+    expect(normalizarNumero("931582435")).toBe("51931582435");
+    expect(formatearWhatsApp("931582435")).toBe("+51 931 582 435");
+  });
+
+  it("el panel no deja guardar un número inválido", () => {
+    expect(PANEL).toContain("whatsappValido");
+    expect(PANEL).toContain("disabled={!whatsappOk}");
+    expect(whatsappValido("931582435")).toBe(true);
+    expect(whatsappValido("")).toBe(true);          // vacío es un estado válido
+    expect(whatsappValido("------")).toBe(false);
+    expect(whatsappValido("hola")).toBe(false);
+  });
+
+  it("hay confirmación de lo que se va a guardar", () => {
+    expect(PANEL).toContain("Se guardará como ${formatearWhatsApp(f.whatsapp)}");
+    expect(PANEL).toContain("Vacío: la docente no verá el botón de WhatsApp.");
+  });
+
+  it("sólo admin y superadmin pueden cambiarlo; support mira", () => {
+    expect(ACTIONS).toContain('requireAdmin(req, { minRole: "admin" })');
+    const fn = SQL.slice(SQL.indexOf("function public.admin_update_payment_settings"));
+    expect(fn).toContain("require_admin_role(p_actor, 'admin')");
+  });
+
+  it("ningún componente lleva el teléfono escrito", () => {
+    for (const f of ["components/account/PlanSection.jsx",
+                     "components/account/avisoWhatsApp.js",
+                     "components/admin/Comercial.jsx"]) {
+      expect(fs.readFileSync(f, "utf8"), f).not.toContain("931582435");
+    }
+  });
+
+  it("la normalización es UNA, compartida por el panel y el flujo docente", () => {
+    // Dos versiones del mismo criterio acabarían discrepando justo en el caso
+    // raro, y aquí el caso raro es un botón que no abre nada.
+    const aviso = fs.readFileSync("components/account/avisoWhatsApp.js", "utf8");
+    expect(aviso).toContain('from "../../api/_lib/phone.js"');
+    expect(PANEL).toContain('from "../../api/_lib/phone.js"');
+    expect(ACTIONS).toContain('from "../../_lib/phone.js"');
+  });
+});
+
+/* ============================================================================
+   EL DESTINATARIO DE LOS AVISOS
+   ========================================================================== */
+describe("avisos · correo administrativo", () => {
+  beforeEach(() => { limpiarEnv(); });
+  afterEach(() => { limpiarEnv(); });
+
+  it("sin variable, el destinatario acordado sigue funcionando", () => {
+    expect(getMailConfig().to).toEqual(["teachingticconsultorias@gmail.com"]);
+  });
+
+  it("SCIVERSE_ADMIN_EMAILS manda sobre el respaldo", () => {
+    process.env.SCIVERSE_ADMIN_EMAILS = "otro@ejemplo.pe";
+    expect(getMailConfig().to).toEqual(["otro@ejemplo.pe"]);
+  });
+
+  it("el destinatario no está repartido por la lógica", () => {
+    // Una sola aparición, en el mailer, marcada como respaldo.
+    const enLogica = ["api/_lib/notifications.js",
+                      "api/_handlers/payments/request.js",
+                      "components/account/PlanSection.jsx"];
+    for (const f of enLogica) {
+      expect(fs.readFileSync(f, "utf8"), f).not.toContain("teachingticconsultorias");
+    }
+  });
+
+  it("el panel enseña a dónde llegan los avisos, en sólo lectura", () => {
+    const commerce = fs.readFileSync("api/_handlers/admin/commerce.js", "utf8");
+    expect(commerce).toContain("notificaciones");
+    expect(commerce).toContain("getMailConfig");
+    // Informativo: no hay acción que lo escriba.
+    const actions = fs.readFileSync("api/_handlers/admin/commerce-actions.js", "utf8");
+    expect(actions).not.toContain("SCIVERSE_ADMIN_EMAILS");
+
+    const panel = fs.readFileSync("components/admin/Comercial.jsx", "utf8");
+    expect(panel).toContain("Avisos por correo");
+    expect(panel).toContain("Configurado desde Vercel");
+  });
+
+  it("lo que se expone al panel no incluye ninguna clave", () => {
+    process.env.RESEND_API_KEY = "clave-secreta";
+    process.env.SCIVERSE_MAIL_PROVIDER = "resend";
+    const expuesto = JSON.stringify({
+      destinatarios: getMailConfig().to,
+      proveedor: getMailConfig().provider,
+      activo: mailUnavailableReason() === null,
+      motivo: mailUnavailableReason(),
+    });
+    expect(expuesto).not.toContain("clave-secreta");
   });
 });
 
@@ -317,8 +455,9 @@ describe("avisos · el botón sólo aparece cuando ya hay solicitud", () => {
 
   it("el botón principal deja claro el orden: primero pagar, luego avisar", () => {
     expect(PLANSEC).toContain("Ya pagué · Enviar solicitud");
-    expect(PLANSEC).toContain("Pago registrado para verificación");
-    expect(PLANSEC).toContain("puedes avisarnos por WhatsApp");
+    expect(PLANSEC).toContain("Solicitud registrada");
+    expect(PLANSEC).toContain("Para acelerar la verificación puedes avisarnos por WhatsApp.");
+    expect(PLANSEC).toContain("Avisar por WhatsApp");
   });
 
   it("con solicitud pendiente se puede avisar de nuevo SIN crear otra", () => {

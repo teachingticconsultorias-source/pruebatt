@@ -1076,18 +1076,57 @@ gratis; ahora se compara por precio.
 `?admin=1&seccion=pagos` abre el panel directamente en la bandeja, que es a
 donde apunta el enlace del correo. La sección se valida contra una lista.
 
+## AJUSTE FINAL DE LOS AVISOS · 2026-09-06
+
+Cierre del bloque de avisos con los datos definitivos: WhatsApp 931582435 y
+correo administrativo teachingticconsultorias@gmail.com. Ninguno de los dos
+está escrito en un componente.
+
+### El fallo que este ajuste evitó
+
+El número acordado son nueve dígitos, como se escribe en Perú. El normalizador
+anterior sólo quitaba lo que no fuera dígito, así que habría construido
+`https://wa.me/931582435` — sin código de país. Ese enlace **no abre el
+contacto**: wa.me exige formato internacional y lleva a una pantalla de número
+inválido. Un botón que no abre nada es peor que no tener botón.
+
+`api/_lib/phone.js` completa el 51 cuando ve un móvil peruano de nueve dígitos
+y respeta lo que ya venga con código de país. Es **una sola** implementación:
+la importan el panel al guardar y el flujo de la docente al construir el
+enlace. Dos versiones del mismo criterio acabarían discrepando justo en el
+caso raro, y aquí el caso raro es el número que usamos.
+
+### Basura fuera antes de llegar a Postgres
+
+La restricción de la base acepta dígitos, espacios, guiones y paréntesis:
+suficiente contra una inyección, insuficiente contra `------`. La API
+normaliza y rechaza antes de escribir, y el panel deshabilita Guardar y enseña
+cómo va a quedar el número. No hizo falta migración.
+
+### Correo: qué es editable y qué no
+
+El destinatario vive en `SCIVERSE_ADMIN_EMAILS`. Si no está, se usa
+teachingticconsultorias@gmail.com, y esa constante existe **en un solo sitio**
+—el mailer— marcada como respaldo. En producción debe configurarse en Vercel.
+
+Administración → Configuración enseña ahora «Avisos por correo» en sólo
+lectura: destinatarios, proveedor y si está activo, con el texto «Configurado
+desde Vercel». No se creó migración para esto: es configuración de
+infraestructura, no comercial.
+
+### Qué falta hacer a mano
+
+1. Administración → Configuración → WhatsApp de coordinación → `931582435`.
+   Se guardará como `+51 931 582 435`. Hasta entonces no hay botón.
+2. Vercel: `SCIVERSE_MAIL_PROVIDER`, `RESEND_API_KEY`, `SCIVERSE_MAIL_FROM`,
+   `SCIVERSE_ADMIN_EMAILS`.
+
+El remitente no puede ser una dirección de Gmail: Resend exige un dominio
+verificado. Mientras falte, las solicitudes se registran igual y se ven en
+Pagos; sólo no llega el aviso.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
-Falta `git push origin main` con el bloque de avisos, y despues configurar en
-Vercel las variables del correo. Sin ellas el aviso no sale, pero nada mas se
-rompe: la solicitud se crea igual y el panel la muestra igual.
-
-| Variable | Para que |
-|---|---|
-| `SCIVERSE_MAIL_PROVIDER` | `resend` o `webhook` |
-| `RESEND_API_KEY` | si el proveedor es Resend |
-| `SCIVERSE_MAIL_FROM` | remitente verificado en el dominio |
-| `SCIVERSE_ADMIN_EMAILS` | destinatarios, separados por coma |
-
-Y en Administracion → Configuracion, escribir el WhatsApp de coordinacion:
-mientras este vacio, el boton no aparece.
+`git push origin main` con los dos commits pendientes (avisos y ajuste final),
+y despues los dos pasos manuales: el WhatsApp en el panel y las variables del
+correo en Vercel. Supabase no necesita nada.

@@ -374,7 +374,7 @@ function ModalSolicitud({ plan, ajustes, metodos, onCerrar, onHecho }) {
 
       toast({
         tone: "success",
-        title: "Pago registrado para verificación",
+        title: "Solicitud registrada",
         description: "Estamos verificando tu pago. Te avisaremos cuando tu plan esté activo.",
       });
       // No se cierra el modal: se cambia de pantalla. Cerrar aquí escondería
@@ -393,8 +393,8 @@ function ModalSolicitud({ plan, ajustes, metodos, onCerrar, onHecho }) {
       <Modal
         open
         onClose={onHecho}
-        title="Pago registrado para verificación"
-        description="Tu solicitud ya está registrada. Para acelerar la activación de tu cuenta puedes avisarnos por WhatsApp."
+        title="Solicitud registrada"
+        description="Para acelerar la verificación puedes avisarnos por WhatsApp."
         icon={CheckCircle2}
         variant="success"
         actions={<Button variant="ghost" onClick={onHecho}>Entendido</Button>}

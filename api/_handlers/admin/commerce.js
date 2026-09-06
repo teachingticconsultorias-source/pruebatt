@@ -8,6 +8,7 @@
 import { sendError, Errors } from "../../_lib/errors.js";
 import { requireAdmin, callAdminRpc } from "../../_lib/admin.js";
 import { clientKey, enforceRateLimit, RateLimits } from "../../_lib/rate-limit.js";
+import { getMailConfig, mailUnavailableReason } from "../../_lib/mailer.js";
 
 export default async function handler(req, res) {
   try {
@@ -22,8 +23,20 @@ export default async function handler(req, res) {
       callAdminRpc({ name: "admin_payment_config", ...comun, body: { p_actor: admin.user.id } }),
     ]);
 
+    // Estado del aviso por correo, SÓLO informativo y sólo lectura: vive en
+    // variables de Vercel, no en la base. Se enseña para que el equipo sepa a
+    // dónde llegan las alertas sin tener que abrir el panel de Vercel.
+    // No viaja ninguna clave: `getMailConfig` sólo dice si existe.
+    const correo = getMailConfig();
+
     return res.status(200).json({
       role: admin.role,
+      notificaciones: {
+        destinatarios: correo.to,
+        proveedor: correo.provider,
+        activo: mailUnavailableReason(correo) === null,
+        motivo: mailUnavailableReason(correo),
+      },
       // `puedeEditar` es una comodidad para la interfaz, NO un permiso: quien
       // decide es el backend, y la propia RPC lo vuelve a comprobar.
       puedeEditar: admin.role === "admin" || admin.role === "superadmin",
