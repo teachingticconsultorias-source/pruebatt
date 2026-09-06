@@ -463,6 +463,70 @@ y plantillas: el dump trae la estructura de `auth`, no los ajustes. Y los
 buckets de Storage son filas, no esquema: un volcado `--schema-only` no puede
 decir si existen.
 
+## ARQUITECTURA DE CUENTAS, PLANES Y ADMINISTRACIÓN · 2026-09-06
+
+Entregado: `docs/audit/27-ACCOUNTS-PLANS-ADMIN-ARCHITECTURE.md`. **Solo
+diseño**: sin SQL ejecutado, sin migraciones escritas, sin UI, sin push.
+
+### Modelo propuesto
+
+Cuatro dominios separados: identidad (`auth.users`), perfil
+(`public.docentes`), estado comercial (`plans`, `subscriptions`,
+`payments`) y uso (`ai_usage_counters`, `ai_generations`,
+`activity_events`). La administración vive entera en `sciverse_private`:
+`admin_users` y `admin_audit_log`.
+
+Dos reglas gobiernan el resto: el cliente puede leer lo suyo pero nunca
+escribir nada que determine su derecho a algo; y lo que el docente no deba
+ver no vive en `public`, porque los privilegios por defecto del proyecto
+conceden a `anon` sobre cada tabla nueva de ese esquema.
+
+### Tres hechos del dump que condicionaron el diseño
+
+1. **`service_role` no puede leer `auth.users`.** Para mostrar correo
+   confirmado y último acceso hace falta una función SECURITY DEFINER
+   propiedad de postgres, o la Admin API por HTTP. No hay JOIN posible.
+2. `auth.users.last_sign_in_at` ya existe: **no se construye seguimiento de
+   login**, sería duplicar algo que la plataforma mantiene mejor.
+3. `docentes.nivel` **no tiene CHECK** en producción; el del repositorio
+   nunca se aplicó.
+
+### Decisiones que conviene recordar
+
+- `docentes.plan` sale a `subscriptions`, retirado en tres pasos.
+- `activo` y `correo` se quedan, con semántica aclarada.
+- Índice único parcial `(user_id) where status=active`: **la base** impide
+  dos planes activos, no la aplicación.
+- Plan efectivo por **evaluación perezosa**: no hay `pg_cron` y así no queda
+  ninguna ventana en la que un plan vencido siga dando acceso.
+- Verificar pago y activar plan son **una sola transacción**.
+- `ADMIN_SECRET` desaparece: los administradores son usuarios de Auth con
+  fila en `admin_users`, y cada acción queda a nombre de una persona.
+- Se descarta `plan_features`: `features jsonb` más un ayudante evita un
+  JOIN en cada comprobación. Se creará si aparece un caso real.
+- **No** se crea `docente_preferences`: hoy no hay ninguna preferencia real.
+- Nada de `enum` de Postgres para estados: `text` con CHECK.
+
+### Contradicción explícita con 002 — pendiente de tu decisión
+
+`002` pone las columnas de crédito en `docentes`; esta arquitectura las
+lleva a `ai_usage_counters` con el límite viniendo del plan.
+
+**Recomendación: aplicar 002 tal cual.** La generación lleva caída desde antes
+de esta sesión y retener el arreglo cambiaría una avería en curso por semanas
+de espera. Mover el contador después es barato por construcción: 002 deja las
+tres funciones como únicos escritores de esas columnas, así que la migración
+posterior toca tres cuerpos de función y nada más.
+
+### Orden de implementación
+
+Camino crítico: **A → C → D → E → F**.
+
+A aplicar 002 + código del vale · B material types · C plans+subscriptions ·
+D admin_users+auditoría · E panel en solo lectura · F pagos y activación ·
+G acciones · H mover contador · I medición · J Mi cuenta · K retirar
+ADMIN_SECRET · L profile sync.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque
