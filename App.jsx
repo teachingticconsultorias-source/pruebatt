@@ -20,7 +20,8 @@ import { useUI } from "./components/ui/UIProvider.jsx";
 import "./components/dashboard/dashboard.css";
 import "./components/layout/appshell.css";
 import "./components/landing/landing.css";
-import { PLANS, FREE_WEEKLY_AI_LIMIT, whatsappLink } from "./config/plans.js";
+import { FREE_WEEKLY_AI_LIMIT, whatsappLink } from "./config/plans.js";
+import { usePlanCatalog } from "./components/usePlanCatalog.js";
 import "./library.css";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
@@ -3437,8 +3438,12 @@ function PasswordRecoveryModal({ onClose, onSubmit, loading }) {
 }
 
 function PlansModal({ onClose, onChoosePlan }) {
+  // Precios, vigencia y viñetas salen de `public.plans`, no de una constante:
+  // el escaparate no puede prometer algo distinto de lo que aplica el backend.
+  const { planes } = usePlanCatalog();
+
   const handleChoosePlan = (plan) => {
-    if (plan.name === "Gratuito") return onChoosePlan("gratuito");
+    if (Number(plan.price) === 0) return onChoosePlan("gratuito");
     const message = `Hola Teaching TIC, deseo adquirir el Plan ${plan.name} de SciVerse por S/${plan.price}. ¿Me comparten los datos para pagar por Plin o Yape?`;
     window.open(`https://wa.me/51921090875?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
     onClose();
@@ -3453,13 +3458,13 @@ function PlansModal({ onClose, onChoosePlan }) {
           <p>Empieza gratis y elige más capacidad cuando necesites generar y descargar más materiales.</p>
         </div>
         <div className="plans-grid">
-          {PLANS.map((plan) => (
-            <article key={plan.name} className={`plan-card ${plan.featured ? "featured" : ""}`}>
+          {planes.map((plan) => (
+            <article key={plan.id} className={`plan-card ${plan.featured ? "featured" : ""}`}>
               {plan.featured && <span className="plan-badge"><Sparkles size={12} /> Más conveniente</span>}
               <div className="plan-header"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
               <div className="plan-saving">{plan.saving}</div>
               <ul>{plan.benefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
-              <button onClick={() => handleChoosePlan(plan)} className={plan.featured ? "primary-btn" : "secondary-btn"}>{plan.name === "Gratuito" ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`} <ArrowRight size={15} /></button>
+              <button onClick={() => handleChoosePlan(plan)} className={plan.featured ? "primary-btn" : "secondary-btn"}>{Number(plan.price) === 0 ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`} <ArrowRight size={15} /></button>
             </article>
           ))}
         </div>

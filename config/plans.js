@@ -39,43 +39,56 @@ export const CONTACT = {
   facebook: "https://www.facebook.com/teachingticconsultorias/",
 };
 
-export const PLANS = [
+/* --------------------------------------------------------------------------
+   RESPALDO DEL CATÁLOGO
+
+   ⚠️ ESTO NO ES LA FUENTE DE VERDAD. Lo es `public.plans`, que se edita desde
+   Administración; `components/usePlanCatalog.js` la lee y esto sólo se usa
+   mientras carga o si la consulta falla.
+
+   Antes aquí ponía «Todo ilimitado», «Sesiones de aprendizaje ilimitadas» e
+   «Instrumentos de evaluación ilimitados». El plan real da 100 creaciones por
+   semana. Prometer ilimitado y aplicar un tope no se arregla suavizando el
+   texto: se arregla haciendo que el texto salga del mismo sitio que el límite
+   que aplica el servidor.
+
+   Si algún día esto y la base dicen cosas distintas, la base tiene razón y
+   esto hay que corregirlo.
+   ------------------------------------------------------------------------ */
+export const FALLBACK_PLANS = [
   {
-    id: "gratuito",
+    id: "free",
     name: "Gratuito",
     price: "0",
     period: "para conocer SciVerse",
-    saving: "Sin tarjeta",
+    saving: `${FREE_WEEKLY_AI_LIMIT} creaciones con IA por semana`,
     featured: false,
     tagline: "Ideal para probar SciVerse en tu próxima clase.",
     benefits: [
-      `${FREE_WEEKLY_AI_LIMIT} creaciones con IA por semana (sesiones, instrumentos o materiales)`,
-      "Banco de actividades STEAM completo",
-      "Retos grupales y plantillas",
+      `${FREE_WEEKLY_AI_LIMIT} creaciones con IA por semana`,
+      "Acceso a todas las herramientas",
       "Exportación a Word",
-      "Acceso a comunidad de WhatsApp",
     ],
   },
   {
-    id: "mensual",
-    name: "Mensual",
+    id: "pro",
+    name: "Pro",
     price: "20",
     period: "por 1 mes",
-    saving: "Todo ilimitado",
+    saving: "100 creaciones con IA por semana",
     featured: true,
-    tagline: "Para quien planifica todas sus sesiones con SciVerse.",
+    tagline: "Plan mensual con 100 creaciones con IA por semana.",
     benefits: [
-      "Sesiones de aprendizaje ilimitadas",
-      "Actividades STEAM y recursos CNEB ilimitados",
-      "Instrumentos de evaluación ilimitados",
-      "Materiales editables sin límite",
-      "Exportación Word, PDF y PPT sin marca de agua",
-      "Plantillas y fichas personalizables",
-      "Primaria y Secundaria",
-      "Soporte prioritario por WhatsApp",
+      "100 creaciones con IA por semana",
+      "Sesiones de aprendizaje, fichas, instrumentos y proyectos STEAM",
+      "Exportación a Word de todo lo que crees",
+      "Vigencia de 1 mes desde la activación",
     ],
   },
 ];
+
+/** @deprecated Usa `usePlanCatalog()`: esto es sólo el respaldo. */
+export const PLANS = FALLBACK_PLANS;
 
 /** Plan institucional: sin precio publicado, se cotiza. No inventar cifras. */
 export const INSTITUTIONAL_PLAN = {

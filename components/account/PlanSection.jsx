@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   CreditCard, Check, Clock, XCircle, CheckCircle2, Info, Copy,
-  QrCode, MessageCircle, Sparkles,
+  QrCode, MessageCircle, Sparkles, ShieldCheck,
 } from "lucide-react";
 
 import { supabase } from "../../supabaseClient.js";
@@ -10,6 +10,7 @@ import Modal from "../ui/Modal.jsx";
 import { Badge, Alert, Skeleton } from "../ui/Feedback.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
 import CreditsIndicator from "../CreditsIndicator.jsx";
+import { enlaceAvisoWhatsApp } from "./avisoWhatsApp.js";
 
 /* ==========================================================================
    MI PLAN · lado del docente
@@ -51,6 +52,37 @@ function fecha(valor) {
 function periodo(meses) {
   if (!meses) return "sin vencimiento";
   return meses === 1 ? "al mes" : `cada ${meses} meses`;
+}
+
+/** Nombre visible del método, según lo tenga configurado el equipo. */
+function etiquetaMetodo(metodos, code) {
+  return (metodos || []).find((m) => m.code === code)?.label || undefined;
+}
+
+/**
+ * Botón «Avisar por WhatsApp».
+ *
+ * Devuelve null —y por tanto no se pinta nada— si el equipo aún no ha
+ * configurado un número. Ese es todo el control: sin número no hay botón,
+ * y el número sale de la base, nunca del código.
+ */
+function BotonWhatsApp({ whatsapp, datos, etiqueta, variante = "primary" }) {
+  const enlace = enlaceAvisoWhatsApp(whatsapp, datos);
+  if (!enlace) return null;
+
+  return (
+    <Button
+      as="a"
+      href={enlace}
+      target="_blank"
+      rel="noopener noreferrer"
+      variant={variante}
+      icon={MessageCircle}
+      fullWidth
+    >
+      {etiqueta}
+    </Button>
+  );
 }
 
 export default function PlanSection() {
@@ -163,13 +195,32 @@ export default function PlanSection() {
       {/* Única fuente del uso real de la semana: la API de créditos. */}
       <CreditsIndicator />
 
-      {/* --------------------------------------------------- SOLICITUD ABIERTA */}
+      {/* --------------------------------------------------- SOLICITUD ABIERTA
+          Ya existe la solicitud, así que aquí el aviso por WhatsApp no crea
+          nada: sólo vuelve a llamar la atención del equipo sobre algo que ya
+          está registrado. Por eso dice «nuevamente». */}
       {pendiente && (
-        <Alert tone="info" icon={Clock} title="Solicitud enviada">
+        <Alert tone="info" icon={Clock} title="Tu solicitud está en revisión">
           Estamos verificando tu pago del plan <strong>{pendiente.plan_nombre}</strong>{" "}
           ({soles(pendiente.monto_centimos, pendiente.moneda)}). Te avisaremos
           cuando tu plan esté activo.
         </Alert>
+      )}
+
+      {pendiente && (
+        <BotonWhatsApp
+          whatsapp={ajustes?.whatsapp}
+          datos={{
+            plan: pendiente.plan_nombre,
+            montoCentimos: pendiente.monto_centimos,
+            moneda: pendiente.moneda,
+            metodo: pendiente.metodo,
+            metodoEtiqueta: etiquetaMetodo(metodos, pendiente.metodo),
+            referencia: pendiente.referencia,
+          }}
+          etiqueta="Avisar nuevamente por WhatsApp"
+          variante="outline"
+        />
       )}
 
       {/* La última rechazada merece una explicación, sin enseñar notas internas. */}
@@ -279,6 +330,10 @@ function ModalSolicitud({ plan, ajustes, metodos, onCerrar, onHecho }) {
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState("");
   const [copiado, setCopiado] = useState(false);
+  // Sólo se rellena cuando el servidor confirma la solicitud. Es la condición
+  // que abre la pantalla de éxito y, con ella, el atajo de WhatsApp: antes de
+  // que exista la solicitud no hay nada de lo que avisar.
+  const [creada, setCreada] = useState(null);
 
   const elegido = disponibles.find((m) => m.code === metodo) || null;
   const configurado = Boolean(ajustes?.is_configured) && disponibles.length > 0;
@@ -319,10 +374,12 @@ function ModalSolicitud({ plan, ajustes, metodos, onCerrar, onHecho }) {
 
       toast({
         tone: "success",
-        title: "Solicitud enviada",
+        title: "Pago registrado para verificación",
         description: "Estamos verificando tu pago. Te avisaremos cuando tu plan esté activo.",
       });
-      onHecho();
+      // No se cierra el modal: se cambia de pantalla. Cerrar aquí escondería
+      // el atajo de WhatsApp justo en el momento en que sirve.
+      setCreada(data);
     } catch (e) {
       setError(e.message);
     } finally {
@@ -330,6 +387,50 @@ function ModalSolicitud({ plan, ajustes, metodos, onCerrar, onHecho }) {
     }
   }
 
+  // ---- PANTALLA 2 · la solicitud ya existe -------------------------------
+  if (creada) {
+    return (
+      <Modal
+        open
+        onClose={onHecho}
+        title="Pago registrado para verificación"
+        description="Tu solicitud ya está registrada. Para acelerar la activación de tu cuenta puedes avisarnos por WhatsApp."
+        icon={CheckCircle2}
+        variant="success"
+        actions={<Button variant="ghost" onClick={onHecho}>Entendido</Button>}
+      >
+        <div className="plansec__exito">
+          <div className="plansec__resumenpago">
+            <div><span className="sv-label">Plan</span><strong>{creada.plan_nombre || plan.name}</strong></div>
+            <div><span className="sv-label">Monto</span><strong>{soles(creada.monto_centimos ?? plan.price_cents, creada.moneda || plan.currency)}</strong></div>
+            <div><span className="sv-label">Método</span><strong>{elegido?.label || metodo}</strong></div>
+            <div><span className="sv-label">Estado</span><Badge tone="amber">En revisión</Badge></div>
+          </div>
+
+          <BotonWhatsApp
+            whatsapp={ajustes?.whatsapp}
+            datos={{
+              plan: creada.plan_nombre || plan.name,
+              montoCentimos: creada.monto_centimos ?? plan.price_cents,
+              moneda: creada.moneda || plan.currency,
+              metodo,
+              metodoEtiqueta: elegido?.label,
+              referencia: referencia.trim() || null,
+            }}
+            etiqueta="Avisar por WhatsApp"
+          />
+
+          <p className="plansec__nota">
+            <ShieldCheck size={13} aria-hidden="true" />
+            La activación la hace el equipo desde la plataforma después de
+            verificar tu pago. WhatsApp sólo sirve para avisarnos antes.
+          </p>
+        </div>
+      </Modal>
+    );
+  }
+
+  // ---- PANTALLA 1 · datos de pago ---------------------------------------
   return (
     <Modal
       open
@@ -343,7 +444,7 @@ function ModalSolicitud({ plan, ajustes, metodos, onCerrar, onHecho }) {
           <Button variant="ghost" onClick={onCerrar} disabled={enviando}>Cancelar</Button>
           {/* `loading` ya lo deshabilita: el doble clic no llega a salir. */}
           <Button variant="primary" loading={enviando} onClick={solicitar}>
-            Enviar solicitud
+            Ya pagué · Enviar solicitud
           </Button>
         </>
       }

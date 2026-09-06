@@ -10,7 +10,7 @@ import { Badge, Alert, EmptyState } from "../ui/Feedback.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
 import CreditsIndicator from "../CreditsIndicator.jsx";
 import PlanSection from "./PlanSection.jsx";
-import { PLANS, whatsappLink } from "../../config/plans.js";
+import { whatsappLink } from "../../config/plans.js";
 
 /* ==========================================================================
    MI CUENTA

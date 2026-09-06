@@ -8,7 +8,8 @@ import {
 import Button from "../ui/Button.jsx";
 import { Badge } from "../ui/Feedback.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
-import { PLANS, INSTITUTIONAL_PLAN, CONTACT, whatsappLink } from "../../config/plans.js";
+import { INSTITUTIONAL_PLAN, CONTACT, whatsappLink } from "../../config/plans.js";
+import { usePlanCatalog } from "../usePlanCatalog.js";
 
 /* ==========================================================================
    LANDING PÚBLICA
@@ -150,7 +151,10 @@ export default function Landing({ onRegister, onLogin }) {
   }, [menuOpen]);
 
   function choosePlan(plan) {
-    if (plan.id === "gratuito") return onRegister();
+    // Por precio y no por identificador: el catálogo real usa el código
+    // `free`, y comparar contra `"gratuito"` mandaría a WhatsApp a quien sólo
+    // quiere crear una cuenta gratis.
+    if (Number(plan.price) === 0) return onRegister();
     window.open(
       whatsappLink(
         `Hola Teaching TIC, deseo adquirir el Plan ${plan.name} de SciVerse por S/${plan.price}. ¿Me comparten los datos para pagar por Plin o Yape?`
@@ -362,7 +366,7 @@ export default function Landing({ onRegister, onLogin }) {
           </div>
 
           <div className="lp-plans">
-            {PLANS.map((plan) => (
+            {planes.map((plan) => (
               <article key={plan.id} className={`lp-plan${plan.featured ? " is-featured" : ""}`}>
                 {plan.featured && <span className="lp-plan__flag"><Sparkles size={12} /> Más elegido</span>}
                 <h3>{plan.name}</h3>
@@ -382,7 +386,7 @@ export default function Landing({ onRegister, onLogin }) {
                   iconRight={ArrowRight}
                   onClick={() => choosePlan(plan)}
                 >
-                  {plan.id === "gratuito" ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`}
+                  {Number(plan.price) === 0 ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`}
                 </Button>
               </article>
             ))}

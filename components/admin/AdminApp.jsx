@@ -31,6 +31,25 @@ import { Planes, ConfiguracionPagos } from "./Comercial.jsx";
 
 const PAGE_SIZE = 25;
 
+const SECCIONES = ["resumen", "docentes", "pagos", "planes", "config"];
+
+/**
+ * Sección inicial según `?seccion=`.
+ *
+ * Existe para que el aviso por correo pueda enlazar directamente a Pagos:
+ * quien lo recibe llega a la bandeja, no al resumen. Se valida contra la
+ * lista para que un enlace manipulado no meta un valor arbitrario en el
+ * estado; cualquier otra cosa cae en «resumen».
+ */
+function seccionInicial() {
+  try {
+    const q = new URLSearchParams(window.location.search).get("seccion");
+    return SECCIONES.includes(q) ? q : "resumen";
+  } catch {
+    return "resumen";
+  }
+}
+
 /** Ejecuta una accion administrativa sobre un docente. */
 async function ejecutar(accion, token) {
   return enviar("/api/admin/actions", accion, token);
@@ -41,7 +60,7 @@ async function ejecutar(accion, token) {
 export default function AdminApp() {
   const [session, setSession] = useState(null);
   const [cargandoSesion, setCargandoSesion] = useState(true);
-  const [vista, setVista] = useState("resumen");
+  const [vista, setVista] = useState(seccionInicial);
   const [docenteAbierto, setDocenteAbierto] = useState(null);
   const [role, setRole] = useState(null);
   const [denegado, setDenegado] = useState(false);

@@ -213,3 +213,21 @@
   font-size: var(--text-label); color: var(--text-secondary);
 }
 .plansec__instrucciones p svg { vertical-align: -2px; }
+
+/* ------------------------------------------ MI PLAN · SOLICITUD REGISTRADA */
+.plansec__exito { display: grid; gap: var(--space-4); }
+.plansec__resumenpago {
+  display: grid; gap: var(--space-3); padding: var(--space-4);
+  border-radius: var(--radius-md); background: var(--bg-sunken);
+}
+@media (min-width: 480px) {
+  .plansec__resumenpago { grid-template-columns: repeat(2, 1fr); }
+}
+.plansec__resumenpago > div { display: grid; gap: 2px; align-content: start; }
+.plansec__resumenpago strong { font-size: var(--text-body); font-weight: var(--weight-semibold); }
+.plansec__nota {
+  display: flex; align-items: flex-start; gap: var(--space-2); margin: 0;
+  font-size: var(--text-label); line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+.plansec__nota svg { flex: none; margin-top: 2px; color: var(--teal-700); }

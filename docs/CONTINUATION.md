@@ -996,10 +996,98 @@ mapa es explícito y se consulta con `hasOwnProperty`, así que `constructor` o
 falla si alguien vuelve a pasar de 10 entrypoints. Ese fallo ya no puede
 aparecer sólo en el deployment.
 
+## AVISOS: WHATSAPP Y CORREO AL EQUIPO · 2026-09-06
+
+El pago manual ya funcionaba dentro de la plataforma, pero nadie se enteraba
+de que había algo que verificar hasta que alguien abría el panel. Este bloque
+añade dos alertas —y sólo alertas.
+
+### La regla que ordena todo lo demás
+
+`payment_requests` es el registro. WhatsApp y el correo **no sustituyen nada**:
+avisan de algo que ya está guardado. Por eso el botón de WhatsApp sólo existe
+después de que el servidor confirme la solicitud, y por eso el correo dice
+explícitamente que no autoriza nada.
+
+La única activación válida sigue siendo: el equipo verifica → pulsa Aprobar →
+la RPC crea la suscripción → queda en auditoría.
+
+### Flujo del docente
+
+Elegir Pro → método → receptor, número, copiar, QR, instrucciones → anotar la
+operación → **«Ya pagué · Enviar solicitud»**.
+
+Con la solicitud creada, el modal cambia de pantalla en vez de cerrarse:
+«Pago registrado para verificación», resumen de lo pedido y, si hay número
+configurado, **«Avisar por WhatsApp»**. Cerrar ahí escondería el atajo justo
+cuando sirve.
+
+Con una solicitud ya pendiente: «Tu solicitud está en revisión» y **«Avisar
+nuevamente por WhatsApp»**, que no crea nada — sólo enlaza.
+
+### El número no está en el código
+
+Sale de `payment_settings.whatsapp`. Si está vacío, `enlaceAvisoWhatsApp`
+devuelve null y no se pinta botón. Hoy está vacío a propósito: nunca se
+inventa un teléfono.
+
+### Correo al equipo
+
+`api/_lib/mailer.js` es una capa fina sobre proveedores intercambiables
+—`resend` y `webhook`, los dos con `fetch`, sin dependencias nuevas—.
+`api/_lib/notifications.js` pone el texto. Cambiar de proveedor es cambiar una
+variable, no reescribir código.
+
+El SMTP de Supabase Auth **no sirve** para esto: sólo lo dispara Auth cuando
+pasa algo con una cuenta, y no hay forma de pedirle que mande un aviso.
+
+Orden en `request.js`: validar → crear la solicitud → intentar el aviso →
+responder 201. El aviso va envuelto en un try/catch que no puede lanzar. Si el
+correo falla, la solicitud sigue existiendo y la docente ve su confirmación.
+
+Se espera al envío en vez de dispararlo tras responder porque en Vercel la
+función se congela al cerrar la respuesta y un envío «en segundo plano» se
+perdería casi siempre. El tope es de 6 s y el resultado no cambia la respuesta.
+
+El nombre de la docente se lee **en el servidor** con su propio token: un
+nombre enviado por el navegador es texto sin verificar que acabaría impreso en
+el correo del equipo.
+
+### Nada de Functions nuevas
+
+Seguimos en **8**. El correo vive dentro de la Function de pagos que ya
+existía; `_lib/` no cuenta como entrypoint.
+
+### El escaparate dejó de mentir
+
+`config/plans.js` prometía «Todo ilimitado», «Sesiones ilimitadas» e
+«Instrumentos ilimitados». El plan real da 100 por semana. Ahora las tarjetas
+de precios de la portada y de la app leen `public.plans` con
+`components/usePlanCatalog.js`, y el reclamo se deriva del límite en vez de ser
+un adjetivo. Lo que queda en `config/plans.js` es sólo respaldo, y dice lo
+mismo que la base.
+
+De paso: el catálogo real usa el código `free`, no `gratuito`. Comparar contra
+`"gratuito"` habría mandado a WhatsApp a quien sólo quería crear una cuenta
+gratis; ahora se compara por precio.
+
+### Deep link a Pagos
+
+`?admin=1&seccion=pagos` abre el panel directamente en la bandeja, que es a
+donde apunta el enlace del correo. La sección se valida contra una lista.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
-`main` local está un commit por delante de `origin/main`, con la reducción de
-Serverless Functions de 19 a 8. Falta `git push origin main` y comprobar que
-el deployment de producción llega a **Ready**.
+Falta `git push origin main` con el bloque de avisos, y despues configurar en
+Vercel las variables del correo. Sin ellas el aviso no sale, pero nada mas se
+rompe: la solicitud se crea igual y el panel la muestra igual.
 
-Supabase no necesita nada: `008` ya está aplicada y verificada (13/13).
+| Variable | Para que |
+|---|---|
+| `SCIVERSE_MAIL_PROVIDER` | `resend` o `webhook` |
+| `RESEND_API_KEY` | si el proveedor es Resend |
+| `SCIVERSE_MAIL_FROM` | remitente verificado en el dominio |
+| `SCIVERSE_ADMIN_EMAILS` | destinatarios, separados por coma |
+
+Y en Administracion → Configuracion, escribir el WhatsApp de coordinacion:
+mientras este vacio, el boton no aparece.
