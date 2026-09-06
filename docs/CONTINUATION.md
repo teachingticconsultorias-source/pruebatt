@@ -407,6 +407,62 @@ de la inspección delante.
 
 `001_material_types.sql` sigue **sin ejecutar**.
 
+## PRODUCCIÓN VERIFICADA CON EL DUMP REAL · 2026-09-06
+
+Fuente de verdad: `supabase/production-full-schema.sql`. Las deducciones
+anteriores quedan resueltas en la ADENDA B de
+`docs/audit/26-PRODUCTION-BACKEND-AUDIT.md`. Solo análisis: no se ejecutó
+ninguna migración, ALTER, GRANT ni cambio de Auth o Vercel.
+
+### El hallazgo principal no era el que buscábamos
+
+**La generación con IA está caída en producción.** Los cinco endpoints llaman
+a `consume_ai_credit` antes de tocar Gemini; esa función **no existe** en la
+base real, PostgREST devuelve 404 y ambos helpers lanzan. En `withCredit()`
+el consumo va antes de la operación, así que Gemini nunca llega a llamarse.
+
+No es una fuga de créditos: es una caída total de la función principal del
+producto. Y en dos endpoints el mensaje crudo de PostgREST llega a la
+pantalla de la docente.
+
+### Qué hay realmente en producción
+
+Solo se aplicó `supabase-schema.sql`. Nunca llegaron `supabase-freemium.sql`,
+`supabase-session-resources.sql`, `supabase-session-flow-v2.sql` ni
+`001_material_types.sql`. No hay tabla de migraciones que lo registrara.
+
+- Sin columnas ni funciones de crédito (0 coincidencias de `ai_credit`).
+- CHECK de `tipo` con los 4 tipos originales: **4 de los 5 tipos que escribe
+  el frontend fallarían al guardar** en cuanto se restaure la generación.
+- `authenticated` y `anon` con `GRANT ALL` sobre ambas tablas, sin GRANT por
+  columna: un docente puede cambiarse el `plan`.
+- Trigger `al_crear_usuario` y `crear_perfil_docente()` correctos. No tocar.
+
+### Dos conclusiones previas que estaban mal
+
+- **MEDIO-1 retirado**: no existe índice sobre `lower(correo)` en producción,
+  así que el fallo de registro por mayúsculas que describí no puede ocurrir.
+- **CRÍTICO-2 reclasificado**: `refund_ai_credit()` no está desplegada. El
+  fallo de diseño es real, pero no está vivo. Debe cerrarse *antes* de
+  instalar los créditos, no después.
+
+### Orden recomendado (diseñado, no ejecutado)
+
+1. `002_secure_ai_credits.sql` — restaura la generación y cierra el agujero de
+   columnas en el mismo paso. Incluye vale de un solo uso para el reembolso.
+2. Verificar generación en producción.
+3. `003_material_types.sql` (el actual 001, renumerado).
+4. Verificar guardado de los cuatro tipos que hoy fallan.
+5. `004_profile_sync.sql` — `ie` y `nivel` se desincronizan porque «Mi cuenta»
+   escribe en `auth.users` y la app los lee de `docentes`.
+
+### Sigue requiriendo dashboard
+
+Site URL, Redirect URLs, confirmación, recuperación, duración de sesión, SMTP
+y plantillas: el dump trae la estructura de `auth`, no los ajustes. Y los
+buckets de Storage son filas, no esquema: un volcado `--schema-only` no puede
+decir si existen.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque

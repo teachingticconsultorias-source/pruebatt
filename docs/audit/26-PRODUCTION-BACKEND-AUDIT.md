@@ -799,3 +799,349 @@ Deliberadamente **no** se ha escrito `002_secure_ai_credits.sql`. Una
 migración que revoca privilegios y cambia la firma de una función, escrita
 contra un esquema supuesto, es la clase de cambio que rompe producción un
 viernes. Se escribirá cuando la inspección diga qué hay realmente.
+
+---
+
+# ADENDA B · 2026-09-06 — PRODUCCIÓN VERIFICADA CON EL DUMP REAL
+
+Fuente de verdad: `supabase/production-full-schema.sql`
+(`pg_dump --schema-only --no-owner`, PostgreSQL 17.6).
+
+**A partir de aquí los ficheros SQL sueltos del repositorio dejan de ser
+referencia.** Varios nunca se aplicaron. Todo lo marcado ⚠️ DEDUCIDO en las
+secciones anteriores queda resuelto abajo, y **dos conclusiones de la
+auditoría previa resultaron equivocadas**; se corrigen aquí.
+
+---
+
+## B.1 ESTADO REAL DE PRODUCCIÓN ✅
+
+### Tablas de la aplicación: exactamente dos
+
+```sql
+public.docentes (
+  id, user_id, nombres, apellidos, ie, celular, correo,
+  plan text default 'gratuito', activo boolean default true,
+  created_at, nivel text default 'primaria'
+)
+```
+
+**No existe ninguna columna de créditos.** Ni `ai_week_used`, ni
+`ai_weekly_limit`, ni `ai_week_start`.
+
+```sql
+public.materiales_docente (
+  id, user_id, tipo, titulo, nivel, grado, area, tema,
+  contenido jsonb, created_at, updated_at,
+  CONSTRAINT materiales_docente_tipo_check
+    CHECK (tipo = ANY (ARRAY['session','project','rubric','checklist']))
+)
+```
+
+### Funciones en `public`: una sola
+
+`crear_perfil_docente()` — `SECURITY DEFINER`, `SET search_path TO ''`.
+**No existe ninguna función de crédito.** Búsqueda de `ai_credit`/`ai_week`
+en todo el dump: **0 coincidencias**.
+
+### Triggers
+
+`al_crear_usuario` — `AFTER INSERT ON auth.users`, activo. Correcto.
+
+### RLS y políticas
+
+RLS activado en ambas tablas. Seis políticas, todas `TO authenticated`:
+
+| Tabla | SELECT | INSERT | UPDATE | DELETE |
+|---|---|---|---|---|
+| `docentes` | propia fila | — | propia fila | — |
+| `materiales_docente` | propia | propia | propia | propia |
+
+### Privilegios
+
+```sql
+GRANT ALL ON TABLE public.docentes           TO anon, authenticated, service_role;
+GRANT ALL ON TABLE public.materiales_docente TO anon, authenticated, service_role;
+```
+
+Sin ningún GRANT por columna. `ALL` incluye UPDATE sobre **todas** las columnas.
+
+### Extensiones
+
+`pg_stat_statements`, `pgcrypto`, `supabase_vault`, `uuid-ossp`. Sin `pg_cron`.
+
+---
+
+## B.2 DIFERENCIAS REPO ↔ PRODUCCIÓN
+
+| Fichero del repo | ¿Aplicado? | Evidencia |
+|---|---|---|
+| `supabase-schema.sql` | **SÍ, parcialmente** | Tablas, trigger y políticas coinciden. Pero el índice sobre `lower(correo)` **no se creó**: en producción hay un UNIQUE y un índice único, ambos sobre `correo` sin normalizar |
+| `supabase-freemium.sql` | **NO** | Sin columnas `ai_*`, sin las tres RPC |
+| `supabase-session-resources.sql` | **NO** | El CHECK no incluye `worksheet` ni `rating_scale` |
+| `supabase-session-flow-v2.sql` | **NO** | El CHECK no incluye `observation_guide`, `reading` ni `questionnaire` |
+| `supabase/migrations/001_material_types.sql` | **NO** | Sin `challenge` |
+
+**Producción está en el estado del primer script y nada más.** Los cuatro
+posteriores nunca llegaron, y no hay tabla de migraciones que lo registrara.
+
+### Dos correcciones a la auditoría previa
+
+**C-3 · MEDIO-1 no existe.** Sostuve que el doble índice sobre `correo`
+podía hacer fallar un registro con mayúsculas distintas. En producción **no
+hay índice sobre `lower(correo)`**: hay un UNIQUE constraint y un índice
+único, ambos sobre `correo` sin normalizar. Son redundantes entre sí, pero no
+producen el fallo que describí. **Retirado.**
+
+**C-4 · CRÍTICO-2 no aplica hoy.** `refund_ai_credit()` no existe en
+producción, así que nadie puede invocarla. El riesgo era real *en el diseño*,
+pero **no está desplegado**. Deja de ser un crítico vigente y pasa a ser un
+requisito de diseño para cuando se instalen los créditos.
+
+---
+
+## B.3 CRÉDITOS — LA GENERACIÓN CON IA ESTÁ CAÍDA
+
+Éste es el hallazgo principal del bloque, y no es el que se venía persiguiendo.
+
+### Qué espera el código
+
+Los **cinco** endpoints generadores llaman a `consume_ai_credit` antes de
+tocar Gemini. Tres por `withCredit()`; dos con un helper `rpc()` copiado en
+línea:
+
+| Endpoint | Vía |
+|---|---|
+| `generate-session.js` | `withCredit()` |
+| `generate-project-steam.js` | `withCredit()` |
+| `generate-with-quota.js` | `withCredit()` |
+| `generate-linked-worksheet.js` | `rpc()` inline, línea 66 |
+| `generate-session-resource.js` | `rpc()` inline, línea 312 |
+
+### Qué pasa hoy, paso a paso
+
+1. El endpoint hace `POST /rest/v1/rpc/consume_ai_credit`.
+2. PostgREST **no encuentra la función** y responde 404 (`PGRST202`).
+3. Ambos helpers comprueban `if (!r.ok) throw`.
+4. En `withCredit()` el consumo va **antes** de la operación
+   (`api/_lib/credits.js:74-84`), así que **Gemini nunca llega a llamarse**.
+5. El endpoint responde con error.
+
+**Ninguna generación con IA funciona en producción.** No es una fuga de
+créditos: es una caída total de la funcionalidad principal del producto.
+
+### Qué ve la docente
+
+Los dos endpoints inline devuelven el mensaje crudo de PostgREST:
+
+```js
+return res.status(e?.status || 500).json({ error: … e?.message … });
+```
+
+Es decir, un texto del tipo «Could not find the function
+public.consume_ai_credit without parameters in the schema cache» dentro de la
+interfaz. Los tres de `withCredit()` sí lo traducen a un error genérico
+gracias a `_lib/errors.js`.
+
+### El indicador de créditos
+
+`components/CreditsIndicator.jsx:96` hace `if (!credits) return null`. Como
+`/api/credits` falla por la misma causa, **el widget desaparece**. No muestra
+cifras falsas: desaparece sin explicación. Correcto que no mienta; malo que
+no diga nada.
+
+### Riesgo económico real
+
+**Ninguno, hoy.** No se puede gastar Gemini porque no se puede generar. El
+riesgo es de producto, no de coste: la función que justifica la plataforma no
+responde.
+
+---
+
+## B.4 MATERIALES — CUATRO DE CINCO TIPOS FALLAN
+
+CHECK vigente: `session · project · rubric · checklist`.
+
+| TIPO QUE ESCRIBE EL FRONTEND | ¿ADMITIDO HOY? | ACCIÓN |
+|---|---|---|
+| `project` | **SÍ** | ninguna |
+| `worksheet` | **NO** | migración |
+| `reading` | **NO** | migración |
+| `rating_scale` | **NO** | migración |
+| `challenge` | **NO** | migración |
+| `session` · `rubric` · `checklist` | SÍ (heredados) | ninguna |
+
+Guardar cualquiera de los cuatro produce
+`new row violates check constraint "materiales_docente_tipo_check"`.
+
+Matiz que cambia la urgencia: como la generación está caída (B.3), **hoy no
+se llega siquiera a intentar guardar**. En cuanto se restauren los créditos,
+este fallo aparece de inmediato. Por eso ambas migraciones deben ir en el
+mismo despliegue, aunque separadas.
+
+`001_material_types.sql` es **necesaria** y su bloque de inspección pasará:
+las filas existentes solo pueden tener los cuatro tipos que el CHECK admite,
+todos incluidos en el superconjunto nuevo.
+
+---
+
+## B.5 DOCENTES — RIESGOS REALES
+
+### Confirmado
+
+`authenticated` tiene `GRANT ALL` (incluye UPDATE sobre todas las columnas) y
+la política permite escribir la propia fila. **No hay restricción por
+columna.** Luego cualquier docente puede:
+
+```
+PATCH /rest/v1/docentes?user_id=eq.<el suyo>
+{ "plan": "premium", "activo": false, "correo": "otro@x.pe" }
+```
+
+| Campo | Riesgo real hoy |
+|---|---|
+| `plan` | **ALTO** — se muestra en la interfaz y regirá los límites cuando existan créditos |
+| `activo` | BAJO — solo puede desactivarse a sí mismo |
+| `correo` | MEDIO — se desincroniza de `auth.users.email`; el UNIQUE impide suplantar a otro |
+| `user_id` | **Ninguno** — el `WITH CHECK` obliga a que siga siendo el suyo |
+| créditos | **No aplica** — las columnas no existen |
+
+### `GRANT ALL TO anon`
+
+Hoy inofensivo: RLS está activo y ninguna política alcanza a `anon`. Pero es
+superficie innecesaria: si alguien desactivara RLS un minuto, `anon` tendría
+lectura y escritura totales. Debe reducirse por defensa en profundidad.
+
+### Qué necesita editar realmente el usuario
+
+**Nada por esta vía.** Verificado en el código: no existe un solo `UPDATE` del
+cliente sobre `docentes`. «Mi cuenta» guarda con `supabase.auth.updateUser`
+(`App.jsx:4114`). Por tanto **revocar el UPDATE directo no rompe ninguna
+funcionalidad actual**.
+
+---
+
+## B.6 PERFIL — DESINCRONIZACIÓN CONFIRMADA
+
+`saveProfile` escribe en `auth.users.raw_user_meta_data`. El trigger solo
+actúa `AFTER INSERT`, nunca en UPDATE. Resultado:
+
+| Campo | Se edita en «Mi cuenta» | ¿Llega a `docentes`? | ¿Lo lee la app de la tabla? |
+|---|---|---|---|
+| `nombres` | sí | **no** | no (usa la sesión) |
+| `apellidos` | sí | **no** | no |
+| `ie` | sí | **no** | **SÍ** (`App.jsx:4170`) |
+| `nivel` | sí | **no** | **SÍ** (`App.jsx:4170`) |
+| `celular` | sí | **no** | no |
+
+`ie` y `nivel` son los que muerden: la app los lee de la tabla, así que
+muestra el valor viejo mientras la sesión tiene el nuevo. **Corrupción
+silenciosa, sin error visible.**
+
+---
+
+## B.7 TRIGGER Y AUTH
+
+`crear_perfil_docente()` está **bien construido**: `SECURITY DEFINER`,
+`search_path` vacío, nombres cualificados con `public.`, y copia `nivel`
+correctamente. **No tocar.**
+
+Único matiz: el `ON CONFLICT (correo) DO UPDATE SET user_id = excluded.user_id`
+permite que quien se registre con un correo ya presente en una fila sin
+`user_id` **reclame ese perfil** y herede su `plan`. Requiere controlar el
+buzón, así que el alcance es limitado. **MEDIO**, sin cambio en este bloque.
+
+Configuración de Auth — **REQUIERE DASHBOARD.** El dump trae la estructura de
+`auth`, no los ajustes. Siguen sin verificar: Site URL, Redirect URLs,
+confirmación de correo, recuperación, secure email change, duración de sesión,
+SMTP y plantillas. No se inventan aquí.
+
+---
+
+## B.8 STORAGE
+
+El esquema `storage` del dump es el estándar de Supabase: tablas `buckets`,
+`objects`, `s3_multipart_uploads`, más funciones y triggers de la plataforma.
+**Su presencia no indica uso.**
+
+Un volcado `--schema-only` **no contiene filas**, y los buckets son filas de
+`storage.buckets`. Por tanto **desde este dump no se puede saber si hay
+buckets creados**. Lo que sí consta: el repositorio no tiene ninguna
+referencia a Storage y los DOCX se generan en el navegador. Para cerrarlo
+hace falta `select id, public from storage.buckets;` — **REQUIERE DASHBOARD**.
+
+---
+
+## B.9 CAMBIOS P0
+
+1. **Restaurar la generación con IA.** Instalar el sistema de créditos
+   (columnas y RPC) pero **ya endurecido**, no la versión original de
+   `supabase-freemium.sql`, que nace con el fallo de columnas editables.
+2. **Restringir la escritura del cliente sobre `docentes`** por columna, en la
+   misma migración, para que los créditos no sean editables ni un segundo.
+3. **Ampliar el CHECK de `tipo`**, para que lo generado se pueda guardar.
+4. **Dejar de filtrar mensajes crudos** en los dos endpoints inline.
+
+## B.10 CAMBIOS P1
+
+5. Sincronizar el perfil (`ie`, `nivel`) entre Auth y `docentes`.
+6. Reducir `GRANT ALL TO anon` en ambas tablas.
+7. Unificar los dos helpers `rpc()` inline con `api/_lib/supabase.js`.
+8. Rate limit persistente; `ADMIN_SECRET` sin rotar.
+9. Diccionario de errores centralizado (§10).
+10. Trigger de `updated_at` en `materiales_docente`.
+
+---
+
+## B.11 MIGRACIONES A DISEÑAR — **NINGUNA EJECUTADA**
+
+### `002_secure_ai_credits.sql`
+
+- Añade `ai_weekly_limit`, `ai_week_used`, `ai_week_start` a `docentes`.
+- Crea `get_ai_credit_status()`, `consume_ai_credit()` (con `FOR UPDATE`) y
+  `refund_ai_credit(p_token uuid)`.
+- Crea `ai_credit_consumptions`: cada consumo emite un vale de un solo uso y
+  el reembolso lo exige. Cierra el fallo de diseño C-4 **antes** de
+  desplegarlo, y no obliga a tocar Vercel ni a repartir `service_role` (A.3).
+- `REVOKE UPDATE ON public.docentes FROM authenticated, anon`, seguido de
+  `GRANT UPDATE (nombres, apellidos, ie, celular, nivel) TO authenticated`.
+  Seguro: nada del cliente escribe hoy en esa tabla (B.5).
+- `REVOKE ALL ... FROM anon` en ambas tablas.
+
+### `003_material_types.sql`
+
+El actual `001_material_types.sql`, renumerado. Su bloque de inspección se
+mantiene; pasará.
+
+### `004_profile_sync.sql`
+
+Trigger `AFTER UPDATE OF raw_user_meta_data ON auth.users` que refleje
+`nombres`, `apellidos`, `ie`, `celular` y `nivel` en `docentes`. Resuelve B.6
+sin tocar el frontend.
+
+---
+
+## B.12 ORDEN RECOMENDADO
+
+1. `002_secure_ai_credits.sql` — restaura la generación y cierra el agujero de
+   columnas en el mismo paso. **Sin esto el producto no funciona.**
+2. Verificar en producción que se puede generar.
+3. `003_material_types.sql` — para que lo generado se guarde.
+4. Verificar el guardado de los cuatro tipos que hoy fallan.
+5. `004_profile_sync.sql`.
+6. Los P1 por código, sin migración.
+
+Cada paso con su propia migración y su propia verificación. No agrupar.
+
+## B.13 ARCHIVOS A MODIFICAR
+
+| Archivo | Cambio |
+|---|---|
+| `supabase/migrations/002_secure_ai_credits.sql` | nuevo |
+| `supabase/migrations/003_material_types.sql` | renombrar desde `001_` |
+| `supabase/migrations/004_profile_sync.sql` | nuevo |
+| `api/_lib/credits.js` | pasar el vale de consumo al reembolso |
+| `api/generate-linked-worksheet.js` | usar `_lib`; dejar de devolver `e.message` |
+| `api/generate-session-resource.js` | ídem |
+| `components/CreditsIndicator.jsx` | estado explícito cuando el servicio no responde |
+| `supabase-freemium.sql`, `supabase-session-*.sql` | marcar como históricos no aplicados |
