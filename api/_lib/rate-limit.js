@@ -96,4 +96,18 @@ export const RateLimits = {
   adminAuth: { limit: 8, windowMs: 300_000 },
   /** Consultas de solo lectura del propio usuario. */
   readOwn: { limit: 120, windowMs: 60_000 },
+  /**
+   * Cambios de configuración comercial. Cubo propio para que una tanda de
+   * ediciones no consuma el presupuesto de lectura del panel, ni al revés.
+   */
+  adminWrite: { limit: 20, windowMs: 60_000 },
+  /** Subida del QR: pesada y muy poco frecuente. */
+  adminUpload: { limit: 8, windowMs: 60_000 },
+  /**
+   * Solicitudes de plan. Es una ESCRITURA que crea trabajo para una persona
+   * al otro lado, así que no puede compartir presupuesto con las lecturas.
+   * Se aplica por usuario, no sólo por IP: un colegio entero comparte salida
+   * a internet y no debe penalizarse entre sí.
+   */
+  paymentRequest: { limit: 6, windowMs: 60_000 },
 };

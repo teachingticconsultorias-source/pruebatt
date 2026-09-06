@@ -17,6 +17,8 @@ const MENSAJES = [
   [/PLAN_ALREADY_ACTIVE/i,     409, "Ya tienes este plan activo. Escríbenos si quieres renovarlo."],
   [/REQUEST_ALREADY_PENDING/i, 409, "Ya tienes una solicitud en revisión para este plan. Te avisaremos apenas la revisemos."],
   [/PROFILE_NOT_FOUND/i,       409, "Tu perfil no terminó de crearse. Escríbenos y lo activamos."],
+  [/PAYMENTS_CLOSED/i,         409, "Ahora mismo no estamos aceptando solicitudes de plan. Vuelve a intentarlo más tarde."],
+  [/METHOD_NOT_AVAILABLE/i,    409, "Ese método de pago ya no está disponible. Elige otro."],
 ];
 
 function traducir(error) {
@@ -36,9 +38,19 @@ export default async function handler(req, res) {
   try {
     if (req.method !== "POST") throw Errors.methodNotAllowed();
 
-    enforceRateLimit({ key: clientKey(req), bucket: "payment-request", ...RateLimits.readOwn });
+    // Dos vueltas: por IP antes de identificar (frena un script anónimo) y por
+    // usuario después (un colegio entero comparte salida a internet y no debe
+    // penalizarse entre sí). La protección de verdad contra duplicados sigue
+    // siendo el índice único parcial de la base, no esto.
+    enforceRateLimit({ key: clientKey(req), bucket: "payment-request-ip", ...RateLimits.paymentRequest });
 
     const auth = await requireUser(req);
+    enforceRateLimit({
+      key: clientKey(req, auth.user.id),
+      bucket: "payment-request",
+      ...RateLimits.paymentRequest,
+    });
+
     const { plan, method, reference } = req.body || {};
 
     if (!plan || typeof plan !== "string") {

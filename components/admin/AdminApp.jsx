@@ -4,6 +4,7 @@ import {
   ShieldCheck, ShieldAlert, LogOut, RefreshCw, Mail, MailCheck, Clock,
   GraduationCap, Sparkles, FolderOpen, AlertCircle, Ban, CheckCircle2,
   CalendarPlus, ArrowRightLeft, History, Receipt, ThumbsUp, ThumbsDown,
+  Tags, Settings,
 } from "lucide-react";
 
 import { supabase } from "../../supabaseClient.js";
@@ -11,6 +12,11 @@ import Button from "../ui/Button.jsx";
 import { Skeleton, EmptyState, Badge, Alert } from "../ui/Feedback.jsx";
 import Modal from "../ui/Modal.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
+import {
+  fecha, desde, soles, pedir, enviar, useCarga,
+  Dato, CargandoTarjetas, CargandoTabla, ErrorEstado,
+} from "./shared.jsx";
+import { Planes, ConfiguracionPagos } from "./Comercial.jsx";
 
 /* ==========================================================================
    PANEL ADMINISTRATIVO · SOLO LECTURA
@@ -25,59 +31,9 @@ import { useUI } from "../ui/UIProvider.jsx";
 
 const PAGE_SIZE = 25;
 
-function fecha(valor, conHora = false) {
-  if (!valor) return "—";
-  const d = new Date(valor);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleDateString("es-PE", {
-    day: "2-digit", month: "short", year: "numeric",
-    ...(conHora ? { hour: "2-digit", minute: "2-digit" } : {}),
-  });
-}
-
-function desde(valor) {
-  if (!valor) return "Nunca";
-  const dias = Math.floor((Date.now() - new Date(valor).getTime()) / 86_400_000);
-  if (Number.isNaN(dias)) return "—";
-  if (dias === 0) return "Hoy";
-  if (dias === 1) return "Ayer";
-  if (dias < 30) return `Hace ${dias} días`;
-  if (dias < 365) return `Hace ${Math.floor(dias / 30)} meses`;
-  return `Hace ${Math.floor(dias / 365)} años`;
-}
-
-/** Llamada autenticada. Nunca deja escapar el detalle técnico. */
-async function pedir(ruta, token) {
-  const res = await fetch(ruta, { headers: { Authorization: `Bearer ${token}` } });
-
-  if (res.status === 401) throw Object.assign(new Error("Tu sesión venció. Vuelve a entrar."), { code: "AUTH" });
-  if (res.status === 403) throw Object.assign(new Error("Esta sección es solo para el equipo de SciVerse."), { code: "FORBIDDEN" });
-
-  const tipo = res.headers.get("content-type") || "";
-  if (!tipo.includes("application/json")) {
-    throw new Error("El servicio no está disponible en este momento.");
-  }
-
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error || "No pudimos cargar la información.");
-  return data;
-}
-
-/** Ejecuta una acción administrativa. Devuelve el JSON o lanza con mensaje. */
+/** Ejecuta una accion administrativa sobre un docente. */
 async function ejecutar(accion, token) {
-  const res = await fetch("/api/admin/actions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-    body: JSON.stringify(accion),
-  });
-
-  const tipo = res.headers.get("content-type") || "";
-  if (!tipo.includes("application/json")) {
-    throw new Error("El servicio no está disponible en este momento.");
-  }
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.error || "No pudimos completar la acción.");
-  return data;
+  return enviar("/api/admin/actions", accion, token);
 }
 
 /* ======================================================================= */
@@ -149,6 +105,20 @@ export default function AdminApp() {
           >
             <Receipt size={17} aria-hidden="true" /> Pagos
           </button>
+          <button
+            type="button"
+            className={`adm__link${vista === "planes" ? " is-active" : ""}`}
+            onClick={() => { setVista("planes"); setDocenteAbierto(null); }}
+          >
+            <Tags size={17} aria-hidden="true" /> Planes
+          </button>
+          <button
+            type="button"
+            className={`adm__link${vista === "config" ? " is-active" : ""}`}
+            onClick={() => { setVista("config"); setDocenteAbierto(null); }}
+          >
+            <Settings size={17} aria-hidden="true" /> Configuración
+          </button>
         </nav>
 
         <div className="adm__sidefoot">
@@ -179,6 +149,12 @@ export default function AdminApp() {
         ) : vista === "pagos" ? (
           <Pagos token={token} role={role} onRole={setRole}
                  onDenegado={() => setDenegado(true)} />
+        ) : vista === "planes" ? (
+          <Planes token={token} onRole={setRole}
+                  onDenegado={() => setDenegado(true)} />
+        ) : vista === "config" ? (
+          <ConfiguracionPagos token={token} onRole={setRole}
+                              onDenegado={() => setDenegado(true)} />
         ) : (
           <ListaDocentes
             token={token}
@@ -249,31 +225,6 @@ function PantallaDenegado({ onSalir }) {
       </div>
     </div>
   );
-}
-
-/* ======================================================================= */
-
-function useCarga(ruta, token, onDenegado) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [cargando, setCargando] = useState(true);
-
-  const cargar = useCallback(async () => {
-    if (!token) return;
-    setCargando(true);
-    setError("");
-    try {
-      setData(await pedir(ruta, token));
-    } catch (e) {
-      if (e.code === "FORBIDDEN") onDenegado?.();
-      setError(e.message);
-    } finally {
-      setCargando(false);
-    }
-  }, [ruta, token, onDenegado]);
-
-  useEffect(() => { cargar(); }, [cargar]);
-  return { data, error, cargando, recargar: cargar };
 }
 
 /* ======================================================================= */
@@ -547,7 +498,7 @@ function DetalleDocente({ userId, token, role, onVolver, onDenegado }) {
           <Dato etiqueta="Hasta" valor={plan.hasta ? fecha(plan.hasta) : "Sin vencimiento"} />
           <Dato etiqueta="Créditos" valor={`${plan.usadas ?? 0} usados · ${plan.disponibles ?? 0} disponibles de ${plan.limite_semanal ?? 0}`} />
           {plan.por_fallback && (
-            <Alert tone="amber" title="Sin suscripción registrada">
+            <Alert tone="warning" title="Sin suscripción registrada">
               Se resuelve como gratuito porque no tiene fila de suscripción activa.
             </Alert>
           )}
@@ -707,11 +658,6 @@ const ESTADO_PAGO = {
   rejected:  { texto: "Rechazado", tono: "danger" },
   cancelled: { texto: "Cancelado", tono: "neutral" },
 };
-
-function soles(centimos, moneda = "PEN") {
-  const valor = (Number(centimos) || 0) / 100;
-  return (moneda === "PEN" ? "S/ " : moneda + " ") + valor.toFixed(2);
-}
 
 function Pagos({ token, role, onRole, onDenegado }) {
   const [estado, setEstado] = useState("pending");
@@ -1112,51 +1058,5 @@ function ModalAccion({ accion, docente, planActual, userId, token, onCerrar, onH
         {error && <p className="adm__error" role="alert">{error}</p>}
       </div>
     </Modal>
-  );
-}
-
-/* ======================================================================= */
-
-function Dato({ etiqueta, valor }) {
-  return (
-    <div className="adm__dato">
-      <span>{etiqueta}</span>
-      <div>{valor ?? "—"}</div>
-    </div>
-  );
-}
-
-function CargandoTarjetas() {
-  return (
-    <div className="adm__cards">
-      {[0, 1, 2, 3, 4, 5].map((i) => (
-        <article key={i} className="adm__card">
-          <Skeleton w={32} h={32} radius="var(--radius-md)" />
-          <Skeleton w="50%" h={26} /><Skeleton w="75%" h={13} />
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function CargandoTabla() {
-  return (
-    <div className="adm__loadrows">
-      {[0, 1, 2, 3, 4].map((i) => (
-        <div key={i}><Skeleton w="30%" h={15} /><Skeleton w="55%" h={12} /></div>
-      ))}
-    </div>
-  );
-}
-
-function ErrorEstado({ mensaje, onReintentar }) {
-  return (
-    <div className="adm__errorstate">
-      <AlertCircle size={26} aria-hidden="true" />
-      <p>{mensaje}</p>
-      <Button variant="outline" size="sm" icon={RefreshCw} onClick={onReintentar}>
-        Reintentar
-      </Button>
-    </div>
   );
 }

@@ -846,17 +846,94 @@ y el docente simplemente verá que aún no hay planes de pago.
 `ADMIN_SECRET`, `api/list-docentes.js`, `AdminPanel.jsx` y `?admin=legacy` se
 conservan hasta validar Admin 3 en producción.
 
+## CONFIGURACIÓN COMERCIAL ADMINISTRABLE · 2026-09-06
+
+`007_payments.sql` está **aplicada en producción** y `010_verify_payments.sql`
+pasó. Este bloque convierte ese sistema de pagos en uno que se administra
+desde `?admin=1`, sin volver a entrar a Supabase para cambiar un precio.
+
+Estado: **228 tests, build OK, `git diff --check` limpio, sin push, nada
+ejecutado contra producción.**
+
+### Lo que se decidió y dónde vive ahora
+
+| Decisión | Valor | Dónde |
+|---|---|---|
+| Plan Pro | S/ 20.00 · 1 mes · 100 IA/semana · activo | `public.plans` |
+| Yape y Plin | Keytlin · 931582435 · habilitados | `public.payment_methods` |
+| WhatsApp | vacío, no se inventó ninguno | `payment_settings.whatsapp` |
+| QR | configurable, aún sin cargar | bucket `payment-assets` |
+
+Ninguno de esos valores está escrito en React ni en las APIs. Hay tests que
+lo comprueban leyendo los ficheros.
+
+### `payment_settings` se vuelve relacional
+
+007 guardaba UN método. Ahora `public.payment_methods` da una fila por método,
+con su receptor, su número y su QR propios; `payment_settings` conserva lo
+verdaderamente global: instrucciones, WhatsApp e interruptor general. Yape y
+Plin comparten número hoy y pueden separarse mañana sin migración.
+
+Las tres columnas viejas (`method`, `receiver_name`, `account_number`) **no se
+borran**: se copian a `payment_methods` y quedan con un COMMENT que dice que
+ya no las lee nadie. La limpieza opcional está al final de 008.
+
+### El interruptor de pagos se aplica en la BASE
+
+`manual_payments_enabled` no podía ser sólo un `if` en React: se redefinió
+`request_plan` (misma firma, mismos permisos) para que apagar los pagos
+impida crear solicitudes aunque alguien llame al endpoint a mano. También
+rechaza un método que administración haya deshabilitado.
+
+### Apagar un plan con gente dentro está prohibido
+
+`effective_plan` trata un plan inactivo como inexistente y cae al gratuito.
+Desactivar Pro con suscripciones vivas habría degradado en silencio a todo el
+que pagó. `admin_update_plan` lo bloquea con `PLAN_HAS_ACTIVE_SUBSCRIBERS`.
+
+Consecuencia conocida: hoy no se puede «dejar de vender sin degradar». Eso
+pide una columna `is_purchasable` separada de `is_active`; no se adelanta.
+
+### El QR
+
+Bucket **privado** `payment-assets`, 2 MB, PNG/JPEG/WEBP impuesto por el
+propio Storage. Sin ninguna política de escritura: sólo `service_role` sube.
+La lectura se firma con la sesión de quien mira.
+
+Se valida la **firma real del fichero**, no el `Content-Type`, y se sube con
+nombre nuevo antes de tocar la base; el anterior se borra después. Si la base
+rechazara la ruta, el fichero recién subido se limpia solo.
+
+Va en JSON base64 de navegador a función porque el cuerpo binario crudo se
+comporta distinto según cómo parsee Vercel, y ese fallo sería invisible hasta
+producción. En Postgres y en Storage no hay base64 en ninguna parte.
+
+### Dos eventos al aprobar
+
+`PAYMENT_APPROVED` (el dinero se dio por bueno) y `SUBSCRIPTION_ACTIVATED`
+(el acceso quedó activo) se emiten por separado, en la misma transacción. El
+día que haya pasarela, el primero llegará por webhook y el segundo seguirá
+siendo nuestro.
+
+### Orden de despliegue
+
+1. `supabase/migrations/008_commercial_settings.sql` en el SQL Editor.
+2. `supabase/inspect/011_verify_commercial_settings.sql` → trece OK.
+3. Si el paso 1 avisó del bucket: crearlo a mano en Storage (instrucciones al
+   final de 008) y repetir el paso 2.
+4. `git push origin main` y esperar a Vercel.
+5. Cargar el QR de Yape y el de Plin desde Administración → Configuración.
+
+### Sigue pendiente
+
+`ADMIN_SECRET`, `api/list-docentes.js`, `AdminPanel.jsx` y `?admin=legacy` se
+conservan. Sin renovación automática, sin pasarela, sin comprobantes de pago.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
-El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque
-Deploy Visual a Vercel**. No desplegar ni hacer push hasta recibir esa
-autorización expresa; `feat/visual-overhaul` se mantiene sin push.
+Aplicar `supabase/migrations/008_commercial_settings.sql` en el SQL Editor y
+pegar el Results de `supabase/inspect/011_verify_commercial_settings.sql`
+(trece OK). Sólo después, `git push origin main`.
 
-Al reanudar cualquier QA, primero:
-
-```bash
-# terminar cualquier vite preview huérfano en 4173, reconstruir y servir
-npm run build && npm run preview
-node scripts/visual-qa.mjs docs/qa
-node scripts/a11y-qa.mjs
-```
+No hacer push antes de que 008 esté aplicada: el panel llamaría a funciones
+que todavía no existen.
