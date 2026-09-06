@@ -24,6 +24,13 @@ export const Errors = {
   notAuthorized: () =>
     new AppError("NOT_AUTHORIZED", "No autorizado.", 401),
 
+  /** El usuario está identificado, pero esta sección no es suya. */
+  forbidden: (message = "No tienes acceso a esta sección.") =>
+    new AppError("FORBIDDEN", message, 403),
+
+  notFound: (message = "No encontramos lo que buscabas.") =>
+    new AppError("NOT_FOUND", message, 404),
+
   methodNotAllowed: () =>
     new AppError("METHOD_NOT_ALLOWED", "Método no permitido.", 405),
 
