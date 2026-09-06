@@ -639,6 +639,42 @@ que exige el proyecto por sus privilegios por defecto.
 Quedan **listas salvo el censo**: 002 no puede ejecutarse hasta saber que no
 hay planes sin equivalencia.
 
+## CENSO APROBADO · 002 LISTA PARA APLICAR · 2026-09-06
+
+Censo ejecutado manualmente en producción: **5 docentes, todos con user_id, y
+un único valor de `plan`: «gratuito»**. Ningún NULL, ningún vacío, ningún
+plan de pago. La guarda del paso 0 de 002 lo reconoce
+(`lower(btrim('gratuito'))` → 'gratuito'), así que **no abortará**.
+
+### Qué debe ejecutar el usuario
+
+1. `supabase/migrations/002_commercial_core.sql` — copiar entero al SQL Editor.
+2. Inmediatamente después: `supabase/inspect/006_verify_commercial_core.sql`,
+   solo lectura, un único Results.
+
+### Resultado esperado tras 002
+
+| Comprobación | Esperado |
+|---|---|
+| 00 VEREDICTO · las cuatro filas | OK |
+| Catálogo | 1 plan · free · ai_weekly_limit 5 |
+| Suscripciones totales / activas / free | 5 / 5 / 5 |
+| Origen | free_default = 5 |
+| Plan efectivo | free (con suscripción real) = 5 · ninguna por fallback |
+| Cobertura | con activa 5 · sin activa 0 · dos activas 0 |
+| `docentes.plan` | sigue siendo «gratuito» — 002 no lo toca |
+| Permisos | plans: SELECT para anon y authenticated · subscriptions: SELECT sólo authenticated · anon sin nada |
+| sciverse_private | anon y authenticated en false |
+
+Si «04 PLAN EFECTIVO» dijera «por fallback», la siembra no cubrió a alguien:
+la aplicación seguiría funcionando (resuelve free igual), pero habría que
+revisarlo antes de seguir.
+
+### Todavía NO
+
+003 no se prepara hasta que 002 esté verificada. Los cambios de código de la
+API tampoco: van con 003, en la misma ventana.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
 El Bloque Visual está cerrado. La siguiente acción autorizada es el **Bloque
