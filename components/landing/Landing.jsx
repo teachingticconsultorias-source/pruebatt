@@ -142,6 +142,11 @@ export default function Landing({ onRegister, onLogin }) {
   const { openComingSoon } = useUI();
   const menuRef = useRef(null);
 
+  // Precios, vigencia y viñetas salen de `public.plans`. Mientras carga —y si
+  // la consulta falla— devuelve el catálogo de respaldo, así que la sección de
+  // planes nunca se queda sin contenido.
+  const { planes } = usePlanCatalog();
+
   // Escape cierra el menú móvil.
   useEffect(() => {
     if (!menuOpen) return undefined;
