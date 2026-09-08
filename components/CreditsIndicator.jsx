@@ -74,6 +74,10 @@ export default function CreditsIndicator({
     window.addEventListener("sciverse:material-created", refresh);
     window.addEventListener("sciverse:credit-used", refresh);
     window.addEventListener("focus", refresh);
+    // Igual que useMyPlan: en el móvil, volver a la app no siempre dispara
+    // `focus`, y créditos y plan tienen que contar lo mismo.
+    const alVolver = () => { if (!document.hidden) refresh(); };
+    document.addEventListener("visibilitychange", alVolver);
 
     const interval = window.setInterval(loadCredits, 15000);
 
@@ -81,6 +85,7 @@ export default function CreditsIndicator({
       window.removeEventListener("sciverse:material-created", refresh);
       window.removeEventListener("sciverse:credit-used", refresh);
       window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", alVolver);
       window.clearInterval(interval);
     };
   }, [loadCredits]);

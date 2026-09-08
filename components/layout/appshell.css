@@ -77,11 +77,13 @@
 
 .shell__plan {
   display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-3);
-  align-items: center; padding: var(--space-3);
+  align-items: center; padding: var(--space-3); width: 100%;
   border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
   background: var(--bg-sunken); color: var(--text-secondary); text-decoration: none;
+  font: inherit; text-align: left; cursor: pointer;
   transition: border-color var(--dur-fast) var(--ease-out);
 }
+.shell__plan:focus-visible { outline: none; border-color: var(--border-focus); box-shadow: var(--elev-focus); }
 .shell__plan:hover { border-color: var(--border-brand); }
 .shell__plan small { display: block; font-size: var(--text-label); color: var(--text-tertiary); }
 .shell__plan strong { display: block; font-size: var(--text-sm); color: var(--text-primary); text-transform: capitalize; }

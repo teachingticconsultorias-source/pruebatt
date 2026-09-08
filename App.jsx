@@ -22,6 +22,7 @@ import "./components/layout/appshell.css";
 import "./components/landing/landing.css";
 import { FREE_WEEKLY_AI_LIMIT, whatsappLink, CONTACT } from "./config/plans.js";
 import { usePlanCatalog } from "./components/usePlanCatalog.js";
+import { useMyPlan, nombreDePlan } from "./components/useMyPlan.js";
 import "./library.css";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
@@ -4153,7 +4154,7 @@ export default function SciVerseDocentes() {
 // Puente hacia el componente de cuenta rediseñado.
 // La escritura sigue siendo supabase.auth.updateUser, igual que antes:
 // no se toca el backend de perfil en el bloque visual.
-function TeacherAccountModal({ profile, dbProfile = null, initialTab = "perfil", onClose }) {
+function TeacherAccountModal({ profile, dbProfile = null, planVigente = null, initialTab = "perfil", onClose }) {
   async function saveProfile(form) {
     const { error } = await supabase.auth.updateUser({ data: { ...form } });
     if (error) {
@@ -4167,6 +4168,7 @@ function TeacherAccountModal({ profile, dbProfile = null, initialTab = "perfil",
     <Account
       profile={profile}
       dbProfile={dbProfile}
+      planVigente={planVigente}
       initialTab={initialTab}
       onClose={onClose}
       onSaveProfile={saveProfile}
@@ -4201,6 +4203,11 @@ function SciVerseApp({ profile, onLogout }) {
   const [librarySort,setLibrarySort]=useState("recientes");
   const [selectedMaterial,setSelectedMaterial]=useState(null);
   const [dbProfile,setDbProfile]=useState(null);
+
+  // Plan vigente, resuelto por `effective_plan()`. NO se usa `docentes.plan`:
+  // es una columna anterior al núcleo comercial que nadie escribe, así que
+  // seguía diciendo "gratuito" con el plan Pro ya activo.
+  const {plan:planVigente}=useMyPlan();
   const [savedResources,setSavedResources]=useState(()=>{try{return JSON.parse(localStorage.getItem("sciverse-saved-resources")||"[]");}catch{return[];}});
 
   // Plan y estado reales. Antes el sidebar mostraba "Gratuito" fijo aunque
@@ -4274,7 +4281,7 @@ function SciVerseApp({ profile, onLogout }) {
     <>
     <AppShell
       profile={profile}
-      plan={dbProfile?.plan}
+      plan={nombreDePlan(planVigente)}
       activeSection={activeSection}
       onNavigate={setActiveSection}
       onOpenAccount={(tab) => { setAccountTab(tab || "perfil"); setAccountOpen(true); }}
@@ -4362,7 +4369,7 @@ function SciVerseApp({ profile, onLogout }) {
       {selected && <ActivityModal activity={selected} grade={modalGrade} setGrade={setModalGrade} onClose={() => setSelected(null)} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===`${selected.id}-${modalGrade}`)} />}
       {selectedReto && <RetoModal reto={selectedReto} profile={profile} onClose={()=>setSelectedReto(null)} onCreateInstrument={()=>{setSelectedReto(null);setActiveSection("crear");}} onSave={toggleSaved} isSaved={savedResources.some(item=>item.id===(selectedReto.id||selectedReto.titulo))} />}
       {selectedMaterial&&<MaterialViewerModal item={selectedMaterial} typeLabel={materialTypeLabel[selectedMaterial.tipo]||"Material"} onClose={()=>setSelectedMaterial(null)} onDownload={()=>downloadMaterial(selectedMaterial)} onDuplicate={()=>duplicateMaterial(selectedMaterial)} onDelete={()=>deleteMaterial(selectedMaterial)}/>} 
-      {accountOpen && <TeacherAccountModal profile={profile} dbProfile={dbProfile} initialTab={accountTab} onClose={() => setAccountOpen(false)} />}
+      {accountOpen && <TeacherAccountModal profile={profile} dbProfile={dbProfile} planVigente={planVigente} initialTab={accountTab} onClose={() => setAccountOpen(false)} />}
     </>
   );
 }

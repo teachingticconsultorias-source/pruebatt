@@ -7,7 +7,6 @@ import {
 import CreditsIndicator from "../CreditsIndicator.jsx";
 import Button from "../ui/Button.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
-import { whatsappLink } from "../../config/plans.js";
 
 /* ==========================================================================
    APP SHELL — sidebar de escritorio · topbar · navegación móvil
@@ -139,11 +138,17 @@ export default function AppShell({
         <div className="shell__bottom">
           <CreditsIndicator compact />
 
-          <a
+          {/* Abre Mi cuenta → Plan y uso.
+
+              Antes era un enlace a WhatsApp con un teléfono comercial escrito
+              a mano: el flujo de cuando no existía otro sitio donde mejorar de
+              plan. Ahora ese sitio existe, y llevar a la docente fuera de la
+              aplicación para algo que puede hacer dentro sólo pierde a quien
+              iba a pagar. */}
+          <button
+            type="button"
             className="shell__plan"
-            href={whatsappLink("Hola Teaching TIC, deseo mejorar mi plan de SciVerse.")}
-            target="_blank"
-            rel="noreferrer"
+            onClick={() => onOpenAccount("plan")}
           >
             <Award size={16} aria-hidden="true" />
             <span>
@@ -151,7 +156,7 @@ export default function AppShell({
               <strong>{plan || "Gratuito"}</strong>
             </span>
             <ChevronRight size={15} aria-hidden="true" />
-          </a>
+          </button>
 
           <button type="button" className="shell__user" onClick={() => onOpenAccount("perfil")}>
             <span className="shell__avatar" aria-hidden="true">{initials}</span>

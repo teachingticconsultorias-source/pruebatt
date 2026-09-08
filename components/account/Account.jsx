@@ -11,6 +11,7 @@ import { useUI } from "../ui/UIProvider.jsx";
 import CreditsIndicator from "../CreditsIndicator.jsx";
 import PlanSection from "./PlanSection.jsx";
 import { whatsappLink } from "../../config/plans.js";
+import { nombreDePlan } from "../useMyPlan.js";
 
 /* ==========================================================================
    MI CUENTA
@@ -41,6 +42,7 @@ const TABS = [
 export default function Account({
   profile,
   dbProfile,
+  planVigente = null,
   initialTab = "perfil",
   onClose,
   onSaveProfile,
@@ -62,7 +64,10 @@ export default function Account({
   const initials =
     `${(profile.nombres?.[0] || "D").toUpperCase()}${(profile.apellidos?.[0] || "").toUpperCase()}`;
   const fullName = [profile.nombres, profile.apellidos].filter(Boolean).join(" ") || "Docente";
-  const plan = dbProfile?.plan || "gratuito";
+  // El plan efectivo, el mismo que ven los créditos y Plan y uso. Antes salía
+  // de `docentes.plan`, que nadie actualiza al aprobar un pago.
+  const plan = nombreDePlan(planVigente);
+  const esGratuito = (planVigente?.plan || "free") === "free";
   const joined = profile.createdAt
     ? new Intl.DateTimeFormat("es-PE", { day: "numeric", month: "long", year: "numeric" }).format(new Date(profile.createdAt))
     : null;
@@ -118,7 +123,7 @@ export default function Account({
                   <div className="acc__idbadges">
                     <Badge tone="brand">Docente</Badge>
                     <Badge tone="neutral">{profile.nivel === "secundaria" ? "Secundaria" : "Primaria"}</Badge>
-                    <Badge tone={plan === "gratuito" ? "neutral" : "success"}>Plan {plan}</Badge>
+                    <Badge tone={esGratuito ? "neutral" : "success"}>Plan {plan}</Badge>
                   </div>
                 </div>
               </div>

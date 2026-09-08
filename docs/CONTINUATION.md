@@ -1168,11 +1168,64 @@ Ningún botón de compra apunta al primero. Queda como única constante con un
 teléfono en el frontend, documentada; moverlo a la base pediría migración y
 no toca ahora.
 
+## EL PLAN SE LEÍA DE DOS SITIOS · 2026-09-06
+
+Con el plan Pro ya activo en la base, la aplicación decía dos cosas a la vez:
+créditos 100/100 y barra lateral «Gratuito».
+
+### No era falta de refresco: eran datos distintos
+
+| Zona | Leía | Correcto |
+|---|---|---|
+| Créditos | `/api/credits` → `effective_plan()` | sí |
+| Mi cuenta → Plan y uso | `get_my_plan()` → `effective_plan()` | sí |
+| **Barra lateral** | **`docentes.plan`** | **no** |
+| **Distintivo de Perfil** | **`docentes.plan`** | **no** |
+
+`docentes.plan` es una columna de texto anterior al núcleo comercial. La
+migración 002 la dejó donde estaba a propósito y **nadie la escribe**: aprobar
+un pago crea una fila en `subscriptions`. Así que la barra no estaba
+desactualizada — leía un dato que ya no significa nada.
+
+Por eso no se arreglaba refrescando, ni escribiendo en esa columna. Se arregla
+dejando de leerla.
+
+### Una sola fuente
+
+`components/useMyPlan.js` envuelve `get_my_plan()`. Lo usan la barra lateral,
+Mi cuenta y Plan y uso. En todo el frontend hay **una** llamada a ese RPC, y
+hay un test que falla si aparece una segunda.
+
+### El card «Plan actual» ya no vende por WhatsApp
+
+Era un `<a href={whatsappLink(...)}>` con el teléfono comercial y el mensaje
+«deseo mejorar mi plan». Ahora es un `<button>` que abre Mi cuenta → Plan y
+uso, para Free y para Pro. Llevar fuera de la aplicación a quien iba a pagar
+sólo sirve para perderla.
+
+### Reactividad sin cerrar sesión
+
+Plan y créditos se revalidan con las mismas señales: `focus` y
+`visibilitychange`. La segunda importa en el móvil, que es donde la docente lee
+el WhatsApp que le dice que su plan ya está activo: al volver a la aplicación
+lo ve, sin recargar.
+
+### Los WhatsApp que quedan, clasificados
+
+Ninguno es de compra:
+
+  · pie de página, ayuda, consulta institucional, Libro de Reclamaciones
+    → `config/plans.js` · `WHATSAPP_NUMBER`, contacto general
+  · aviso posterior al pago
+    → `payment_settings.whatsapp`, editable desde Administración
+
+En el bundle construido no queda **ningún** `wa.me/` seguido de un número
+literal.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
-`git push origin main` con el ajuste de la portada, y despues los dos pasos
-manuales que activan el cobro: el WhatsApp en Admin → Configuracion y las
-variables del correo en Vercel. Supabase no necesita nada.
+`git push origin main` con la unificacion del plan, y despues comprobar en
+produccion que la barra lateral dice Pro sin cerrar sesion.
 
-Pendiente y sin autorizar: borrar el subarbol muerto RegistrationGate →
-ImprovedLanding → PlansModal → LegalModal (~600 lineas en App.jsx).
+Pendiente y sin autorizar: borrar el subarbol muerto RegistrationGate ->
+ImprovedLanding -> PlansModal -> LegalModal (~600 lineas en App.jsx).

@@ -11,6 +11,7 @@ import { Badge, Alert, Skeleton } from "../ui/Feedback.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
 import CreditsIndicator from "../CreditsIndicator.jsx";
 import { enlaceAvisoWhatsApp } from "./avisoWhatsApp.js";
+import { useMyPlan } from "../useMyPlan.js";
 
 /* ==========================================================================
    MI PLAN · lado del docente
@@ -86,7 +87,9 @@ function BotonWhatsApp({ whatsapp, datos, etiqueta, variante = "primary" }) {
 }
 
 export default function PlanSection() {
-  const [planActual, setPlanActual] = useState(null);
+  // Mismo hook que alimenta la barra lateral y Mi cuenta: una sola fuente,
+  // resuelta por `effective_plan()`.
+  const { plan: planActual, recargar: recargarPlan } = useMyPlan();
   const [catalogo, setCatalogo] = useState([]);
   const [ajustes, setAjustes] = useState(null);
   const [metodos, setMetodos] = useState([]);
@@ -103,8 +106,7 @@ export default function PlanSection() {
       const { data: sesion } = await supabase.auth.getSession();
       const token = sesion?.session?.access_token;
 
-      const [mi, planes, cfg, mets, historial] = await Promise.all([
-        supabase.rpc("get_my_plan"),
+      const [planes, cfg, mets, historial] = await Promise.all([
         supabase.from("plans")
           .select("code,name,description,benefits,ai_weekly_limit,price_cents,currency,billing_period_months")
           .eq("is_active", true).order("sort_order"),
@@ -119,7 +121,6 @@ export default function PlanSection() {
           : Promise.resolve(null),
       ]);
 
-      setPlanActual(mi?.data || null);
       setCatalogo(planes?.data || []);
       setAjustes(cfg?.data || null);
       setMetodos(mets?.data || []);
@@ -132,6 +133,9 @@ export default function PlanSection() {
   }, []);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  /** Recarga lo de esta sección y, con ella, el plan compartido. */
+  const recargarTodo = useCallback(() => { cargar(); recargarPlan(); }, [cargar, recargarPlan]);
 
   if (cargando) {
     return (
@@ -304,7 +308,7 @@ export default function PlanSection() {
           ajustes={ajustes}
           metodos={metodos}
           onCerrar={() => setEligiendo(null)}
-          onHecho={() => { setEligiendo(null); cargar(); }}
+          onHecho={() => { setEligiendo(null); recargarTodo(); }}
         />
       )}
     </div>

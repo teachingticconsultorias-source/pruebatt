@@ -5,6 +5,8 @@ import fs from "node:fs";
 
 import Landing from "../components/landing/Landing.jsx";
 import { usePlanCatalog, planDesdeCatalogo } from "../components/usePlanCatalog.js";
+import { nombreDePlan } from "../components/useMyPlan.js";
+import AppShell from "../components/layout/AppShell.jsx";
 import { FALLBACK_PLANS } from "../config/plans.js";
 
 /* ============================================================================
@@ -211,5 +213,137 @@ describe("render · catálogo de planes", () => {
     expect(fila.period).toBe("para conocer SciVerse");
     // Sin viñetas en la base, se deriva una del límite en vez de dejarlo vacío.
     expect(fila.benefits).toEqual(["5 creaciones con IA por semana"]);
+  });
+});
+
+/* ============================================================================
+   EL PLAN QUE VE LA DOCENTE SALE DE UN SOLO SITIO
+
+   Tras aprobar un pago, los créditos decían 100/100 y la barra lateral seguía
+   diciendo «Gratuito». No era falta de refresco: eran datos distintos. La
+   barra leía `docentes.plan`, una columna anterior al núcleo comercial que
+   nadie escribe — aprobar un pago crea una fila en `subscriptions` y no la
+   toca. Se arregla dejando de leerla, no refrescándola.
+   ========================================================================== */
+function pintarShell(plan) {
+  return renderToStaticMarkup(
+    <AppShell
+      profile={{ nombres: "Ana", apellidos: "Quispe", correo: "a@x.pe" }}
+      plan={nombreDePlan(plan)}
+      activeSection="inicio"
+      onNavigate={() => {}}
+      onOpenAccount={() => {}}
+      onLogout={() => {}}
+    >
+      <div />
+    </AppShell>
+  );
+}
+
+describe("plan · la barra lateral dice lo mismo que Plan y uso", () => {
+  const FREE = { plan: "free", plan_name: "Gratuito", limit: 5, is_fallback: true };
+  const PRO = { plan: "pro", plan_name: "Pro", limit: 100, ends_at: "2026-10-08T00:00:00Z" };
+
+  it("con plan gratuito muestra Gratuito", () => {
+    const html = pintarShell(FREE);
+    expect(html).toContain("Plan actual");
+    expect(html).toContain("Gratuito");
+    expect(html).not.toContain(">Pro<");
+  });
+
+  it("con plan Pro muestra Pro, no Gratuito", () => {
+    const html = pintarShell(PRO);
+    expect(html).toContain("Plan actual");
+    expect(html).toContain("Pro");
+    expect(html).not.toContain("Gratuito");
+  });
+
+  it("sin dato todavía cae en Gratuito, nunca en blanco ni en 'undefined'", () => {
+    const html = pintarShell(null);
+    expect(html).toContain("Gratuito");
+    expect(html).not.toContain("undefined");
+  });
+
+  it("cambiar de Free a Pro cambia lo que se pinta", () => {
+    const antes = pintarShell(FREE);
+    const despues = pintarShell(PRO);
+    expect(antes).toContain("Gratuito");
+    expect(despues).not.toContain("Gratuito");
+    expect(nombreDePlan(FREE)).toBe("Gratuito");
+    expect(nombreDePlan(PRO)).toBe("Pro");
+  });
+
+  it("el nombre NO se deduce de los créditos ni se inventa", () => {
+    // nombreDePlan sólo lee `plan_name`; no mira límites ni consumo.
+    expect(nombreDePlan({ limit: 100 })).toBe("Gratuito");
+    expect(nombreDePlan({ plan: "pro" })).toBe("Gratuito");
+    expect(nombreDePlan({ plan_name: "Pro", limit: 5 })).toBe("Pro");
+  });
+});
+
+describe("plan · el card 'Plan actual' no lleva a WhatsApp", () => {
+  const html = pintarShell({ plan: "free", plan_name: "Gratuito", limit: 5 });
+
+  it("es un botón, no un enlace externo", () => {
+    const card = html.slice(html.indexOf("shell__plan"));
+    const hasta = card.slice(0, card.indexOf("shell__user"));
+    expect(hasta).not.toContain("href");
+    expect(hasta).not.toContain("wa.me");
+    expect(hasta).not.toContain("whatsapp");
+    expect(hasta).not.toContain("target=");
+  });
+
+  it("abre Mi cuenta → Plan y uso", () => {
+    const src = fs.readFileSync("components/layout/AppShell.jsx", "utf8");
+    expect(src).toContain('onOpenAccount("plan")');
+    expect(src).not.toContain("whatsappLink");
+    expect(src).not.toContain("mejorar mi plan");
+  });
+
+  it("en toda la barra lateral no hay ni un enlace a WhatsApp", () => {
+    expect(html).not.toContain("wa.me");
+    expect(html).not.toContain("whatsapp");
+    expect(html).not.toContain("921090875");
+  });
+});
+
+describe("plan · una sola fuente de verdad", () => {
+  it("get_my_plan se llama en un único sitio del frontend", () => {
+    const ficheros = ["App.jsx", "components/account/Account.jsx",
+                      "components/account/PlanSection.jsx",
+                      "components/layout/AppShell.jsx",
+                      "components/CreditsIndicator.jsx"];
+    for (const f of ficheros) {
+      expect(fs.readFileSync(f, "utf8"), f).not.toContain('rpc("get_my_plan")');
+    }
+    expect(fs.readFileSync("components/useMyPlan.js", "utf8")).toContain('rpc("get_my_plan")');
+  });
+
+  it("nadie pinta el plan desde la columna legacy docentes.plan", () => {
+    const app = fs.readFileSync("App.jsx", "utf8");
+    expect(app).not.toContain("plan={dbProfile?.plan}");
+    const cuenta = fs.readFileSync("components/account/Account.jsx", "utf8");
+    expect(cuenta).not.toContain('dbProfile?.plan || "gratuito"');
+    expect(cuenta).toContain("nombreDePlan(planVigente)");
+  });
+
+  it("el plan y los créditos se revalidan con las mismas señales", () => {
+    for (const f of ["components/useMyPlan.js", "components/CreditsIndicator.jsx"]) {
+      const src = fs.readFileSync(f, "utf8");
+      expect(src, `${f} focus`).toContain('addEventListener("focus"');
+      expect(src, `${f} visibilitychange`).toContain('"visibilitychange"');
+    }
+  });
+
+  it("el flujo post-pago sigue usando payment_settings.whatsapp", () => {
+    const plansec = fs.readFileSync("components/account/PlanSection.jsx", "utf8");
+    expect(plansec).toContain("ajustes?.whatsapp");
+    expect(plansec).not.toContain("whatsappLink");
+    const aviso = fs.readFileSync("components/account/avisoWhatsApp.js", "utf8");
+    expect(aviso).toContain("https://wa.me/${numero}");
+  });
+
+  it("la barra lateral monta sin lanzar", () => {
+    expect(() => pintarShell({ plan: "pro", plan_name: "Pro", limit: 100 })).not.toThrow();
   });
 });
