@@ -259,7 +259,9 @@ Región: ${form.region || "No indicada"}. Tema: ${form.tema || "No indicado"}.
 Competencia: ${form.competencia || "No indicada"}. Capacidades: ${capacities || "No indicadas"}.
 Propósito actual: ${form.proposito || ""}. Contexto actual: ${form.contexto || ""}.
 ${suggestionInstructions[field] || ""}
-Responde únicamente con una sugerencia lista para pegar en el formulario, en español claro y sin encabezados.`;
+Devuelve únicamente un objeto JSON con esta forma exacta:
+{"suggestion": "la sugerencia lista para pegar, en español claro y sin encabezados"}
+Sin markdown, sin bloques de código y sin ningún texto fuera del JSON.`;
     const instrumentPrompt = `Genera un instrumento de evaluación CNEB de tipo ${instrumentType === "rubric" ? "rúbrica analítica" : "lista de cotejo"}.
 Nivel: ${form.nivel}. Grado: ${form.grado}. Área: ${form.area}. Región: ${form.region || "No indicada"}.
 Tema: ${form.tema}. Competencia: ${form.competencia}. Capacidades seleccionadas: ${capacities}.
@@ -315,6 +317,10 @@ El reto debe exigir colaboración real, asignar roles complementarios y terminar
         systemInstruction: SYSTEM_INSTRUCTION,
         responseSchema,
         maxOutputTokens,
+        // Sólo las sugerencias breves. Las generaciones grandes conservan el
+        // nivel por defecto del modelo: ahí el razonamiento es lo que sostiene
+        // la calidad pedagógica. Ver la explicación en `_lib/gemini.js`.
+        ...(suggestionMode ? { thinkingLevel: "minimal" } : {}),
         tool: moduleMode ? `sesion-modulo:${moduleName}` : `sesion:${mode || "session"}`,
       });
 

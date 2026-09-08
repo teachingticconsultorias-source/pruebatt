@@ -308,3 +308,188 @@ describe("ia · el modelo es uno y está centralizado", () => {
     expect(getGeminiModel()).toBe("otro-modelo");
   });
 });
+
+/* ============================================================================
+   EL ARREGLO DE «SUGERIR CON KANTU»
+
+   Medición real de producción, no supuesto:
+     maxOutputTokens=900 · pensamiento=860 · salida=22 · finishReason=MAX_TOKENS
+     textLength=112 · motivo=TRUNCADO
+
+   Los tokens de pensamiento salen del MISMO presupuesto que la respuesta. Por
+   eso el arreglo no es un presupuesto mayor: es no gastarlo razonando sobre
+   una tarea que no lo necesita.
+
+   `gemini-3.6-flash` se controla con `thinkingLevel` (minimal | low | medium |
+   high, por defecto medium), NO con `thinkingBudget`, y no tiene un apagado
+   real: `minimal` es lo más bajo. Se espera algún token de pensamiento.
+   ========================================================================== */
+describe("gemini · pensamiento al mínimo, sólo en las sugerencias", () => {
+  function capturar(respuestaDada) {
+    const cuerpos = [];
+    global.fetch = vi.fn(async (_u, opts) => {
+      cuerpos.push(JSON.parse(opts.body));
+      return respuestaDada;
+    });
+    return cuerpos;
+  }
+
+  it("una sugerencia envía thinkingLevel = minimal", async () => {
+    const cuerpos = capturar(respuesta({ text: '{"suggestion":"ok"}' }));
+    await generateJson({ ...LLAMADA, thinkingLevel: "minimal" });
+    expect(cuerpos[0].generationConfig.thinkingConfig).toEqual({ thinkingLevel: "minimal" });
+  });
+
+  it("NO se envía thinkingBudget, que no corresponde a este modelo", async () => {
+    const cuerpos = capturar(respuesta({ text: '{"suggestion":"ok"}' }));
+    await generateJson({ ...LLAMADA, thinkingLevel: "minimal" });
+    expect(JSON.stringify(cuerpos[0])).not.toContain("thinkingBudget");
+  });
+
+  it("una generación grande NO recibe thinkingConfig", async () => {
+    const cuerpos = capturar(respuesta({ text: '{"titulo":"x"}' }));
+    await generateJson({ ...LLAMADA, maxOutputTokens: 7500, tool: "steam-proyecto" });
+    expect(cuerpos[0].generationConfig.thinkingConfig).toBeUndefined();
+    expect(cuerpos[0].generationConfig.maxOutputTokens).toBe(7500);
+  });
+
+  it("una sugerencia hace UNA sola llamada a Gemini", async () => {
+    const cuerpos = capturar(respuesta({ text: '{"suggestion":"ok"}' }));
+    await generateJson({ ...LLAMADA, thinkingLevel: "minimal" });
+    expect(cuerpos).toHaveLength(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("un 400 NO dispara ningún reintento", async () => {
+    // La red de seguridad anterior estaba mal planteada: el riesgo real no es
+    // el rechazo, es que el parámetro se acepte y se ignore en silencio.
+    let llamadas = 0;
+    global.fetch = vi.fn(async () => {
+      llamadas += 1;
+      return { ok: false, status: 400,
+               json: async () => ({ error: { message: "thinkingConfig not supported" } }) };
+    });
+    await expect(generateJson({ ...LLAMADA, thinkingLevel: "minimal" })).rejects.toBeTruthy();
+    expect(llamadas).toBe(1);
+  });
+
+  it("el presupuesto de la sugerencia sigue siendo bajo", async () => {
+    const cuerpos = capturar(respuesta({ text: '{"suggestion":"ok"}' }));
+    await generateJson({ ...LLAMADA, thinkingLevel: "minimal" });
+    expect(cuerpos[0].generationConfig.maxOutputTokens).toBe(900);
+  });
+
+  it("con el pensamiento al mínimo, el mismo caso real ahora pasa", async () => {
+    // `minimal` no es cero: se espera algo de pensamiento, pero ya cabe la
+    // respuesta dentro de los mismos 900 tokens.
+    global.fetch = vi.fn(async () =>
+      respuesta({ text: '{"suggestion":"En la comunidad el acceso al agua disminuye algunos meses del año."}',
+                  finishReason: "STOP", tokens: { pensamiento: 48, salida: 34 } }));
+
+    const { data } = await generateJson({ ...LLAMADA, thinkingLevel: "minimal" });
+    expect(data.suggestion.length).toBeGreaterThan(40);
+
+    const linea = logs.find((l) => l.includes("[sciverse:gemini]"));
+    const datos = JSON.parse(linea.slice(linea.indexOf("{")));
+    expect(datos.ok).toBe(true);
+    expect(datos.finishReason).toBe("STOP");
+    expect(datos.thinkingLevel).toBe("minimal");
+    expect(datos.maxOutputTokens).toBe(900);
+    // Se registra lo que gastó de verdad, para poder comprobarlo en producción.
+    expect(datos.tokens.pensamiento).toBe(48);
+  });
+
+  it("el log dice el nivel también cuando no se configura", async () => {
+    global.fetch = vi.fn(async () => respuesta({ text: '{"titulo":"x"}' }));
+    await generateJson({ ...LLAMADA, maxOutputTokens: 7500 });
+    const linea = logs.find((l) => l.includes("[sciverse:gemini]"));
+    expect(JSON.parse(linea.slice(linea.indexOf("{"))).thinkingLevel).toBeNull();
+  });
+
+  it("truncar sigue siendo un error controlado", async () => {
+    global.fetch = vi.fn(async () =>
+      respuesta({ text: '{"suggestion":"corta', finishReason: "MAX_TOKENS" }));
+    await expect(generateJson({ ...LLAMADA, thinkingLevel: "minimal" }))
+      .rejects.toMatchObject({ code: "AI_INCOMPLETE" });
+  });
+});
+
+/* ========================================================================== */
+describe("ia · prompt y schema dicen lo mismo", () => {
+  const STEAM = fs.readFileSync("api/generate-project-steam.js", "utf8");
+  const SESION = fs.readFileSync("api/generate-session.js", "utf8");
+
+  it("el prompt de sugerencia pide JSON, no texto suelto", () => {
+    for (const [nombre, src] of [["steam", STEAM], ["sesion", SESION]]) {
+      expect(src, nombre).toContain('{"suggestion":');
+      expect(src, nombre).toContain("Sin markdown");
+    }
+  });
+
+  it("ya no pide «responde solo el texto», que contradecía al schema", () => {
+    expect(STEAM).not.toContain("Responde solo el texto");
+    expect(SESION).not.toContain("Responde únicamente con una sugerencia lista");
+  });
+
+  it("el schema de sugerencia sigue siendo el mismo objeto simple", () => {
+    for (const src of [STEAM, SESION]) {
+      expect(src).toMatch(/suggestion:\s*\{\s*type:\s*"string"\s*\}/);
+    }
+  });
+});
+
+/* ========================================================================== */
+describe("ia · el arreglo no toca lo que ya funcionaba", () => {
+  const STEAM = fs.readFileSync("api/generate-project-steam.js", "utf8");
+  const SESION = fs.readFileSync("api/generate-session.js", "utf8");
+  const LIB = fs.readFileSync("api/_lib/gemini.js", "utf8");
+
+  it("los presupuestos no se movieron", () => {
+    expect(STEAM).toContain("maxOutputTokens: 900");   // sugerencia STEAM
+    expect(STEAM).toContain("maxOutputTokens: 7500");  // proyecto completo
+    expect(SESION).toContain("? 800");                 // sugerencia sesión
+    expect(SESION).toContain(": 8192");                // sesión completa
+    expect(SESION).toContain("? 4500");                // reto
+    expect(SESION).toContain("? 5000");                // instrumento
+  });
+
+  it("thinkingLevel aparece en exactamente dos sitios, las dos sugerencias", () => {
+    expect((STEAM.match(/thinkingLevel: "minimal"/g) || []).length).toBe(1);
+    expect((SESION.match(/thinkingLevel: "minimal"/g) || []).length).toBe(1);
+    expect(SESION).toContain('suggestionMode ? { thinkingLevel: "minimal" }');
+  });
+
+  it("no queda rastro del fallback de thinkingBudget", () => {
+    for (const [nombre, src] of [["steam", STEAM], ["sesion", SESION], ["lib", LIB]]) {
+      expect(src, nombre).not.toContain("thinkingBudget:");
+      expect(src, nombre).not.toContain("fallbackMaxOutputTokens");
+      expect(src, nombre).not.toContain("THINKING_NO_SOPORTADO");
+    }
+  });
+
+  it("la librería sólo manda thinkingConfig si se lo piden", () => {
+    expect(LIB).toContain("if (thinkingLevel) {");
+    expect(LIB).toContain("thinkingConfig = { thinkingLevel }");
+  });
+
+  it("la sugerencia sigue sin consumir crédito", () => {
+    const iSug = STEAM.indexOf('if (mode === "suggestion")');
+    const iRetorno = STEAM.indexOf("return res.status(200).json(data);", iSug);
+    const iCredito = STEAM.indexOf("await withCredit(");
+    expect(iSug).toBeGreaterThan(0);
+    expect(iRetorno).toBeGreaterThan(iSug);
+    expect(iCredito).toBeGreaterThan(iRetorno);
+    expect(SESION).toContain("!moduleMode && !suggestionMode");
+  });
+
+  it("la generación completa sigue cobrando y devolviendo el crédito", () => {
+    expect(STEAM).toContain("withCredit(");
+    expect(SESION).toContain("withCredit(");
+  });
+
+  it("el modelo no se escribió a mano en ningún endpoint", () => {
+    for (const src of [STEAM, SESION]) {
+      expect(src).not.toMatch(/["']gemini-[\d.]+/);
+    }
+  });
+});

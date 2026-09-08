@@ -16,6 +16,31 @@
 //   1. declarar el valor por defecto en UN solo sitio (aquí),
 //   2. registrar un aviso en el log del servidor cuando se usa,
 //   3. documentar la variable en `.env.example`.
+//
+// COMPROBADO EN PRODUCCIÓN (2026-09-06)
+// -------------------------------------
+// `GEMINI_MAIN_MODEL` NO está definida en Vercel: los logs muestran el aviso
+// del paso 2 y `model: "gemini-3.6-flash"`, es decir, se está usando este
+// valor por defecto. El modelo responde correctamente. Queda pendiente
+// fijarlo de forma explícita en Vercel para que un cambio del valor por
+// defecto no mueva el modelo de producción sin que nadie lo decida.
+//
+// El modelo RAZONA: en la misma medición gastó 860 de 900 tokens pensando.
+// Ver el comentario de `usoDeTokens` más abajo.
+//
+// CÓMO SE CONTROLA EL PENSAMIENTO EN ESTE MODELO
+// ----------------------------------------------
+// `gemini-3.6-flash` usa `thinkingConfig.thinkingLevel`, con los niveles
+// minimal | low | medium | high, y su valor por defecto es `medium`. NO usa
+// `thinkingBudget`, y no tiene un apagado real como sí tenía Gemini 2.5
+// Flash: lo más bajo es `minimal`, así que hay que esperar algún token de
+// pensamiento, no cero.
+//
+// Por eso tampoco sirve una red de seguridad basada en "si devuelve 400,
+// reintenta": el riesgo real no es el rechazo, es que un parámetro que no
+// corresponde al modelo se acepte y se ignore en silencio, y sigamos gastando
+// el presupuesto pensando sin enterarnos. El log de `thinkingLevel` junto a
+// `tokens.pensamiento` es lo que permite comprobar que surtió efecto.
 
 import { randomUUID } from "node:crypto";
 
@@ -107,10 +132,10 @@ export async function generateJson({
   maxOutputTokens,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   tool = "desconocida",
+  thinkingLevel,
 }) {
   const requestId = randomUUID().slice(0, 8);
   const inicio = Date.now();
-  const base = { requestId, tool, maxOutputTokens };
   const apiKey = getGeminiApiKey();
   const model = getGeminiModel();
 
@@ -126,9 +151,18 @@ export async function generateJson({
       responseSchema,
     },
   };
+
+  // Sólo si el llamante lo pide explícitamente. Sin este parámetro, el modelo
+  // usa su nivel por defecto y nada cambia respecto a lo que ya funcionaba.
+  if (thinkingLevel) {
+    body.generationConfig.thinkingConfig = { thinkingLevel };
+  }
+
   if (systemInstruction) {
     body.systemInstruction = { parts: [{ text: systemInstruction }] };
   }
+
+  const base = { requestId, tool, maxOutputTokens, thinkingLevel: thinkingLevel || null };
 
   let response;
   try {

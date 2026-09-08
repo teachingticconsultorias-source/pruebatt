@@ -74,12 +74,31 @@ Nivel: ${form.nivel}. Grado: ${form.grado}. Región: ${form.region||"No indicada
 Tema: ${form.tema||"No indicado"}. Situación actual: ${form.situacion||""}.
 Áreas STEAM: ${(form.areasSTEAM||[]).join(", ")}.
 ${instructions[field]}
-Responde solo el texto listo para pegar en el formulario.`;
 
+Devuelve únicamente un objeto JSON con esta forma exacta:
+{"suggestion": "el texto listo para pegar en el formulario"}
+Sin markdown, sin bloques de código y sin ningún texto fuera del JSON.`;
+
+      // Sugerencias breves: pensamiento al mínimo.
+      //
+      // MEDIDO EN PRODUCCIÓN, no supuesto: con maxOutputTokens=900 el modelo
+      // gastó 860 tokens pensando y sólo 22 escribiendo, terminó en MAX_TOKENS
+      // y la sugerencia llegó cortada a 112 caracteres. Los tokens de
+      // pensamiento salen del MISMO presupuesto que la respuesta, así que la
+      // solución no es un presupuesto mayor: es no gastarlo razonando sobre
+      // una tarea que no lo necesita.
+      //
+      // `gemini-3.6-flash` se controla con `thinkingLevel`, cuyo valor por
+      // defecto es `medium`. `minimal` es lo más bajo que admite: no existe un
+      // apagado real, así que se espera algún token de pensamiento, no cero.
+      //
+      // El presupuesto se mantiene en 900 a propósito. Si con `minimal` no
+      // bastara, el log lo dirá y se sube con criterio, no por si acaso.
       const { data } = await generateJson({
         prompt,
         responseSchema: SUGGESTION_SCHEMA,
         maxOutputTokens: 900,
+        thinkingLevel: "minimal",
         tool: `steam-sugerencia:${field}`,
       });
       return res.status(200).json(data);
