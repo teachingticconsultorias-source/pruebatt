@@ -101,11 +101,27 @@ export const Errors = {
       504
     ),
 
-  aiIncomplete: () =>
+  /**
+   * `details` NO viaja al cliente: se queda en el log del servidor. Sin él,
+   * las tres razones muy distintas por las que una generación llega
+   * incompleta —sin texto, truncada por presupuesto, o JSON inválido—
+   * producían la misma línea de log vacía y era imposible saber cuál era.
+   */
+  aiIncomplete: (details = null) =>
     new AppError(
       "AI_INCOMPLETE",
       "La respuesta llegó incompleta. Vuelve a intentarlo.",
-      502
+      502,
+      details
+    ),
+
+  /** El proveedor bloqueó la petición o la respuesta por sus filtros. */
+  aiBlocked: (details = null) =>
+    new AppError(
+      "AI_BLOCKED",
+      "No pudimos generar este contenido. Prueba a reformular el tema o el contexto.",
+      422,
+      details
     ),
 
   internal: (details = null) =>

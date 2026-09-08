@@ -315,6 +315,7 @@ El reto debe exigir colaboración real, asignar roles complementarios y terminar
         systemInstruction: SYSTEM_INSTRUCTION,
         responseSchema,
         maxOutputTokens,
+        tool: moduleMode ? `sesion-modulo:${moduleName}` : `sesion:${mode || "session"}`,
       });
 
     // 5) Cobro de créditos.

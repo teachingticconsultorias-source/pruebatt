@@ -80,6 +80,7 @@ Responde solo el texto listo para pegar en el formulario.`;
         prompt,
         responseSchema: SUGGESTION_SCHEMA,
         maxOutputTokens: 900,
+        tool: `steam-sugerencia:${field}`,
       });
       return res.status(200).json(data);
     }
@@ -133,6 +134,7 @@ REGLAS:
           systemInstruction: SYSTEM_INSTRUCTION,
           responseSchema: PROJECT_SCHEMA,
           maxOutputTokens: 7500,
+          tool: "steam-proyecto",
         })
     );
 
