@@ -155,18 +155,18 @@ export default function Landing({ onRegister, onLogin }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [menuOpen]);
 
-  function choosePlan(plan) {
-    // Por precio y no por identificador: el catálogo real usa el código
-    // `free`, y comparar contra `"gratuito"` mandaría a WhatsApp a quien sólo
-    // quiere crear una cuenta gratis.
-    if (Number(plan.price) === 0) return onRegister();
-    window.open(
-      whatsappLink(
-        `Hola Teaching TIC, deseo adquirir el Plan ${plan.name} de SciVerse por S/${plan.price}. ¿Me comparten los datos para pagar por Plin o Yape?`
-      ),
-      "_blank",
-      "noopener,noreferrer"
-    );
+  // Cualquier plan lleva a crear cuenta, gratuito o de pago.
+  //
+  // Antes el plan de pago abría WhatsApp pidiendo «los datos para pagar». Eso
+  // era el flujo de cuando no existía otro; ahora el pago vive dentro de
+  // SciVerse —Mi cuenta → Plan y uso— y enseñar datos de pago a alguien sin
+  // sesión no tendría a quién activarle nada después.
+  //
+  // Se distingue por precio y no por identificador: el catálogo real usa el
+  // código `free`, y comparar contra `"gratuito"` rompía el botón del plan
+  // gratuito en cuanto los planes pasaron a leerse de la base.
+  function choosePlan() {
+    onRegister();
   }
 
   function contactInstitutional() {
@@ -367,7 +367,7 @@ export default function Landing({ onRegister, onLogin }) {
           <div className="lp-section__head">
             <Badge tone="brand">Planes</Badge>
             <h2 className="sv-h1">Empieza gratis. Cambia cuando lo necesites.</h2>
-            <p>Pago por Plin o Yape a nombre de Teaching TIC. La activación se confirma por WhatsApp.</p>
+            <p>Pago por Yape o Plin. Registras tu pago en SciVerse y nuestro equipo lo verifica antes de activar tu plan.</p>
           </div>
 
           <div className="lp-plans">
@@ -391,7 +391,9 @@ export default function Landing({ onRegister, onLogin }) {
                   iconRight={ArrowRight}
                   onClick={() => choosePlan(plan)}
                 >
-                  {Number(plan.price) === 0 ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`}
+                  {Number(plan.price) === 0
+                    ? "Crear cuenta gratis"
+                    : `Crear cuenta y elegir ${plan.name}`}
                 </Button>
               </article>
             ))}

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import fs from "node:fs";
 
 import Landing from "../components/landing/Landing.jsx";
 import { usePlanCatalog, planDesdeCatalogo } from "../components/usePlanCatalog.js";
@@ -58,6 +59,89 @@ describe("render · la aplicación no se queda en blanco", () => {
     const html = renderToStaticMarkup(<Landing onRegister={() => {}} onLogin={() => {}} />);
     expect(html).toContain("Crear cuenta gratis");
     expect(FALLBACK_PLANS.find((p) => Number(p.price) === 0)).toBeTruthy();
+  });
+});
+
+/* ============================================================================
+   LA PORTADA NO VENDE POR WHATSAPP
+
+   El flujo real es: la docente crea su cuenta, registra el pago dentro de
+   SciVerse y el equipo lo verifica antes de activar. Un CTA público que abría
+   WhatsApp pidiendo «los datos para pagar» contaba otra historia — y además
+   enseñaba datos de pago a alguien sin sesión, a quien luego no hay a quién
+   activarle nada.
+   ========================================================================== */
+describe("portada · comprar ocurre dentro de SciVerse", () => {
+  const html = renderToStaticMarkup(<Landing onRegister={() => {}} onLogin={() => {}} />);
+
+  it("el CTA del plan de pago invita a crear cuenta", () => {
+    expect(html).toContain("Crear cuenta y elegir Pro");
+    expect(html).toContain("Crear cuenta gratis");
+  });
+
+  it("el CTA del plan de pago llama a onRegister, no abre WhatsApp", () => {
+    let registro = 0;
+    const abrir = globalThis.window?.open;
+    renderToStaticMarkup(<Landing onRegister={() => { registro += 1; }} onLogin={() => {}} />);
+    // En render de servidor no hay clic; se comprueba en la fuente que el
+    // manejador no tiene otra salida que el registro.
+    const src = fs.readFileSync("components/landing/Landing.jsx", "utf8");
+    const fn = src.slice(src.indexOf("function choosePlan"), src.indexOf("function contactInstitutional"));
+    expect(fn).toContain("onRegister()");
+    expect(fn).not.toContain("whatsappLink");
+    expect(fn).not.toContain("wa.me");
+    expect(abrir === globalThis.window?.open).toBe(true);
+    expect(registro).toBe(0); // nada se dispara en el render
+  });
+
+  it("no queda el copy de la activación por WhatsApp", () => {
+    expect(html).not.toContain("La activación se confirma por WhatsApp");
+    expect(html).toContain("lo verifica antes de activar tu plan");
+  });
+
+  it("la sección de planes no enlaza a WhatsApp en ningún sitio", () => {
+    const planes = html.slice(html.indexOf('id="planes"'));
+    const hasta = planes.slice(0, planes.indexOf("</section>"));
+    expect(hasta).not.toContain("wa.me");
+    expect(hasta).not.toContain("whatsapp");
+  });
+
+  it("ningún componente lleva un teléfono escrito a mano", () => {
+    const ficheros = ["App.jsx", "components/landing/Landing.jsx",
+                      "components/account/PlanSection.jsx",
+                      "components/account/avisoWhatsApp.js",
+                      "components/admin/Comercial.jsx"];
+    for (const f of ficheros) {
+      const src = fs.readFileSync(f, "utf8");
+      expect(src, `${f} · 921090875`).not.toContain("921090875");
+      expect(src, `${f} · 931582435`).not.toContain("931582435");
+    }
+  });
+
+  it("PlanMini, que era código muerto con el teléfono dentro, ya no existe", () => {
+    expect(fs.readFileSync("App.jsx", "utf8")).not.toContain("PlanMini");
+  });
+
+  it("el único wa.me operativo es el de después del pago", () => {
+    // El del flujo post-pago usa payment_settings.whatsapp; el de config es
+    // contacto general (pie, consulta institucional, reclamaciones).
+    const aviso = fs.readFileSync("components/account/avisoWhatsApp.js", "utf8");
+    expect(aviso).toContain("https://wa.me/${numero}");
+    expect(aviso).toContain("normalizarWhatsApp");
+
+    const cfg = fs.readFileSync("config/plans.js", "utf8");
+    expect(cfg).toContain("NO ES EL WHATSAPP DE PAGOS");
+
+    // Y ninguna pantalla de compra lo usa.
+    const planSection = fs.readFileSync("components/account/PlanSection.jsx", "utf8");
+    expect(planSection).not.toContain("whatsappLink");
+  });
+
+  it("el plan gratuito no toca el flujo de pago", () => {
+    const src = fs.readFileSync("components/landing/Landing.jsx", "utf8");
+    // Distinguir por precio y no por el identificador `gratuito`.
+    expect(src).toContain("Number(plan.price) === 0");
+    expect(src).not.toContain('=== "gratuito"');
   });
 });
 

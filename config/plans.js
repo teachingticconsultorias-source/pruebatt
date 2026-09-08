@@ -21,7 +21,21 @@
    (CreditsIndicator), no de esta constante.
    ========================================================================== */
 
-/** Contacto comercial único. Antes estaba repetido en 8 sitios de App.jsx. */
+/**
+ * WhatsApp de CONTACTO GENERAL. Antes estaba repetido en 8 sitios de App.jsx.
+ *
+ * ⚠️ NO ES EL WHATSAPP DE PAGOS. Son dos canales distintos y conviene no
+ * confundirlos:
+ *
+ *   · éste          → dudas, consultas institucionales, Libro de Reclamaciones.
+ *                     Vive aquí porque es identidad de la empresa, no
+ *                     configuración comercial.
+ *   · el de pagos   → `payment_settings.whatsapp`, editable desde
+ *                     Administración, y sólo se usa DESPUÉS de que una docente
+ *                     registre su solicitud (`components/account/avisoWhatsApp.js`).
+ *
+ * Ningún botón de compra debe apuntar aquí: comprar ocurre dentro de SciVerse.
+ */
 export const WHATSAPP_NUMBER = "51921090875";
 
 export function whatsappLink(message) {

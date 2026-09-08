@@ -20,7 +20,7 @@ import { useUI } from "./components/ui/UIProvider.jsx";
 import "./components/dashboard/dashboard.css";
 import "./components/layout/appshell.css";
 import "./components/landing/landing.css";
-import { FREE_WEEKLY_AI_LIMIT, whatsappLink } from "./config/plans.js";
+import { FREE_WEEKLY_AI_LIMIT, whatsappLink, CONTACT } from "./config/plans.js";
 import { usePlanCatalog } from "./components/usePlanCatalog.js";
 import "./library.css";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
@@ -3117,11 +3117,7 @@ function ImprovedLanding({ onRegister, onLogin, onForgotPassword }) {
   // NOTA: duplicado histórico de PlansModal.handleChoosePlan. No se usa.
   // Eliminar en el Bloque C junto con el resto de código muerto.
   // eslint-disable-next-line no-unused-vars
-  const choosePlan = (plan) => {
-    if (plan.name === "Gratuito") return onRegister();
-    const message = `Hola Teaching TIC, deseo adquirir el Plan ${plan.name} de SciVerse por S/${plan.price}. ¿Me comparten los datos para pagar por Plin o Yape?`;
-    window.open(`https://wa.me/51921090875?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
-  };
+  const choosePlan = () => onRegister();
 
   return (
     <div className="landing-shell" style={{ background: C.bg, color: C.text, minHeight: "100vh", fontFamily: "'Inter', sans-serif" }}>
@@ -3207,13 +3203,13 @@ function ImprovedLanding({ onRegister, onLogin, onForgotPassword }) {
       <section className="final-cta"><div><span className="eyebrow light"><Sparkles size={13} /> Tu próxima experiencia empieza aquí</span><h2>Explora, adapta y crea con SciVerse.</h2><p>Regístrate una vez y accede gratuitamente a todas las herramientas disponibles.</p></div><button onClick={onRegister} className="light-btn">Crear mi acceso gratuito <ArrowRight size={17} /></button></section>
 
       <footer className="landing-footer expanded-footer">
-        <div className="footer-column"><div className="brand-lockup"><span className="brand-mark"><Microscope size={20} /></span><span><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></span></div><p>Tecnología educativa para experiencias STEAM accesibles, creativas y contextualizadas.</p><div className="social-row"><a href="https://www.facebook.com/teachingticconsultorias/" target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={17} /></a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer" aria-label="WhatsApp"><MessageCircle size={17} /></a></div></div>
+        <div className="footer-column"><div className="brand-lockup"><span className="brand-mark"><Microscope size={20} /></span><span><strong>SciVerse</strong><small>una iniciativa de Teaching TIC</small></span></div><p>Tecnología educativa para experiencias STEAM accesibles, creativas y contextualizadas.</p><div className="social-row"><a href="https://www.facebook.com/teachingticconsultorias/" target="_blank" rel="noreferrer" aria-label="Facebook"><Facebook size={17} /></a><a href={whatsappLink("Hola Teaching TIC, quiero saber más sobre SciVerse.")} target="_blank" rel="noreferrer" aria-label="WhatsApp"><MessageCircle size={17} /></a></div></div>
         <div className="footer-column"><h4>Explora</h4><a href="#demo">Herramientas</a><button onClick={() => setShowPlansModal(true)} style={{ border: 'none', background: 'none', color: 'inherit', cursor: 'pointer', font: 'inherit', padding: 0, textAlign: 'left' }}>Planes</button><a href="#testimonios">Testimonios</a><a href="#preguntas">Preguntas frecuentes</a><button onClick={onRegister}>Crear cuenta</button></div>
         <div className="footer-column"><h4>Legal y confianza</h4><button onClick={() => setLegalView("terms")}>Términos y condiciones</button><button onClick={() => setLegalView("privacy")}>Política de privacidad</button><button onClick={() => setLegalView("ai")}>Política de uso de IA</button><button onClick={() => setLegalView("complaints")}>Libro de Reclamaciones</button></div>
-        <div className="footer-column"><h4>Contacto</h4><p>Teaching TIC Consultorías S.A.C.<br />RUC 20607945331</p><a href="mailto:teachingticconsultorias@gmail.com">teachingticconsultorias@gmail.com</a><a href="https://wa.me/51921090875" target="_blank" rel="noreferrer">+51 921 090 875</a><small>© 2026 Teaching TIC. Todos los derechos reservados.</small></div>
+        <div className="footer-column"><h4>Contacto</h4><p>Teaching TIC Consultorías S.A.C.<br />RUC 20607945331</p><a href="mailto:teachingticconsultorias@gmail.com">teachingticconsultorias@gmail.com</a><a href={whatsappLink("Hola Teaching TIC, quiero saber más sobre SciVerse.")} target="_blank" rel="noreferrer">{CONTACT.phoneLabel}</a><small>© 2026 Teaching TIC. Todos los derechos reservados.</small></div>
       </footer>
       {legalView && <LegalModal view={legalView} onClose={() => setLegalView(null)} />}
-      {/* PlansModal gestiona internamente los planes de pago (abre WhatsApp).
+      {/* PlansModal lleva a crear cuenta; el pago ocurre dentro de SciVerse.
           onChoosePlan solo se invoca para el plan gratuito, con la cadena "gratuito":
           por eso el handler correcto es onRegister. */}
       {showPlansModal && <PlansModal onClose={() => setShowPlansModal(false)} onChoosePlan={onRegister} />}
@@ -3229,7 +3225,7 @@ function LegalModal({ view, onClose }) {
     complaints: { title: "Libro de Reclamaciones", icon: ClipboardList, body: ["Proveedor: Teaching TIC Consultorías S.A.C. · RUC 20607945331.", "Domicilio fiscal: Jr. Cristóbal de Peralta Norte 9 50, Dpto. 210.", "Para presentar un reclamo o queja, envía tus nombres y apellidos, documento de identidad, correo, teléfono, descripción del servicio, detalle del reclamo o queja y el pedido concreto a teachingticconsultorias@gmail.com.", "Teaching TIC enviará una constancia de recepción y atenderá la solicitud dentro del plazo legal aplicable. La presentación de un reclamo no impide acudir a otras vías de solución de controversias."] },
   }[view];
   const Icon = content.icon;
-  return <div className="legal-backdrop" role="presentation" onMouseDown={onClose}><section className="legal-modal" role="dialog" aria-modal="true" aria-labelledby="legal-title" onMouseDown={(event) => event.stopPropagation()}><button className="legal-close" onClick={onClose} aria-label="Cerrar"><X size={20} /></button><Icon size={26} color={C.teal} /><h2 id="legal-title">{content.title}</h2>{content.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{view === "complaints" && <div className="legal-actions"><a className="primary-btn" href="mailto:teachingticconsultorias@gmail.com?subject=Registro%20en%20el%20Libro%20de%20Reclamaciones&body=Tipo%3A%20Reclamo%20o%20queja%0ANombres%20y%20apellidos%3A%0ADNI%20o%20CE%3A%0ACorreo%3A%0ATel%C3%A9fono%3A%0AServicio%20contratado%3A%0ADetalle%3A%0APedido%20concreto%3A">Registrar por correo <Mail size={15} /></a><a className="secondary-btn" href="https://wa.me/51921090875?text=Hola%20Teaching%20TIC%2C%20necesito%20orientaci%C3%B3n%20para%20presentar%20un%20reclamo." target="_blank" rel="noreferrer">Orientación por WhatsApp <MessageCircle size={15} /></a></div>}<small>Última actualización: agosto de 2026.</small></section></div>;
+  return <div className="legal-backdrop" role="presentation" onMouseDown={onClose}><section className="legal-modal" role="dialog" aria-modal="true" aria-labelledby="legal-title" onMouseDown={(event) => event.stopPropagation()}><button className="legal-close" onClick={onClose} aria-label="Cerrar"><X size={20} /></button><Icon size={26} color={C.teal} /><h2 id="legal-title">{content.title}</h2>{content.body.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{view === "complaints" && <div className="legal-actions"><a className="primary-btn" href="mailto:teachingticconsultorias@gmail.com?subject=Registro%20en%20el%20Libro%20de%20Reclamaciones&body=Tipo%3A%20Reclamo%20o%20queja%0ANombres%20y%20apellidos%3A%0ADNI%20o%20CE%3A%0ACorreo%3A%0ATel%C3%A9fono%3A%0AServicio%20contratado%3A%0ADetalle%3A%0APedido%20concreto%3A">Registrar por correo <Mail size={15} /></a><a className="secondary-btn" href={whatsappLink("Hola Teaching TIC, necesito orientación para presentar un reclamo.")} target="_blank" rel="noreferrer">Orientación por WhatsApp <MessageCircle size={15} /></a></div>}<small>Última actualización: agosto de 2026.</small></section></div>;
 }
 
 function ResetPasswordPage({ onSubmit, loading, error, token }) {
@@ -3442,10 +3438,10 @@ function PlansModal({ onClose, onChoosePlan }) {
   // el escaparate no puede prometer algo distinto de lo que aplica el backend.
   const { planes } = usePlanCatalog();
 
-  const handleChoosePlan = (plan) => {
-    if (Number(plan.price) === 0) return onChoosePlan("gratuito");
-    const message = `Hola Teaching TIC, deseo adquirir el Plan ${plan.name} de SciVerse por S/${plan.price}. ¿Me comparten los datos para pagar por Plin o Yape?`;
-    window.open(`https://wa.me/51921090875?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+  // Todos los planes llevan a crear cuenta: el pago vive dentro de SciVerse,
+  // en Mi cuenta → Plan y uso, y sin sesión no hay a quién activarle nada.
+  const handleChoosePlan = () => {
+    onChoosePlan("gratuito");
     onClose();
   };
   return (
@@ -3464,11 +3460,11 @@ function PlansModal({ onClose, onChoosePlan }) {
               <div className="plan-header"><span>Plan {plan.name}</span><strong><small>S/</small>{plan.price}</strong><p>{plan.period}</p></div>
               <div className="plan-saving">{plan.saving}</div>
               <ul>{plan.benefits.map((benefit) => <li key={benefit}><span>✓</span>{benefit}</li>)}</ul>
-              <button onClick={() => handleChoosePlan(plan)} className={plan.featured ? "primary-btn" : "secondary-btn"}>{Number(plan.price) === 0 ? "Crear cuenta gratis" : `Elegir plan ${plan.name.toLowerCase()}`} <ArrowRight size={15} /></button>
+              <button onClick={() => handleChoosePlan(plan)} className={plan.featured ? "primary-btn" : "secondary-btn"}>{Number(plan.price) === 0 ? "Crear cuenta gratis" : `Crear cuenta y elegir ${plan.name}`} <ArrowRight size={15} /></button>
             </article>
           ))}
         </div>
-        <p className="plans-note"><span>🔒</span> Pago por Plin o Yape a nombre de Teaching TIC. La activación se confirma por WhatsApp.</p>
+        <p className="plans-note"><span>🔒</span> Pago por Yape o Plin. Registras tu pago en SciVerse y nuestro equipo lo verifica antes de activar tu plan.</p>
       </section>
     </div>
   );
@@ -4179,7 +4175,6 @@ function TeacherAccountModal({ profile, dbProfile = null, initialTab = "perfil",
 }
 
 function Usage({ label, current, total }) { return <div><p><span>{label}</span><b>{current} / {total}</b></p><span><i style={{width:`${Math.min(100,(Number(current)/Number(total))*100)}%`}} /></span></div>; }
-function PlanMini({ name, price, period, benefits = [], featured }) { return <article className={featured ? "featured" : ""}>{featured && <small>RECOMENDADO</small>}<h4>{name}</h4><strong>S/{price}</strong><p>{period}</p><ul>{benefits.slice(0, 3).map((benefit) => <li key={benefit}>{benefit}</li>)}</ul><a href={`https://wa.me/51921090875?text=${encodeURIComponent(`Hola Teaching TIC, deseo adquirir el Plan ${name} de SciVerse por S/${price}.`)}`} target="_blank" rel="noreferrer">Elegir plan</a></article>; }
 function Integration({ icon: Icon, name, text }) { return <div className="integration-row"><span><Icon size={20} /></span><div><strong>{name}</strong><p>{text}</p></div><button disabled>Próximamente</button></div>; }
 
 function SciVerseApp({ profile, onLogout }) {

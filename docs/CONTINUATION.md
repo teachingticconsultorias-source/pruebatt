@@ -1125,8 +1125,54 @@ El remitente no puede ser una dirección de Gmail: Resend exige un dominio
 verificado. Mientras falte, las solicitudes se registran igual y se ven en
 Pagos; sólo no llega el aviso.
 
+## LA PORTADA DEJA DE VENDER POR WHATSAPP · 2026-09-06
+
+Último resto del flujo comercial anterior. El CTA público del plan de pago
+abría WhatsApp pidiendo «los datos para pagar», con un número escrito a mano,
+y la sección decía «La activación se confirma por WhatsApp». Nada de eso era
+ya cierto: el pago se registra dentro de SciVerse y lo verifica el equipo.
+
+Además enseñaba —o prometía enseñar— datos de pago a alguien **sin sesión**, a
+quien después no hay a quién activarle nada.
+
+### Qué hace ahora
+
+Visitante → «Crear cuenta gratis» o «Crear cuenta y elegir Pro» → registro.
+Ya dentro: Mi cuenta → Plan y uso → Mejorar a Pro → pago interno.
+
+El caso «usuario autenticado pulsa Pro en la portada» **no existe**:
+`AuthGate.jsx` devuelve la aplicación en cuanto hay perfil, así que la portada
+sólo la ve quien no ha entrado. No se inventó un atajo para un camino que no
+se puede recorrer.
+
+### Código muerto encontrado
+
+`PlanMini` tenía cero referencias y llevaba dentro un `wa.me` con el teléfono
+escrito. Eliminado.
+
+Y hay más, que NO se ha tocado por no meter un borrado de ~600 líneas en un
+bloque de ajuste: `RegistrationGate` (App.jsx:3477) no lo referencia nadie, y
+de él cuelgan `ImprovedLanding`, `PlansModal` y `LegalModal`. La portada viva
+es `components/landing/Landing.jsx`, vía `AuthGate`. A ese subárbol sí se le
+quitaron los CTA a WhatsApp y el copy viejo, para que revivirlo no
+reintroduzca el flujo anterior.
+
+### Los dos WhatsApp, que no son el mismo
+
+| | Dónde | Para qué |
+|---|---|---|
+| Contacto general | `config/plans.js` · `WHATSAPP_NUMBER` | dudas, consulta institucional, Libro de Reclamaciones |
+| Pagos | `payment_settings.whatsapp` | sólo DESPUÉS de registrar la solicitud |
+
+Ningún botón de compra apunta al primero. Queda como única constante con un
+teléfono en el frontend, documentada; moverlo a la base pediría migración y
+no toca ahora.
+
 ## SIGUIENTE ACCIÓN EXACTA
 
-`git push origin main` con los dos commits pendientes (avisos y ajuste final),
-y despues los dos pasos manuales: el WhatsApp en el panel y las variables del
-correo en Vercel. Supabase no necesita nada.
+`git push origin main` con el ajuste de la portada, y despues los dos pasos
+manuales que activan el cobro: el WhatsApp en Admin → Configuracion y las
+variables del correo en Vercel. Supabase no necesita nada.
+
+Pendiente y sin autorizar: borrar el subarbol muerto RegistrationGate →
+ImprovedLanding → PlansModal → LegalModal (~600 lineas en App.jsx).
