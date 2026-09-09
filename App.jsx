@@ -39,7 +39,7 @@ import {
   modulosListos, textoDeProgreso,
 } from "./lib/sesion/modulos.js";
 import "./library.css";
-import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
+import { downloadResource, downloadCompleteClass, downloadText as downloadWord } from "./lib/docx/exporters.js";
 import {
   FlaskConical,
   Atom,
@@ -140,29 +140,6 @@ const CNEB = {
   cambio: "Resuelve problemas de regularidad, equivalencia y cambio",
   crea: "Crea proyectos desde los lenguajes artísticos",
 };
-
-const WORD = { purple: "4F46B8", purpleDark: "24206B", purpleLight: "F0EFFE", yellow: "FFF4C4", border: "CDD3E1", ink: "172033", muted: "586174", white: "FFFFFF" };
-const WORD_WIDTH = 9638;
-const wordBorders = { top:{style:BorderStyle.SINGLE,size:4,color:WORD.border}, bottom:{style:BorderStyle.SINGLE,size:4,color:WORD.border}, left:{style:BorderStyle.SINGLE,size:4,color:WORD.border}, right:{style:BorderStyle.SINGLE,size:4,color:WORD.border}, insideHorizontal:{style:BorderStyle.SINGLE,size:4,color:WORD.border}, insideVertical:{style:BorderStyle.SINGLE,size:4,color:WORD.border} };
-
-function wordRun(text, { bold=false, italics=false, color=WORD.ink, size=20 } = {}) { return new TextRun({ text:String(text ?? ""), bold, italics, color, size, font:"Arial" }); }
-function wordParagraph(text="", options={}) { return new Paragraph({ alignment:options.alignment, heading:options.heading, spacing:{ before:options.before ?? 0, after:options.after ?? 90, line:options.line ?? 276 }, bullet:options.bullet ? { level:0 } : undefined, children:[wordRun(text, options)] }); }
-function wordRichParagraph(runs=[], options={}) { return new Paragraph({ alignment:options.alignment, spacing:{before:options.before??0,after:options.after??90,line:options.line??276}, children:runs }); }
-function wordCell(children, width, { fill, color, bold=false, align, span }={}) { const normalized=(Array.isArray(children)?children:[children]).map(item=>item instanceof Paragraph?item:wordParagraph(item,{bold,color,alignment:align,size:18})); return new TableCell({ columnSpan:span, width:{size:width,type:WidthType.DXA}, verticalAlign:VerticalAlign.CENTER, shading:fill?{type:ShadingType.CLEAR,fill}:undefined, margins:{top:90,bottom:90,left:110,right:110}, children:normalized }); }
-function wordTable(rows, widths) { return new Table({ width:{size:WORD_WIDTH,type:WidthType.DXA}, columnWidths:widths, layout:TableLayoutType.FIXED, borders:wordBorders, rows }); }
-function wordSectionHeading(roman, title) { return wordParagraph(`${roman}. ${title.toUpperCase()}`, {bold:true,color:WORD.purple,size:22,before:150,after:90}); }
-function wordBulletList(items=[]) { return items.filter(Boolean).map(item=>wordParagraph(item,{bullet:true,size:19,after:45})); }
-
-async function triggerWordDownload(doc, filename) {
-  const blob = await Packer.toBlob(doc);
-  const safeName=(filename||"documento.docx").replace(/[\\/:*?"<>|]+/g,"-");
-  if (window.navigator?.msSaveOrOpenBlob) { window.navigator.msSaveOrOpenBlob(blob,safeName); return; }
-  const url=URL.createObjectURL(blob);
-  const anchor=document.createElement("a");
-  anchor.href=url; anchor.download=safeName; anchor.style.display="none";
-  document.body.appendChild(anchor); anchor.click(); anchor.remove();
-  window.setTimeout(()=>URL.revokeObjectURL(url),30000);
-}
 
 async function saveTeacherMaterial({tipo,titulo,form,contenido}) {
   const {data:{user}}=await supabase.auth.getUser();
@@ -285,164 +262,17 @@ function SaveStatus({ state, onRetry, onDownload }) {
   );
 }
 
-async function downloadWord(filename, content, title="Documento SciVerse") {
-  const paragraphs=String(content||"").split(/\n/).map(line=>line.trim()?wordParagraph(line,{size:20}):wordParagraph("",{after:40}));
-  const doc=new Document({ creator:"Teaching TIC Consultorías S.A.C.", title, styles:{ default:{ document:{ run:{font:"Arial",size:20,color:WORD.ink}, paragraph:{spacing:{after:90,line:276}} } } }, sections:[{ properties:{page:{size:{width:11906,height:16838},margin:{top:1050,right:1134,bottom:950,left:1134}}}, headers:{default:new Header({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"SciVerse",bold:true,font:"Arial",size:23,color:"168B84"}),new TextRun({text:" · una iniciativa de Teaching TIC",font:"Arial",size:16,color:"6F8885"})]}),new Paragraph({border:{bottom:{style:BorderStyle.SINGLE,size:6,color:"CBE4E1"}},children:[]})]})}, footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"Teaching TIC · Página ",font:"Arial",size:14,color:"6F8885"}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:14,color:"6F8885"})]})]})}, children:[wordParagraph(title,{bold:true,size:30,color:"0F625D",alignment:AlignmentType.CENTER,after:220}),...paragraphs] }] });
-  await triggerWordDownload(doc,filename);
-}
-
-const RUBRIC_WORD = { green:"0F625D", pale:"E4F6F3", pale2:"F3FBF9", border:"8DB9B3", ink:"172F2D", muted:"557370", white:"FFFFFF" };
-const RUBRIC_WIDTH = 15736;
-const rubricBorders = { top:{style:BorderStyle.SINGLE,size:5,color:RUBRIC_WORD.border}, bottom:{style:BorderStyle.SINGLE,size:5,color:RUBRIC_WORD.border}, left:{style:BorderStyle.SINGLE,size:5,color:RUBRIC_WORD.border}, right:{style:BorderStyle.SINGLE,size:5,color:RUBRIC_WORD.border}, insideHorizontal:{style:BorderStyle.SINGLE,size:4,color:RUBRIC_WORD.border}, insideVertical:{style:BorderStyle.SINGLE,size:4,color:RUBRIC_WORD.border} };
-function rubricParagraph(text="", {bold=false,color=RUBRIC_WORD.ink,size=15,alignment,after=40,italics=false}={}) { return new Paragraph({alignment,spacing:{after,line:220},children:[new TextRun({text:String(text??""),bold,color,size,italics,font:"Arial"})]}); }
-function rubricCell(children,width,{fill,color,bold=false,alignment,verticalMerge}={}) { const normalized=(Array.isArray(children)?children:[children]).map(item=>item instanceof Paragraph?item:rubricParagraph(item,{bold,color,alignment})); return new TableCell({width:{size:width,type:WidthType.DXA},verticalAlign:VerticalAlign.CENTER,verticalMerge,shading:fill?{type:ShadingType.CLEAR,fill}:undefined,margins:{top:70,bottom:70,left:85,right:85},children:normalized}); }
-function rubricTable(rows,widths=[]) { return new Table({width:{size:RUBRIC_WIDTH,type:WidthType.DXA},columnWidths:widths,layout:TableLayoutType.FIXED,borders:rubricBorders,rows}); }
-
-async function downloadRubricWord({form,instrument,profile={}}) {
-  const widths=[2400,3300,2509,2509,2509,2509];
-  const groups=[];
-  (instrument.criterios||[]).forEach(item=>{ const capacity=item.capacidad||"Capacidad seleccionada"; let group=groups.find(entry=>entry.capacity===capacity); if(!group){group={capacity,items:[]};groups.push(group);} group.items.push(item); });
-  const rubricRows=[new TableRow({tableHeader:true,children:[rubricCell("CAPACIDAD",widths[0],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("CRITERIO DE EVALUACIÓN",widths[1],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("LOGRO DESTACADO (AD)",widths[2],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("LOGRO ESPERADO (A)",widths[3],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("EN PROCESO (B)",widths[4],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("EN INICIO (C)",widths[5],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER})]})];
-  groups.forEach(group=>group.items.forEach((item,index)=>rubricRows.push(new TableRow({children:[rubricCell(index===0?group.capacity:"",widths[0],{fill:RUBRIC_WORD.pale,bold:true,verticalMerge:index===0?VerticalMergeType.RESTART:VerticalMergeType.CONTINUE}),rubricCell(item.criterio,widths[1],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white,bold:true}),rubricCell(item.logroDestacado,widths[2],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white}),rubricCell(item.logroEsperado,widths[3],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white}),rubricCell(item.enProceso,widths[4],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white}),rubricCell(item.inicio,widths[5],{fill:index%2?RUBRIC_WORD.pale2:RUBRIC_WORD.white})]}))));
-  const teacher=[profile.nombres,profile.apellidos].filter(Boolean).join(" ")||profile.nombre||form.docente||"";
-  const institution=profile.ie||profile.institucion||form.institucion||"";
-  const capacities=(instrument.capacidades||form.capacidades||[]).join(" · ");
-  const children=[rubricParagraph("RÚBRICA DE EVALUACIÓN",{bold:true,size:25,color:RUBRIC_WORD.green,alignment:AlignmentType.CENTER,after:140}),rubricTable([new TableRow({children:[rubricCell("DOCENTE",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(teacher,6300),rubricCell("I.E.",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(institution,6586)]}),new TableRow({children:[rubricCell("ÁREA",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.area,6300),rubricCell("NIVEL Y GRADO",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(`${form.nivel} · ${form.grado}${form.seccion?` · ${form.seccion}`:""}`,6586)]}),new TableRow({children:[rubricCell("FECHA",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.fecha||"",6300),rubricCell("DURACIÓN",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.duracion?`${form.duracion} minutos`:"",6586)]})],[1550,6300,1300,6586]),rubricParagraph("TÍTULO DE LA SESIÓN",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),rubricParagraph(form.tema||instrument.titulo,{size:16,after:90}),rubricParagraph("PROPÓSITO DE APRENDIZAJE",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),rubricParagraph(`Competencia: ${instrument.competencia||form.competencia}`,{bold:true,size:15,after:25}),rubricParagraph(`Capacidades: ${capacities}`,{size:15,after:25}),...(form.proposito?[rubricParagraph(`Propósito: ${form.proposito}`,{size:15,after:25})]:[]),rubricParagraph(`Evidencia: ${instrument.evidencia||form.evidencia}`,{size:15,after:100}),rubricTable(rubricRows,widths)];
-  const doc=new Document({creator:"Teaching TIC Consultorías S.A.C.",title:instrument.titulo||"Rúbrica de evaluación",styles:{default:{document:{run:{font:"Arial",size:15,color:RUBRIC_WORD.ink},paragraph:{spacing:{after:40,line:220}}}}},sections:[{properties:{page:{size:{width:16838,height:11906,orientation:PageOrientation.LANDSCAPE},margin:{top:520,right:550,bottom:520,left:550}}},headers:{default:new Header({children:[rubricParagraph("Teaching TIC · Kantu",{size:13,color:RUBRIC_WORD.muted,alignment:AlignmentType.RIGHT,after:0})]})},footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"SciVerse para docentes · Página ",font:"Arial",size:13,color:RUBRIC_WORD.muted}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:13,color:RUBRIC_WORD.muted})]})]})},children}]});
-  const slug=(form.tema||instrument.titulo||"rubrica-de-evaluacion").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,55);
-  await triggerWordDownload(doc,`rubrica-${slug}.docx`);
-}
-
-async function downloadChecklistWord({form,instrument,profile={}}) {
-  const criteria=(instrument.criterios||[]).slice(0,8);
-  const teacher=[profile.nombres,profile.apellidos].filter(Boolean).join(" ")||profile.nombre||form.docente||"";
-  const institution=profile.ie||profile.institucion||form.institucion||"";
-  const fixedWidth=760;
-  const namesWidth=3500;
-  const observationsWidth=2100;
-  const criterionWidth=Math.floor((RUBRIC_WIDTH-fixedWidth-namesWidth-observationsWidth)/Math.max(criteria.length,1));
-  const widths=[fixedWidth,namesWidth,...criteria.map(()=>criterionWidth),observationsWidth];
-  const adjustedTotal=widths.reduce((sum,value)=>sum+value,0);
-  widths[widths.length-1]+=RUBRIC_WIDTH-adjustedTotal;
-  const headerCells=[rubricCell("N.º",widths[0],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),rubricCell("APELLIDOS Y NOMBRES",widths[1],{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER}),...criteria.map((item,index)=>rubricCell([rubricParagraph(`CRITERIO ${index+1}`,{bold:true,color:RUBRIC_WORD.white,size:14,alignment:AlignmentType.CENTER,after:30}),rubricParagraph(item.criterio,{color:RUBRIC_WORD.white,size:12,alignment:AlignmentType.CENTER,after:0})],criterionWidth,{fill:RUBRIC_WORD.green,alignment:AlignmentType.CENTER})),rubricCell("OBSERVACIONES",widths.at(-1),{fill:RUBRIC_WORD.green,color:RUBRIC_WORD.white,bold:true,alignment:AlignmentType.CENTER})];
-  const scaleRow=new TableRow({children:[rubricCell("",widths[0],{fill:RUBRIC_WORD.pale}),rubricCell("Escala de valoración",widths[1],{fill:RUBRIC_WORD.pale,bold:true,alignment:AlignmentType.RIGHT}),...criteria.map(()=>rubricCell("Sí / No",criterionWidth,{fill:RUBRIC_WORD.pale,bold:true,alignment:AlignmentType.CENTER})),rubricCell("",widths.at(-1),{fill:RUBRIC_WORD.pale})]});
-  const studentRows=Array.from({length:30},(_,index)=>new TableRow({children:[rubricCell(String(index+1).padStart(2,"0"),widths[0],{alignment:AlignmentType.CENTER}),rubricCell("",widths[1]),...criteria.map(()=>rubricCell("☐ Sí    ☐ No",criterionWidth,{alignment:AlignmentType.CENTER})),rubricCell("",widths.at(-1))]}));
-  const capacities=(instrument.capacidades||form.capacidades||[]).join(" · ");
-  const children=[rubricParagraph("LISTA DE COTEJO",{bold:true,size:25,color:RUBRIC_WORD.green,alignment:AlignmentType.CENTER,after:140}),rubricTable([new TableRow({children:[rubricCell("DOCENTE",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(teacher,6300),rubricCell("I.E.",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(institution,6586)]}),new TableRow({children:[rubricCell("ÁREA",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.area,6300),rubricCell("NIVEL Y GRADO",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(`${form.nivel} · ${form.grado}${form.seccion?` · ${form.seccion}`:""}`,6586)]}),new TableRow({children:[rubricCell("FECHA",1550,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.fecha||"",6300),rubricCell("DURACIÓN",1300,{fill:RUBRIC_WORD.pale,bold:true}),rubricCell(form.duracion?`${form.duracion} minutos`:"",6586)]})],[1550,6300,1300,6586]),rubricParagraph("TÍTULO DE LA SESIÓN",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),rubricParagraph(form.tema||instrument.titulo,{size:16,after:80}),rubricParagraph("PROPÓSITO DE APRENDIZAJE",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),rubricParagraph(`Competencia: ${instrument.competencia||form.competencia}`,{bold:true,size:15,after:25}),rubricParagraph(`Capacidades: ${capacities}`,{size:15,after:25}),...(form.proposito?[rubricParagraph(`Propósito: ${form.proposito}`,{size:15,after:25})]:[]),rubricParagraph(`Evidencia: ${instrument.evidencia||form.evidencia}`,{size:15,after:80}),rubricParagraph("CRITERIOS DE EVALUACIÓN",{bold:true,size:17,color:RUBRIC_WORD.green,after:35}),...criteria.map((item,index)=>rubricParagraph(`${index+1}. ${item.criterio}`,{size:14,after:25})),rubricParagraph("REGISTRO DE ESTUDIANTES",{bold:true,size:17,color:RUBRIC_WORD.green,after:60}),rubricTable([new TableRow({tableHeader:true,children:headerCells}),scaleRow,...studentRows],widths)];
-  const doc=new Document({creator:"Teaching TIC Consultorías S.A.C.",title:instrument.titulo||"Lista de cotejo",styles:{default:{document:{run:{font:"Arial",size:15,color:RUBRIC_WORD.ink},paragraph:{spacing:{after:40,line:220}}}}},sections:[{properties:{page:{size:{width:16838,height:11906,orientation:PageOrientation.LANDSCAPE},margin:{top:520,right:550,bottom:520,left:550}}},headers:{default:new Header({children:[rubricParagraph("Teaching TIC · Kantu",{size:13,color:RUBRIC_WORD.muted,alignment:AlignmentType.RIGHT,after:0})]})},footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"SciVerse para docentes · Página ",font:"Arial",size:13,color:RUBRIC_WORD.muted}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:13,color:RUBRIC_WORD.muted})]})]})},children}]});
-  const slug=(form.tema||instrument.titulo||"lista-de-cotejo").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,55);
-  await triggerWordDownload(doc,`lista-de-cotejo-${slug}.docx`);
-}
-
+// Adaptadores de las pantallas existentes al sistema DOCX compartido.
+const downloadSessionWord = ({form,result,documentType="session",profile={}}) => downloadResource(documentType,result,form,profile);
+const downloadRubricWord = ({form,instrument,profile={}}) => downloadResource("rubric",instrument,form,profile);
+const downloadChecklistWord = ({form,instrument,profile={}}) => downloadResource("checklist",instrument,form,profile);
 async function downloadActivityWord(activity,grade) {
-  const v=activity.versions[grade];
-  const detail=activity.detalle;
-  const green="0F625D",teal="168B84",pale="E4F6F3",pale2="F4FAF9",yellow="FFF3C4",ink="173E3B",muted="5D7774",white="FFFFFF";
-  const heading=(number,title)=>new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[700,8938],layout:TableLayoutType.FIXED,borders:{top:{style:BorderStyle.NONE},bottom:{style:BorderStyle.NONE},left:{style:BorderStyle.NONE},right:{style:BorderStyle.NONE},insideHorizontal:{style:BorderStyle.NONE},insideVertical:{style:BorderStyle.NONE}},rows:[new TableRow({children:[wordCell(number,700,{fill:green,color:white,bold:true,align:AlignmentType.CENTER}),wordCell(title.toUpperCase(),8938,{fill:pale,color:green,bold:true})]})]});
-  const infoTable=new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[3212,3213,3213],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell([wordParagraph("NIVEL RECOMENDADO",{bold:true,color:teal,size:16,after:35}),wordParagraph(v.nivel,{bold:true,color:ink,size:18})],3212,{fill:pale2}),wordCell([wordParagraph("TIEMPO SUGERIDO",{bold:true,color:teal,size:16,after:35}),wordParagraph(detail.tiempo,{bold:true,color:ink,size:18})],3213,{fill:pale2}),wordCell([wordParagraph("ORGANIZACIÓN",{bold:true,color:teal,size:16,after:35}),wordParagraph(detail.organizacion,{color:ink,size:17})],3213,{fill:pale2})]})]});
-  const successBox=new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[900,8738],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell("✓",900,{fill:green,color:white,bold:true,align:AlignmentType.CENTER}),wordCell([wordParagraph("CONDICIÓN DE ÉXITO",{bold:true,color:green,size:17,after:35}),wordParagraph(v.condicion,{color:ink,size:19})],8738,{fill:pale})]})]});
-  const evidenceBox=new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[4819,4819],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell([wordParagraph("PREGUNTAS PARA ACOMPAÑAR",{bold:true,color:green,size:17,after:55}),...detail.acompanamiento.map(item=>wordParagraph(item,{bullet:true,size:18,after:55}))],4819,{fill:pale2}),wordCell([wordParagraph("EVIDENCIAS QUE DEBE RECOGER",{bold:true,color:green,size:17,after:55}),...detail.evidencias.map(item=>wordParagraph(item,{bullet:true,size:18,after:55}))],4819,{fill:pale2})]})]});
-  const children=[
-    wordParagraph(`${activity.code} · ${SUBJECTS[activity.subject].label.toUpperCase()}`,{bold:true,color:teal,size:17,after:60}),
-    wordParagraph(activity.title,{bold:true,color:green,size:32,after:80}),
-    wordParagraph("Guía pedagógica para aplicar una experiencia STEAM en el aula",{color:muted,size:19,after:180}),
-    infoTable,
-    wordParagraph("",{after:70}),
-    heading("01","Competencia CNEB"),wordParagraph(activity.competencia,{bold:true,color:ink,size:20,before:90,after:150}),
-    heading("02","El reto"),wordParagraph(v.objetivo,{color:ink,size:20,before:90,after:150}),
-    heading("03","Antes de empezar"),...detail.preparacion.map(item=>wordParagraph(item,{bullet:true,size:19,before:25,after:65})),
-    heading("04","Materiales"),...v.materiales.map(item=>wordParagraph(item,{bullet:true,size:19,before:25,after:65})),
-    heading("05","¿Cómo se juega?"),...v.pasos.map(item=>new Paragraph({numbering:{reference:"activity-steps",level:0},spacing:{before:45,after:85,line:290},children:[wordRun(item,{size:19,color:ink})]})),
-    successBox,wordParagraph("",{after:65}),
-    heading("06","Acompañamiento y evaluación"),wordParagraph("Durante el reto, observa el razonamiento antes de intervenir. Utiliza estas preguntas y recoge evidencias del proceso, no solo del producto final.",{color:muted,size:18,before:80,after:80}),evidenceBox,
-    wordParagraph("VARIACIÓN — MÁS DIFÍCIL",{bold:true,color:"9B6B00",size:17,before:150,after:45}),
-    new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[WORD_WIDTH],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell(v.variacion,WORD_WIDTH,{fill:yellow})]})]}),
-    wordParagraph("PREGUNTA PARA REFLEXIONAR",{bold:true,color:teal,size:17,before:150,after:45}),
-    new Table({width:{size:WORD_WIDTH,type:WidthType.DXA},columnWidths:[WORD_WIDTH],layout:TableLayoutType.FIXED,borders:wordBorders,rows:[new TableRow({children:[wordCell(wordParagraph(v.reflexion,{bold:true,italics:true,color:green,size:21,alignment:AlignmentType.CENTER,after:0}),WORD_WIDTH,{fill:pale})]})]}),
-  ];
-  const doc=new Document({creator:"Teaching TIC Consultorías S.A.C.",title:activity.title,description:"Guía de actividad STEAM de SciVerse",numbering:{config:[{reference:"activity-steps",levels:[{level:0,format:"decimal",text:"%1.",alignment:AlignmentType.LEFT,style:{paragraph:{indent:{left:540,hanging:260}},run:{bold:true,color:green,font:"Arial",size:19}}}]}]},styles:{default:{document:{run:{font:"Arial",size:20,color:ink},paragraph:{spacing:{after:100,line:290}}}}},sections:[{properties:{page:{size:{width:11906,height:16838},margin:{top:1050,right:1134,bottom:950,left:1134},pageNumbers:{start:1,formatType:NumberFormat.DECIMAL}}},headers:{default:new Header({children:[new Paragraph({alignment:AlignmentType.CENTER,spacing:{after:40},children:[new TextRun({text:"SciVerse",bold:true,font:"Arial",size:24,color:"A9D6D1"}),new TextRun({text:"  ·  una iniciativa de Teaching TIC",font:"Arial",size:17,color:"B9C9C7"})]}),new Paragraph({spacing:{after:0},border:{bottom:{style:BorderStyle.SINGLE,size:6,color:"CBE4E1"}},children:[]})]})},footers:{default:new Footer({children:[new Paragraph({alignment:AlignmentType.CENTER,children:[new TextRun({text:"Teaching TIC · Recursos para docentes · Página ",font:"Arial",size:15,color:muted}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:15,color:muted})]})]})},children}]});
-  await triggerWordDownload(doc,`${activity.id}-${grade}.docx`);
-}
-
-function wordMomentSubsection(title, item, {development=false}={}) {
-  if (!item) return [];
-  const paragraphs=[wordParagraph(title,{bold:true,color:development?"2865CC":WORD.purpleDark,size:19,before:80,after:55})];
-  const description=item.descripcion||item.actividad||"";
-  if(description) paragraphs.push(wordParagraph(description,{size:18,after:55}));
-  const questions=item.preguntas||item.preguntasMediacion||[];
-  if(questions.length) paragraphs.push(wordParagraph(development?"Preguntas de mediación":"Preguntas orientadoras",{bold:true,color:WORD.purple,size:17,before:40,after:35}),...wordBulletList(questions));
-  if(item.criteriosCompartidos?.length) paragraphs.push(wordParagraph("Criterios compartidos",{bold:true,color:WORD.purple,size:17,before:40,after:35}),...wordBulletList(item.criteriosCompartidos));
-  if(item.acompanamiento) paragraphs.push(wordRichParagraph([wordRun("Acompañamiento: ",{bold:true,color:"2865CC",size:17}),wordRun(item.acompanamiento,{size:17})]));
-  if(item.evaluacionFormativa) paragraphs.push(wordRichParagraph([wordRun("Evaluación formativa: ",{bold:true,color:"2865CC",size:17}),wordRun(item.evaluacionFormativa,{size:17})]));
-  if(item.mensajeLogro) paragraphs.push(wordRichParagraph([wordRun("Mensaje de logro: ",{bold:true,color:WORD.purple,size:17}),wordRun(item.mensajeLogro,{italics:true,size:17})]));
-  if(item.consigna) paragraphs.push(wordRichParagraph([wordRun("Consigna: ",{bold:true,color:WORD.purple,size:17}),wordRun(item.consigna,{italics:true,size:17})]));
-  return paragraphs;
-}
-
-function wordMomentContent(momentName, data) {
-  if (!data || typeof data === "string") return [wordParagraph(data||"",{size:18})];
-  if(momentName==="INICIO") return [
-    ...wordMomentSubsection("Motivación",data.motivacion),
-    ...wordMomentSubsection("Saberes previos",data.saberesPrevios),
-    ...wordMomentSubsection("Problematización",data.problematizacion),
-    ...wordMomentSubsection("Propósito y organización",data.propositoOrganizacion),
-  ];
-  if(momentName==="DESARROLLO") return [
-    ...(data.metodologia?[wordRichParagraph([wordRun("Metodología: ",{bold:true,color:"2865CC",size:18}),wordRun(data.metodologia,{italics:true,size:18})])]:[]),
-    ...(data.procesos||[]).flatMap(item=>wordMomentSubsection(item.subtitulo,item,{development:true})),
-  ];
-  return [
-    ...wordMomentSubsection("Metacognición",data.metacognicion),
-    ...wordMomentSubsection("Evaluación",data.evaluacion),
-    ...wordMomentSubsection("Cierre y transferencia",data.transferencia),
-  ];
-}
-
-async function downloadSessionWord({ form, result, documentName="sesión de aprendizaje", documentType="session", profile={} }) {
-  const criteria=(result.criteriosDetallados||result.criteriosEvaluacion?.map(criterio=>({criterio,evidenciaObservable:result.evidencia}))||[]);
-  const capacities=result.capacidadesCNEB||form.capacidades||[];
-  const performances=result.desempenosPrecisados||[];
-  const approaches=result.enfoquesTransversales||[];
-  const moments=[
-    {name:"INICIO",minutes:result.inicio?.minutos||result.tiempos?.inicio||"",content:wordMomentContent("INICIO",result.inicio),fill:WORD.yellow},
-    {name:"DESARROLLO",minutes:result.desarrollo?.minutos||result.tiempos?.desarrollo||"",content:wordMomentContent("DESARROLLO",result.desarrollo),fill:"FFFFFF"},
-    {name:"CIERRE",minutes:result.cierre?.minutos||result.tiempos?.cierre||"",content:wordMomentContent("CIERRE",result.cierre),fill:"FFFFFF"},
-  ];
-  const children=[
-    wordParagraph(documentType==="project"?"PROYECTO STEAM":"SESIÓN DE APRENDIZAJE",{bold:true,size:30,color:WORD.ink,alignment:AlignmentType.CENTER,after:220}),
-    wordSectionHeading("I","Título de la sesión"), wordParagraph(result.titulo||form.tema,{size:20}),
-    wordSectionHeading("II","Datos informativos"),
-    wordTable([
-      new TableRow({children:[wordCell("DOCENTE",1450,{fill:WORD.purpleLight,bold:true}),wordCell(profile.nombre||form.docente||"",3370),wordCell("I.E.",1200,{fill:WORD.purpleLight,bold:true}),wordCell(profile.ie||form.institucion||"",3618)]}),
-      new TableRow({children:[wordCell("ÁREA",1450,{fill:WORD.purpleLight,bold:true}),wordCell(form.area,3370),wordCell("NIVEL Y GRADO",1200,{fill:WORD.purpleLight,bold:true}),wordCell(`${form.nivel} · ${form.grado}${form.seccion?` · ${form.seccion}`:""}`,3618)]}),
-      new TableRow({children:[wordCell("FECHA",1450,{fill:WORD.purpleLight,bold:true}),wordCell(form.fecha,3370),wordCell("DURACIÓN",1200,{fill:WORD.purpleLight,bold:true}),wordCell(`${form.duracion} minutos`,3618)]}),
-    ],[1450,3370,1200,3618]),
-    wordSectionHeading("III","Propósitos de aprendizaje"),
-    wordTable([
-      new TableRow({tableHeader:true,children:[wordCell("COMPETENCIA / CAPACIDADES",3000,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("CRITERIOS DE EVALUACIÓN",3738,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("EVIDENCIA / INSTRUMENTO",2900,{fill:WORD.purple,color:WORD.white,bold:true})]}),
-      new TableRow({children:[
-        wordCell([wordParagraph(form.competencia,{bold:true,size:18}),...wordBulletList(capacities)],3000),
-        wordCell(criteria.length?criteria.map(item=>wordParagraph(item.criterio||item,{bullet:true,size:18})):wordParagraph("Por completar"),3738),
-        wordCell([wordRichParagraph([wordRun("Evidencia de aprendizaje",{bold:true,color:WORD.purple,size:18})]),wordParagraph(result.evidencia,{size:18}),wordRichParagraph([wordRun("Instrumento de evaluación",{bold:true,color:WORD.purple,size:18})]),wordParagraph(result.instrumentoSugerido||"Rúbrica o lista de cotejo",{size:18})],2900),
-      ]}),
-    ],[3000,3738,2900]),
-  ];
-  if(performances.length){ children.push(wordTable([new TableRow({children:[wordCell("DESEMPEÑOS PRECISADOS",WORD_WIDTH,{fill:WORD.purple,color:WORD.white,bold:true})]}),new TableRow({children:[wordCell(performances.map(item=>wordRichParagraph([wordRun(`${item.capacidad}: `,{bold:true,size:18}),wordRun(item.desempeno,{size:18})])),WORD_WIDTH)]})],[WORD_WIDTH])); }
-  if(approaches.length){ children.push(wordSectionHeading("IV","Enfoques transversales"),wordTable([new TableRow({tableHeader:true,children:[wordCell("ENFOQUE",2200,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("VALOR",1900,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("ACTITUD OBSERVABLE",5538,{fill:WORD.purple,color:WORD.white,bold:true})]}),...approaches.map(item=>new TableRow({children:[wordCell(item.enfoque,2200),wordCell(item.valor,1900),wordCell(item.actitudObservable,5538)]}))],[2200,1900,5538])); }
-  children.push(
-    wordSectionHeading("V","Situación significativa"),wordParagraph(form.contexto,{size:20}),
-    wordSectionHeading("VI","Momentos de la sesión"),
-    wordTable([new TableRow({tableHeader:true,children:[wordCell("MOMENTO",1400,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("ESTRATEGIAS DIDÁCTICAS",6338,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("RECURSOS Y MATERIALES",1900,{fill:WORD.purple,color:WORD.white,bold:true})]}),...moments.map(moment=>new TableRow({children:[wordCell([wordParagraph(moment.name,{bold:true,size:19}),wordParagraph(moment.minutes?`${moment.minutes} min`:"",{italics:true,size:17})],1400,{fill:moment.fill}),wordCell(moment.content,6338),wordCell(wordBulletList(result.materiales||[]),1900)]}))],[1400,6338,1900]),
-    wordSectionHeading("VII","Evaluación"),
-    wordTable([new TableRow({tableHeader:true,children:[wordCell("CAPACIDAD",2300,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("CRITERIO OBSERVABLE",4438,{fill:WORD.purple,color:WORD.white,bold:true}),wordCell("EVIDENCIA OBSERVABLE",2900,{fill:WORD.purple,color:WORD.white,bold:true})]}),...criteria.map(item=>new TableRow({children:[wordCell(item.capacidad||"Capacidades seleccionadas",2300),wordCell(item.criterio||item,4438),wordCell(item.evidenciaObservable||result.evidencia,2900)]}))],[2300,4438,2900]),
-    wordSectionHeading("VIII","Orientaciones DUA"),...wordBulletList(result.orientacionesDUA||[]),
-    wordSectionHeading("IX","Reflexiones del docente"),
-    wordTable((result.reflexionesDocente||["¿Qué avances tuvieron los estudiantes?","¿Qué dificultades se presentaron?","¿Qué debo reforzar en la próxima sesión?"]).map(question=>new TableRow({children:[wordCell(question,5000,{fill:WORD.purpleLight,bold:true}),wordCell("",4638)]})),[5000,4638]),
-  );
-  (result.anexos||[]).forEach((annex,index)=>children.push(new Paragraph({children:[new PageBreak()]}),wordSectionHeading(`ANEXO ${index+1}`,annex.titulo),wordRichParagraph([wordRun("Propósito: ",{bold:true,color:WORD.purple,size:20}),wordRun(annex.proposito,{size:20})]),wordParagraph(annex.contenido,{size:20}),wordRichParagraph([wordRun("Indicaciones: ",{bold:true,color:WORD.purple,size:20}),wordRun(annex.instrucciones,{size:20})])));
-  const doc=new Document({ creator:"Teaching TIC Consultorías S.A.C.", title:result.titulo, description:`${documentName} generada con Kantu`, styles:{default:{document:{run:{font:"Arial",size:20,color:WORD.ink},paragraph:{spacing:{after:90,line:276}}}}}, sections:[{ properties:{page:{size:{width:11906,height:16838},margin:{top:900,right:1134,bottom:900,left:1134},pageNumbers:{start:1,formatType:NumberFormat.DECIMAL}}}, headers:{default:new Header({children:[wordParagraph("Teaching TIC · Kantu",{size:16,color:WORD.muted,alignment:AlignmentType.RIGHT})]})}, footers:{default:new Footer({children:[wordRichParagraph([wordRun("SciVerse para docentes · Página ",{size:16,color:WORD.muted}),new TextRun({children:[PageNumber.CURRENT],font:"Arial",size:16,color:WORD.muted})],{alignment:AlignmentType.CENTER})]})}, children }] });
-  const slug=(result.titulo||form.tema||"sesion-de-aprendizaje").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,55);
-  await triggerWordDownload(doc,`sesion-${slug}.docx`);
+  const v=activity.versions[grade], detail=activity.detalle;
+  return downloadResource("challenge", {titulo:activity.title, competencia:activity.competencia,
+    objetivo:v.objetivo, materiales:v.materiales, pasos:v.pasos, condicion:v.condicion,
+    variacion:v.variacion, preguntas:[...detail.acompanamiento,v.reflexion],
+    preparacion:detail.preparacion, producto:detail.evidencias, duracion:detail.tiempo,
+    equipo:detail.organizacion, area:SUBJECTS[activity.subject].label});
 }
 
 /* ---------------------------------------------------------------------- */
@@ -1783,110 +1613,15 @@ async function downloadImageFile(dataUrl, filename) {
   document.body.removeChild(link);
 }
 
-async function downloadWordSearch({ titulo, palabras, gridData, dificultad, grado }) {
-  try {
-    const { grid, placedWords, gridSize } = gridData;
-
-    const gridCells = grid.map(row =>
-      new TableRow({
-        children: row.map(letter =>
-          new TableCell({
-            width: { size: 800, type: WidthType.DXA },
-            shading: { type: ShadingType.CLEAR, fill: "FFFFFF" },
-            margins: { top: 30, bottom: 30, left: 30, right: 30 },
-            borders: { top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }, left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }, right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" } },
-            children: [new Paragraph({
-              text: letter,
-              alignment: AlignmentType.CENTER,
-              spacing: { line: 240 }
-            })]
-          })
-        )
-      })
-    );
-
-    const gridTable = new Table({
-      width: { size: 9000, type: WidthType.DXA },
-      layout: TableLayoutType.FIXED,
-      rows: gridCells
-    });
-
-    const solutionCells = grid.map((row, rowIdx) =>
-      new TableRow({
-        children: row.map((letter, colIdx) => {
-          const isPartOfWord = placedWords.some(w => {
-            const directionVectors = {
-              horizontal: [0, 1], horizontal_back: [0, -1], vertical: [1, 0], vertical_back: [-1, 0],
-              diagonal: [1, 1], diagonal_back: [-1, -1], diagonal2: [1, -1], diagonal2_back: [-1, 1]
-            };
-            const [dRow, dCol] = directionVectors[w.direction];
-            for (let i = 0; i < w.word.length; i++) {
-              if (w.row + i * dRow === rowIdx && w.col + i * dCol === colIdx) return true;
-            }
-            return false;
-          });
-
-          return new TableCell({
-            width: { size: 800, type: WidthType.DXA },
-            shading: { type: ShadingType.CLEAR, fill: isPartOfWord ? "FFFFCC" : "FFFFFF" },
-            margins: { top: 30, bottom: 30, left: 30, right: 30 },
-            borders: { top: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }, bottom: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }, left: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" }, right: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" } },
-            children: [new Paragraph({
-              text: letter,
-              alignment: AlignmentType.CENTER,
-              spacing: { line: 240 }
-            })]
-          });
-        })
-      })
-    );
-
-    const solutionTable = new Table({
-      width: { size: 9000, type: WidthType.DXA },
-      layout: TableLayoutType.FIXED,
-      rows: solutionCells
-    });
-
-    const slug = titulo.replace(/\s+/g, "-").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").slice(0, 40);
-
-    const doc = new Document({
-      sections: [{
-        children: [
-          new Paragraph({ text: titulo, heading: HeadingLevel.HEADING_1, alignment: AlignmentType.CENTER, spacing: { after: 100 } }),
-          new Paragraph({ text: `Dificultad: ${dificultad} | Nivel: ${grado}`, alignment: AlignmentType.CENTER, spacing: { after: 200 }, italics: true }),
-
-          new Paragraph({ text: "PARA EL ESTUDIANTE", heading: HeadingLevel.HEADING_2, spacing: { before: 100, after: 150 } }),
-          new Paragraph({ text: "Palabras a buscar:", bold: true, spacing: { after: 80 } }),
-          new Paragraph({ text: palabras.join(" • "), spacing: { after: 150 } }),
-          new Paragraph({ text: "Encuentra todas las palabras en la sopa de letras. Pueden estar horizontales, verticales o diagonales.", spacing: { after: 150 } }),
-          gridTable,
-
-          new PageBreak(),
-
-          new Paragraph({ text: "SOLUCIONARIO (Para el docente)", heading: HeadingLevel.HEADING_2, spacing: { before: 100, after: 150 } }),
-          new Paragraph({ text: "Las palabras están resaltadas en amarillo:", italics: true, spacing: { after: 150 } }),
-          solutionTable,
-
-          new Paragraph({ text: " " }),
-          new Paragraph({ text: "Palabras encontradas:", bold: true, spacing: { before: 150, after: 80 } }),
-          ...palabras.map(p => new Paragraph({ text: `✓ ${p}`, bullet: { level: 0 }, spacing: { after: 40 } }))
-        ]
-      }]
-    });
-
-    await triggerWordDownload(doc, `${slug}.docx`);
-  } catch (error) {
-    // Se propaga para que lo cuente quien tiene acceso a los avisos: esta
-    // funcion vive fuera de React y no puede mostrar nada por si misma.
-    console.error("Error descargando Word:", error);
-    throw new Error("No pudimos preparar el documento de Word.");
-  }
+async function downloadWordSearch(resource) {
+  return downloadResource("wordsearch",resource);
 }
 
-function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
+function WordSearchGenerator({ initialGrade = "primaria", profile = {}, onWordResource = null }) {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ tema: "", palabras: "", grado: initialGrade, area: "", dificultad: "media" });
   const [preview, setPreview] = useState(null);
+  useEffect(()=>{onWordResource?.(preview ? {titulo:preview.titulo,palabras:preview.palabras,gridData:preview.gridData} : null)},[preview]);
   const [loading, setLoading] = useState(false);
   const [aviso, setAviso] = useState("");
   const { toast, openComingSoon } = useUI();
@@ -2741,48 +2476,8 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
     }catch(e){setError(e.message);}finally{setLoading(false);}
   }
 
-  async function downloadProject(){
-    if(!result)return;
-    const teacher=getTeacherFullName(profile);
-    const weeks=(result.rutaSemanas||[]).map((w,i)=>`SEMANA ${i+1}: ${w.titulo}\n${w.proposito}\nActividades: ${(w.actividades||[]).join(" | ")}\nEvidencia: ${w.evidencia}`).join("\n\n");
-    const sessions=(result.sesiones||[]).map((s,i)=>`${i+1}. ${s.titulo}\nCompetencia: ${s.competencia}\nActividad central: ${s.actividadCentral}\nEvidencia: ${s.evidencia}\nCriterios: ${(s.criterios||[]).join(" | ")}\nInstrumento: ${s.instrumento}`).join("\n\n");
-    const text=`PROYECTO STEAM
-
-I. DATOS INFORMATIVOS
-Docente: ${teacher}
-I.E.: ${profile.ie||""}
-Región: ${form.region}
-Nivel: ${form.nivel}
-Grado y sección: ${form.grado}${form.seccion?` - ${form.seccion}`:""}
-Duración: ${form.duracionSemanas} semana(s)
-
-II. TÍTULO
-${result.titulo}
-
-III. SITUACIÓN SIGNIFICATIVA
-${result.situacionSignificativa}
-
-IV. RETO O PREGUNTA GUÍA
-${result.reto}
-
-V. INTEGRACIÓN STEAM
-${(result.integracionSTEAM||[]).map(x=>`${x.area}: ${x.aporte}`).join("\n")}
-
-VI. COMPETENCIAS CNEB
-${(result.competencias||[]).map(x=>`${x.area}: ${x.competencia}`).join("\n")}
-
-VII. PRODUCTO ESPERADO
-${result.productoEsperado}
-
-VIII. EVIDENCIAS
-${(result.evidencias||[]).map(x=>`• ${x}`).join("\n")}
-
-IX. RUTA DEL PROYECTO POR SEMANAS
-${weeks}
-
-X. SESIONES DEL PROYECTO
-${sessions}`;
-    await downloadWord(`proyecto-steam-${(result.titulo||"proyecto").toLowerCase().replace(/[^a-z0-9]+/gi,"-")}.docx`,text,result.titulo);
+  async function downloadProject() {
+    await downloadResource("project",result,form,profile);
   }
 
   return <div className="project-steam-v2">
@@ -3008,7 +2703,7 @@ ${cuerpo}${metacognicion}`;
         </small>
       </label>
     </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar con Kantu"}</button></div></div>
-    :<div className="instrument-result"><div className="instrument-result__actions"><div><small>{isReading?"FICHA DE LECTURA":"FICHA DE TRABAJO"}</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadWord(`${isReading?"ficha-lectura":"ficha-trabajo"}.docx`,resourceText(),resource.titulo)}><Download size={14}/> Word</button></div></div><SaveStatus state={resourceSave.state} onRetry={resourceSave.retry} onDownload={()=>downloadWord(`${isReading?"ficha-lectura":"ficha-trabajo"}.docx`,resourceText(),resource.titulo)} /><pre className="resource-document-preview">{resourceText()}</pre></div>}
+    :<div className="instrument-result"><div className="instrument-result__actions"><div><small>{isReading?"FICHA DE LECTURA":"FICHA DE TRABAJO"}</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadResource(isReading?"reading":"worksheet",resource,form,profile)}><Download size={14}/> Word</button></div></div><SaveStatus state={resourceSave.state} onRetry={resourceSave.retry} onDownload={()=>downloadResource(isReading?"reading":"worksheet",resource,form,profile)} /><pre className="resource-document-preview">{resourceText()}</pre></div>}
   </div>;
 }
 
@@ -3084,7 +2779,7 @@ ${Array.from({length:25},(_,i)=>`${i+1}. | ______________________________ | ___ 
     <label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)}/></label>
     <label className="wide">Competencia<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
     <label className="wide ai-field"><span>Conducta o desempeño a observar *</span><button type="button" onClick={()=>kantu.pedir("evidencia",form)} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Qué vas a observar en el aula y en qué se nota."/></label>
-  </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} Generar escala</button></div></div>:<div className="instrument-result"><div className="instrument-result__actions"><div><small>ESCALA DE VALORACIÓN</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadWord("escala-de-valoracion.docx",text(),resource.titulo)}><Download size={14}/> Word</button></div></div><pre className="resource-document-preview">{text()}</pre></div>}</div>;
+  </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} Generar escala</button></div></div>:<div className="instrument-result"><div className="instrument-result__actions"><div><small>ESCALA DE VALORACIÓN</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadResource("rating_scale",resource,form,profile)}><Download size={14}/> Word</button></div></div><pre className="resource-document-preview">{text()}</pre></div>}</div>;
 }
 
 
@@ -3135,7 +2830,7 @@ function LinkedWorksheetGenerator({sessionContext,profile={},onFinish}){
   if(resource)return <div className="linked-resource-result">
     <div className="flow-actionbar">
       <button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button>
-      <button onClick={()=>downloadWord("ficha-de-trabajo.docx",studentText(),resource.titulo)}><Download size={15}/> Descargar Word</button>
+      <button onClick={()=>downloadResource("worksheet",resource,form,profile)}><Download size={15}/> Descargar Word</button>
       <button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button>
       <button className="flow-next-btn" onClick={()=>onFinish?.({form,resource})}>Terminar <CheckCircle2 size={16}/></button>
     </div>
@@ -3176,7 +2871,7 @@ function LinkedReadingGenerator({sessionContext,profile={},onFinish}){
       claveOp.renovar();setResource(data.resource);try{await saveTeacherMaterial({tipo:"reading",titulo:data.resource.titulo,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.");}}catch(e){setError(e.message)}finally{setLoading(false)}}
   function text(){if(!resource)return"";const groups={literal:[],inferencial:[],critico:[]};(resource.preguntas||[]).forEach(q=>(groups[q.nivel]||groups.critico).push(q.pregunta));return `FICHA DE LECTURA\n\nNombre y apellidos: ______________________________________________\nInstitución educativa: ___________________________________________\nGrado y sección: ${form.grado||""}${form.seccion?` · ${form.seccion}`:""}\nÁrea / curso: ${form.area||"Comunicación"}\nFecha: ${form.fecha||""}\nDocente: ${getTeacherFullName(profile)}\n\n${resource.titulo}\n\n${resource.texto}\n\nNIVEL LITERAL\n${groups.literal.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL INFERENCIAL\n${groups.inferencial.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL CRÍTICO\n${groups.critico.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL REFLEXIVO\n1. ¿Cómo relacionas lo leído con una experiencia de tu vida?\n______________________________________________\n2. ¿Qué enseñanza podrías aplicar en tu entorno?\n______________________________________________`;}
   if(!resource)return <div className="flow-centered-card"><BookOpen size={38}/><h2>Ficha de lectura</h2><p>Kantu creará una lectura alineada a la sesión y preguntas de comprensión.</p>{error&&<p className="wizard-error">{error}</p>}<button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 className="animate-spin" size={16}/>:<Sparkles size={16}/>} {loading?"Generando lectura...":"Generar ficha de lectura"}</button></div>;
-  return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadWord("ficha-de-lectura.docx",text(),resource.titulo)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onFinish?.({form,resource})}>Terminar <CheckCircle2 size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
+  return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadResource("reading",resource,form,profile)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onFinish?.({form,resource})}>Terminar <CheckCircle2 size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
 }
 
 function LinkedRatingScaleGenerator({sessionContext,profile={},onNext}){
@@ -3188,7 +2883,7 @@ function LinkedRatingScaleGenerator({sessionContext,profile={},onNext}){
       claveOp.renovar();setResource(data.resource);try{await saveTeacherMaterial({tipo:"rating_scale",titulo:data.resource.titulo,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.")}}catch(e){setError(e.message)}finally{setLoading(false)}}
   function text(){if(!resource)return"";return `ESCALA DE VALORACIÓN · REGISTRO DE AULA\n\nInstitución educativa / Docente: ${profile.ie||""} / ${getTeacherFullName(profile)}\nGrado y sección: ${form.grado||""}${form.seccion?` · ${form.seccion}`:""}\nÁrea: ${form.area||""}\nCompetencia: ${resource.competencia||form.competencia||""}\n\nEscala: SIEMPRE · A VECES · NO LO HACE · NO OBSERVADO\n\n${(resource.criterios||[]).map((c,i)=>`CRITERIO ${i+1}: ${c.criterio}`).join("\n")}\n\nN.º | APELLIDOS Y NOMBRES | SIEMPRE | A VECES | NO LO HACE | NO OBSERVADO\n${Array.from({length:25},(_,i)=>`${i+1}. | __________________________ | ___ | ___ | ___ | ___`).join("\n")}`;}
   if(!resource)return <div className="flow-centered-card"><ListChecks size={38}/><h2>Escala de valoración</h2><p>Se generará a partir de la competencia, evidencia y criterios de la sesión.</p>{error&&<p className="wizard-error">{error}</p>}<button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 className="animate-spin" size={16}/>:<Sparkles size={16}/>} Generar escala</button></div>;
-  return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadWord("escala-de-valoracion.docx",text(),resource.titulo)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form,instrument:resource})}>Siguiente <ArrowRight size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
+  return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadResource("rating_scale",resource,form,profile)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form,instrument:resource})}>Siguiente <ArrowRight size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
 }
 
 function CompleteClassFlow({preferredGrade="primaria",profile={},onNavigate=null}){
@@ -3196,19 +2891,24 @@ function CompleteClassFlow({preferredGrade="primaria",profile={},onNavigate=null
   const[sessionContext,setSessionContext]=useState(null);
   const[instrumentType,setInstrumentType]=useState(null);
   const[materialType,setMaterialType]=useState(null);
+  const[instrumentContext,setInstrumentContext]=useState(null);
+  const[materialContext,setMaterialContext]=useState(null);
+  const[exportError,setExportError]=useState("");
   const initialContext=sessionContext?{...sessionContext.form,tema:sessionContext.result?.titulo||sessionContext.form?.tema,proposito:sessionContext.result?.proposito||sessionContext.form?.proposito,evidencia:sessionContext.result?.evidencia||sessionContext.form?.evidencia,criteriosBase:sessionContext.result?.criteriosDetallados||sessionContext.result?.criteriosEvaluacion||[]}:null;
-  const finish=()=>setStage("done");
+  const finish=(ctx)=>{if(ctx?.resource)setMaterialContext({type:materialType,...ctx});setStage("done")};
+  const keepInstrument=(ctx)=>{setInstrumentContext({type:instrumentType,form:ctx.form,resource:ctx.instrument});setStage("material-select")};
+  const downloadClass=async()=>{setExportError("");try{await downloadCompleteClass({session:sessionContext,instrument:instrumentContext,material:materialContext,profile})}catch{setExportError("No pudimos preparar el Word. Inténtalo nuevamente.")}};
 
   if(stage==="intro")return <CompleteClassIntro onStart={()=>setStage("session")}/>;
   if(stage==="session")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="active">1 Sesión</span><span>2 Instrumento</span><span>3 Material</span></div><SteamGenerator initialGrade={preferredGrade} documentType="session" profile={profile} completeClass onNavigate={onNavigate} onNext={(ctx)=>{setSessionContext(ctx);setStage("choice")}}/></div>;
   if(stage==="choice")return <div className="flow-modal-shell"><div className="flow-modal-card"><div className="flow-modal-head"><div><small>SESIÓN LISTA</small><h2>¿Qué quieres hacer ahora?</h2><p>Continúa construyendo tu clase completa sin volver a ingresar los datos de la sesión.</p></div></div><div className="flow-choice-grid"><FlowChoiceCard icon={ClipboardList} title="Instrumentos de evaluación" description="Rúbrica, lista de cotejo o escala de valoración alineada a la sesión." onClick={()=>setStage("instrument-select")}/><FlowChoiceCard icon={FileText} title="Material" description="Ficha de trabajo, ficha de lectura o juegos para la sesión." onClick={()=>setStage("material-select")} accent="yellow"/></div></div></div>;
   if(stage==="instrument-select")return <div className="complete-flow-stage"><div className="complete-flow-topline"><button onClick={()=>setStage("choice")}>← Atrás</button><div><small>PASO 2 DE 3</small><h2>Instrumento de evaluación</h2></div></div><div className="instrument-select-grid"><FlowChoiceCard icon={ClipboardList} title="Rúbrica" description="Criterios con niveles de logro y descriptores observables." onClick={()=>{setInstrumentType("rubric");setStage("instrument")}}/><FlowChoiceCard icon={CheckCircle2} title="Lista de cotejo" description="Verificación rápida de criterios observables." onClick={()=>{setInstrumentType("checklist");setStage("instrument")}}/><FlowChoiceCard icon={ListChecks} title="Escala de valoración" description="Registro de frecuencia y observación del desempeño." onClick={()=>{setInstrumentType("rating-scale");setStage("instrument")}}/></div></div>;
-  if(stage==="instrument")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="done">✓ Sesión</span><span className="active">2 Instrumento</span><span>3 Material</span></div>{instrumentType==="rating-scale"?<LinkedRatingScaleGenerator sessionContext={sessionContext} profile={profile} onNext={()=>setStage("material-select")}/>:<EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={instrumentType} initialContext={initialContext} completeClass onNext={()=>setStage("material-select")}/>}</div>;
+  if(stage==="instrument")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="done">✓ Sesión</span><span className="active">2 Instrumento</span><span>3 Material</span></div>{instrumentType==="rating-scale"?<LinkedRatingScaleGenerator sessionContext={sessionContext} profile={profile} onNext={keepInstrument}/>:<EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={instrumentType} initialContext={initialContext} completeClass onNext={keepInstrument}/>}</div>;
   if(stage==="material-select")return <div className="complete-flow-stage"><div className="complete-flow-topline"><button onClick={()=>setStage(sessionContext?"choice":"intro")}>← Atrás</button><div><small>PASO 3 DE 3</small><h2>Material de sesión</h2><p>Elige el recurso que quieres crear con los datos de la sesión.</p></div></div><div className="material-select-grid"><FlowChoiceCard icon={FileText} title="Ficha de trabajo" description="Preguntas abiertas, opción múltiple, lectura o verdadero/falso." onClick={()=>{setMaterialType("worksheet");setStage("material")}}/><FlowChoiceCard icon={BookOpen} title="Ficha de lectura" description="Lectura original con preguntas de comprensión." onClick={()=>{setMaterialType("reading");setStage("material")}}/><FlowChoiceCard icon={Gamepad2} title="Juegos" description="Sopa de letras o crucigrama para reforzar la sesión." onClick={()=>setStage("games")} accent="yellow"/></div></div>;
   if(stage==="material")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="done">✓ Sesión</span><span className={instrumentType?"done":""}>{instrumentType?"✓ ":""}Instrumento</span><span className="active">3 Material</span></div>{materialType==="reading"?<LinkedReadingGenerator sessionContext={sessionContext} profile={profile} onFinish={finish}/>:<LinkedWorksheetGenerator sessionContext={sessionContext} profile={profile} onFinish={finish}/>}</div>;
   if(stage==="games")return <div className="complete-flow-stage"><div className="complete-flow-topline"><button onClick={()=>setStage("material-select")}>← Atrás</button><div><small>MATERIAL DE SESIÓN</small><h2>Juegos</h2></div></div><div className="flow-choice-grid"><FlowChoiceCard icon={Search} title="Sopa de letras" description="Busca palabras clave relacionadas con la sesión." onClick={()=>setStage("wordsearch")}/>{/* Crucigrama retirado en el Bloque B: el generador era una simulación. */}</div></div>;
-  if(stage==="wordsearch")return <div><div className="complete-flow-topline"><button onClick={()=>setStage("games")}>← Atrás</button><div><h2>Sopa de letras</h2></div></div><WordSearchGenerator initialGrade={preferredGrade} profile={profile}/><div className="flow-finish-row"><button className="flow-next-btn" onClick={finish}>Terminar clase <CheckCircle2 size={16}/></button></div></div>;
-  return <div className="complete-done-card"><CheckCircle2 size={48}/><small>CLASE COMPLETA</small><h2>¡Todo quedó listo!</h2><p>Tu sesión y los recursos generados se guardaron en Mi biblioteca.</p><button onClick={()=>{setStage("intro");setSessionContext(null);setInstrumentType(null);setMaterialType(null)}}>Crear otra clase <ArrowRight size={15}/></button></div>;
+  if(stage==="wordsearch")return <div><div className="complete-flow-topline"><button onClick={()=>setStage("games")}>← Atrás</button><div><h2>Sopa de letras</h2></div></div><WordSearchGenerator initialGrade={preferredGrade} profile={profile} onWordResource={(resource)=>setMaterialContext(resource?{type:"wordsearch",resource,form:sessionContext.form}:null)}/><div className="flow-finish-row"><button className="flow-next-btn" disabled={!materialContext?.resource} onClick={()=>finish()}>Terminar clase <CheckCircle2 size={16}/></button></div></div>;
+  return <div className="complete-done-card"><CheckCircle2 size={48}/><small>CLASE COMPLETA</small><h2>¡Todo quedó listo!</h2><p>Tu sesión y los recursos generados se guardaron en Mi biblioteca.</p><button onClick={downloadClass}><Download size={16}/> Descargar clase en Word</button>{exportError&&<p className="wizard-error">{exportError}</p>}<button onClick={()=>{setInstrumentContext(null);setMaterialContext(null);setStage("intro");setSessionContext(null);setInstrumentType(null);setMaterialType(null)}}>Crear otra clase <ArrowRight size={15}/></button></div>;
 }
 
 function CompleteClassIntro({onStart}){
@@ -4375,7 +4075,7 @@ function RetoModal({reto,onClose,onCreateInstrument,onSave,isSaved}){
       <section className="challenge-reflection"><h3>Preguntas para reflexionar</h3>{(reto.preguntas||[]).map((x,i)=><p key={i}>“{x}”</p>)}</section>
       {reto.adaptacionesDUA?.length>0&&<section className="challenge-detail"><h3>Apoyos para la diversidad</h3><ul>{reto.adaptacionesDUA.map((x,i)=><li key={i}>{x}</li>)}</ul></section>}
     </main>
-    <footer><button onClick={()=>onSave?.({kind:"challenge",id:reto.id||reto.titulo,title:reto.title||reto.titulo,subtitle:`${reto.area||"Reto grupal"} · ${reto.duracion}`,payload:reto})}><Star size={15}/>{isSaved?"Guardado":"Guardar"}</button><button onClick={()=>downloadWord(`reto-${(reto.id||reto.titulo||"grupal").toString().toLowerCase().replace(/[^a-z0-9]+/g,"-")}.docx`,challengeText(reto),reto.title||reto.titulo)}><Download size={15}/> Descargar en Word</button><button onClick={onCreateInstrument}><ClipboardList size={15}/> Crear instrumento de evaluación</button></footer>
+    <footer><button onClick={()=>onSave?.({kind:"challenge",id:reto.id||reto.titulo,title:reto.title||reto.titulo,subtitle:`${reto.area||"Reto grupal"} · ${reto.duracion}`,payload:reto})}><Star size={15}/>{isSaved?"Guardado":"Guardar"}</button><button onClick={()=>downloadResource("challenge",reto)}><Download size={15}/> Descargar en Word</button><button onClick={onCreateInstrument}><ClipboardList size={15}/> Crear instrumento de evaluación</button></footer>
   </div></div>;
 }
 
@@ -4638,7 +4338,7 @@ function SciVerseApp({ profile, onLogout }) {
   }
 
   async function downloadMaterial(item){
-    try{ const full=await withContent(item); downloadWord(`${full.tipo}-${full.id}.docx`,materialContentText(full.contenido),full.titulo); }
+    try{ const full=await withContent(item); if(full.contenido && typeof full.contenido === "object") await downloadResource(full.tipo,{...full.contenido,titulo:full.titulo},full,profile); else await downloadWord(full.titulo,full.contenido,full.titulo); }
     catch(e){ console.error(e); toast({tone:"error",title:"No pudimos preparar la descarga",description:"Inténtalo de nuevo en unos segundos."}); }
   }
 
