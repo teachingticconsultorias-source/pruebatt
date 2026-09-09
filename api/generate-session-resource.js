@@ -275,9 +275,10 @@ adicionales, no sustituyen a las preguntas.
 Ordena las preguntas de menor a mayor dificultad.
 Adapta el tipo de ficha al área:
 Ciencia y Tecnología: indagación/investigación/diseño.
-Comunicación: comprensión/producción.
+Comunicación, Castellano como Segunda Lengua e Inglés como Lengua Extranjera: comprensión/producción.
 Matemática: resolución de problemas.
-Personal Social: análisis/reflexión.
+Personal Social, DPCC, Ciencias Sociales y Educación Religiosa: análisis/reflexión.
+Educación Física: práctica corporal y hábitos saludables. Arte y Cultura: apreciación y creación. Educación para el Trabajo: proyecto de emprendimiento.
 Incluye espacios de respuesta y tabla cuando sea pedagógicamente útil.
 Finaliza con metacognición.
 

@@ -396,3 +396,12 @@ html, body { overflow-x: hidden; }
 /* Contador de caracteres del texto libre enviado a la IA. */
 .field-count{display:block;margin-top:4px;font-size:var(--text-label);color:var(--text-tertiary)}
 .field-count.is-near{color:var(--amber-700);font-weight:var(--weight-semibold)}
+
+/* Nombres de area largos — «Desarrollo Personal, Ciudadania y Civica (DPCC)»
+   mide 47 caracteres. En un grid de dos columnas el minimo de una pista `1fr`
+   es su contenido, asi que sin `min-width:0` la opcion mas larga ensancha la
+   columna y saca scroll horizontal a la pagina entera en movil. */
+.wizard-fields > label,
+.wizard-fields > div,
+.wizard-fields > fieldset { min-width: 0; }
+.wizard-fields select { max-width: 100%; text-overflow: ellipsis; }

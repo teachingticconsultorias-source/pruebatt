@@ -6,6 +6,7 @@ import {
 
 import Button from "../ui/Button.jsx";
 import { Badge, EmptyState, SkeletonGrid } from "../ui/Feedback.jsx";
+import { normalizarArea } from "../../config/curriculum.js";
 
 /* ==========================================================================
    BIBLIOTECA
@@ -78,7 +79,10 @@ export default function Library({
     const list = materials.filter((item) => {
       if (type !== "todos" && item.tipo !== type) return false;
       if (!term) return true;
-      return `${item.titulo || ""} ${item.tema || ""} ${item.area || ""} ${item.grado || ""}`
+      // El area canonica entra en la busqueda ademas de la guardada: asi un
+      // material antiguo de "Historia" aparece al buscar "Ciencias Sociales".
+      // Lo guardado NO se toca; esto es solo lectura.
+      return `${item.titulo || ""} ${item.tema || ""} ${item.area || ""} ${normalizarArea(item.area)} ${item.grado || ""}`
         .toLowerCase()
         .includes(term);
     });

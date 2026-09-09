@@ -21,6 +21,7 @@ import "./components/account/account.css";
 import "./components/library/library-v2.css";
 import "./components/create/create.css";
 import { TOOLS_BY_ID } from "./config/tools.js";
+import { areaAlCambiarNivel, areasDeNivel, normalizarArea } from "./config/curriculum.js";
 import Button from "./components/ui/Button.jsx";
 import { Badge } from "./components/ui/Feedback.jsx";
 import { useUI } from "./components/ui/UIProvider.jsx";
@@ -843,7 +844,10 @@ const TEMPLATES = [
 /* STEAM SESSION GENERATOR                                                  */
 /* ---------------------------------------------------------------------- */
 
-const GENERATOR_AREAS = ["Ciencia y Tecnología", "Comunicación", "Matemática", "Personal Social", "Arte y Cultura", "Educación para el Trabajo"];
+/* Las áreas ya NO viven aquí: el catálogo por nivel está en
+   config/curriculum.js, porque Primaria y Secundaria no tienen las mismas y
+   esta lista era una sola para las dos. `areasDeNivel(form.nivel)` es lo que
+   consume cada selector. */
 const GENERATOR_COMPETENCIES = {
   "Ciencia y Tecnología": [CNEB.indaga, CNEB.explica, CNEB.disena],
   Comunicación: ["Se comunica oralmente en su lengua materna", "Lee diversos tipos de textos escritos en su lengua materna", "Escribe diversos tipos de textos en su lengua materna"],
@@ -851,7 +855,23 @@ const GENERATOR_COMPETENCIES = {
   "Personal Social": ["Construye su identidad", "Convive y participa democráticamente en la búsqueda del bien común", "Gestiona responsablemente el espacio y el ambiente"],
   "Arte y Cultura": ["Aprecia de manera crítica manifestaciones artístico-culturales", CNEB.crea],
   "Educación para el Trabajo": ["Gestiona proyectos de emprendimiento económico o social"],
+
+  /* ---- Secundaria: las cinco áreas que faltaban -------------------------
+     Competencias tal y como las nombra el CNEB. En Secundaria «Personal
+     Social» se reparte: la identidad y la convivencia van a DPCC, y el
+     espacio, el tiempo histórico y la economía a Ciencias Sociales.        */
+  "Desarrollo Personal, Ciudadanía y Cívica (DPCC)": ["Construye su identidad", "Convive y participa democráticamente en la búsqueda del bien común"],
+  "Ciencias Sociales": ["Construye interpretaciones históricas", "Gestiona responsablemente el espacio y el ambiente", "Gestiona responsablemente los recursos económicos"],
+  "Educación Física": ["Se desenvuelve de manera autónoma a través de su motricidad", "Asume una vida saludable", "Interactúa a través de sus habilidades sociomotrices"],
+  "Castellano como Segunda Lengua": ["Se comunica oralmente en castellano como segunda lengua", "Lee diversos tipos de textos escritos en castellano como segunda lengua", "Escribe diversos tipos de textos en castellano como segunda lengua"],
+  "Inglés como Lengua Extranjera": ["Se comunica oralmente en inglés como lengua extranjera", "Lee diversos tipos de textos escritos en inglés como lengua extranjera", "Escribe diversos tipos de textos en inglés como lengua extranjera"],
+  "Educación Religiosa": ["Construye su identidad como persona humana, amada por Dios, digna, libre y trascendente", "Asume la experiencia del encuentro personal y comunitario con Dios en su proyecto de vida"],
 };
+/* Un material antiguo puede traer un area que ya no esta en el catalogo
+   ("Historia", "Biologia"). Se traduce al leer para que siga abriendo, y si
+   no hay traduccion se devuelve lista vacia en vez de reventar el render. */
+const competenciasDeArea = (area) => GENERATOR_COMPETENCIES[area] || GENERATOR_COMPETENCIES[normalizarArea(area)] || [];
+
 const GENERATOR_CAPACITIES = {
   [CNEB.indaga]: ["Problematiza situaciones para hacer indagación", "Diseña estrategias para hacer indagación", "Genera y registra datos e información", "Analiza datos e información", "Evalúa y comunica el proceso y resultados de su indagación"],
   [CNEB.explica]: ["Comprende y usa conocimientos sobre los seres vivos, materia y energía, biodiversidad, Tierra y universo", "Evalúa las implicancias del saber y del quehacer científico y tecnológico"],
@@ -869,6 +889,23 @@ const GENERATOR_CAPACITIES = {
   "Aprecia de manera crítica manifestaciones artístico-culturales": ["Percibe manifestaciones artístico-culturales", "Contextualiza manifestaciones artístico-culturales", "Reflexiona creativa y críticamente sobre manifestaciones artístico-culturales"],
   [CNEB.crea]: ["Explora y experimenta los lenguajes del arte", "Aplica procesos creativos", "Evalúa y comunica sus procesos y proyectos"],
   "Gestiona proyectos de emprendimiento económico o social": ["Crea propuestas de valor", "Aplica habilidades técnicas", "Trabaja cooperativamente para lograr objetivos y metas", "Evalúa los resultados del proyecto de emprendimiento"],
+
+  /* ---- capacidades de las competencias nuevas de Secundaria -------------
+     Sin esto, elegir un área nueva dejaría el paso 2 sin capacidades que
+     marcar y la validación no dejaría avanzar nunca.                       */
+  "Construye interpretaciones históricas": ["Interpreta críticamente fuentes diversas", "Comprende el tiempo histórico", "Elabora explicaciones sobre procesos históricos"],
+  "Gestiona responsablemente los recursos económicos": ["Comprende las relaciones entre los elementos del sistema económico y financiero", "Toma decisiones económicas y financieras"],
+  "Se desenvuelve de manera autónoma a través de su motricidad": ["Comprende su cuerpo", "Se expresa corporalmente"],
+  "Asume una vida saludable": ["Comprende las relaciones entre la actividad física, alimentación, postura e higiene personal y del ambiente, y la salud", "Incorpora prácticas que mejoran su calidad de vida"],
+  "Interactúa a través de sus habilidades sociomotrices": ["Se relaciona utilizando sus habilidades sociomotrices", "Crea y aplica estrategias y tácticas de juego"],
+  "Se comunica oralmente en castellano como segunda lengua": ["Obtiene información del texto oral", "Infiere e interpreta información del texto oral", "Adecúa, organiza y desarrolla las ideas de forma coherente y cohesionada", "Utiliza recursos no verbales y paraverbales de forma estratégica", "Interactúa estratégicamente con distintos interlocutores", "Reflexiona y evalúa la forma, el contenido y contexto del texto oral"],
+  "Lee diversos tipos de textos escritos en castellano como segunda lengua": ["Obtiene información del texto escrito", "Infiere e interpreta información del texto", "Reflexiona y evalúa la forma, el contenido y contexto del texto"],
+  "Escribe diversos tipos de textos en castellano como segunda lengua": ["Adecúa el texto a la situación comunicativa", "Organiza y desarrolla las ideas de forma coherente y cohesionada", "Utiliza convenciones del lenguaje escrito de forma pertinente", "Reflexiona y evalúa la forma, el contenido y contexto del texto escrito"],
+  "Se comunica oralmente en inglés como lengua extranjera": ["Obtiene información del texto oral", "Infiere e interpreta información del texto oral", "Adecúa, organiza y desarrolla las ideas de forma coherente y cohesionada", "Utiliza recursos no verbales y paraverbales de forma estratégica", "Interactúa estratégicamente con distintos interlocutores", "Reflexiona y evalúa la forma, el contenido y contexto del texto oral"],
+  "Lee diversos tipos de textos escritos en inglés como lengua extranjera": ["Obtiene información del texto escrito", "Infiere e interpreta información del texto", "Reflexiona y evalúa la forma, el contenido y contexto del texto"],
+  "Escribe diversos tipos de textos en inglés como lengua extranjera": ["Adecúa el texto a la situación comunicativa", "Organiza y desarrolla las ideas de forma coherente y cohesionada", "Utiliza convenciones del lenguaje escrito de forma pertinente", "Reflexiona y evalúa la forma, el contenido y contexto del texto escrito"],
+  "Construye su identidad como persona humana, amada por Dios, digna, libre y trascendente": ["Conoce a Dios y asume su identidad religiosa y espiritual como persona digna, libre y trascendente", "Cultiva y valora las manifestaciones religiosas de su entorno argumentando su fe de manera comprensible y respetuosa"],
+  "Asume la experiencia del encuentro personal y comunitario con Dios en su proyecto de vida": ["Transforma su entorno desde el encuentro personal y comunitario con Dios y desde la fe que profesa", "Actúa coherentemente en razón de su fe según los principios de su conciencia moral en situaciones concretas de la vida"],
 };
 const PERU_REGIONS = ["Amazonas","Áncash","Apurímac","Arequipa","Ayacucho","Cajamarca","Callao","Cusco","Huancavelica","Huánuco","Ica","Junín","La Libertad","Lambayeque","Lima","Loreto","Madre de Dios","Moquegua","Pasco","Piura","Puno","San Martín","Tacna","Tumbes","Ucayali"];
 
@@ -912,8 +949,17 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
 
   const grades = form.nivel === "Primaria" ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"] : ["1.º", "2.º", "3.º", "4.º", "5.º"];
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-  function changeLevel(level) { setForm((current) => ({ ...current, nivel: level, grado: "1.º" })); }
-  function changeArea(area) { const competence=GENERATOR_COMPETENCIES[area][0]; setForm((current) => ({ ...current, area, competencia: competence, capacidades: GENERATOR_CAPACITIES[competence] || [] })); }
+  // Cambiar de nivel NO borra el area: se conserva si sigue existiendo, y si
+  // no ("Personal Social" al pasar a Secundaria) se usa su equivalente.
+  function changeLevel(level) {
+    setForm((current) => {
+      const area = areaAlCambiarNivel(level, current.area);
+      if (area === current.area) return { ...current, nivel: level, grado: "1.º" };
+      const competencia = competenciasDeArea(area)[0];
+      return { ...current, nivel: level, grado: "1.º", area, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] };
+    });
+  }
+  function changeArea(area) { const competence=competenciasDeArea(area)[0]; setForm((current) => ({ ...current, area, competencia: competence, capacidades: GENERATOR_CAPACITIES[competence] || [] })); }
   function changeCompetence(competencia) { setForm((current)=>({...current,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]})); }
   function toggleCapacity(capacity) { setForm((current)=>({...current,capacidades:current.capacidades.includes(capacity)?current.capacidades.filter(c=>c!==capacity):[...current.capacidades,capacity]})); }
   function nextStep() {
@@ -1018,7 +1064,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
         <div className="wizard-fields">
           <label>Nivel educativo *<select value={form.nivel} onChange={e=>changeLevel(e.target.value)}><option>Primaria</option><option>Secundaria</option></select></label>
           <label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
-          <label className="wide">Área curricular *<select value={form.area} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+          <label className="wide">Área curricular *<select value={form.area} onChange={e=>changeArea(e.target.value)}>{areasDeNivel(form.nivel).map(a=><option key={a}>{a}</option>)}</select></label>
           <label className="wide">Región del docente *<select value={form.region} onChange={e=>update("region",e.target.value)}><option value="">Selecciona una región</option>{PERU_REGIONS.map(r=><option key={r}>{r}</option>)}</select><small className="field-help">Kantu usará referentes pertinentes de la región, sin inventar datos locales específicos.</small></label>
           <label>Sección<input value={form.seccion} onChange={e=>update("seccion",e.target.value)} placeholder="Ej.: A, B o Única"/></label>
           <label>Fecha de la sesión *<input type="date" value={form.fecha} onChange={e=>update("fecha",e.target.value)}/></label>
@@ -1030,7 +1076,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
         <div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Propósito y contexto</h4><p>Cuéntale a Kantu qué necesitan aprender tus estudiantes.</p></div></div>
         <div className="wizard-fields">
           <label className="wide">Tema o título provisional *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Cuidamos el agua de nuestra comunidad"/></label>
-          <label className="wide">Competencia CNEB *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
+          <label className="wide">Competencia CNEB *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{competenciasDeArea(form.area).map(c=><option key={c}>{c}</option>)}</select></label>
           <fieldset className="wide capacity-picker"><legend>Capacidades que se movilizarán *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
           <div className="wide ai-field"><label htmlFor={`${documentType}-purpose`}>Propósito de aprendizaje *</label><button type="button" onClick={()=>suggestField("proposito")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="proposito"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="proposito"?kantu.espera:"Sugerir con Kantu"}</button><textarea id={`${documentType}-purpose`} value={form.proposito} onChange={e=>update("proposito",e.target.value)} placeholder="Qué aprenderán, cómo lo demostrarán y para qué les servirá."/></div>
           <div className="wide ai-field"><label htmlFor={`${documentType}-context`}>Situación significativa o contexto regional *</label><button type="button" onClick={()=>suggestField("contexto")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="contexto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="contexto"?kantu.espera:"Sugerir con Kantu"}</button><textarea id={`${documentType}-context`} value={form.contexto} onChange={e=>update("contexto",e.target.value)} placeholder="Describe brevemente a tus estudiantes, su región o el problema que abordarán."/></div>
@@ -1174,8 +1220,13 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
   const [error, setError] = useState(null);
   const grades = form.nivel === "Primaria" ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"] : ["1.º", "2.º", "3.º", "4.º", "5.º"];
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
-  const changeLevel = (nivel) => setForm((current) => ({ ...current, nivel, grado: "1.º" }));
-  const changeArea = (area) => { const competencia = GENERATOR_COMPETENCIES[area][0]; setForm((current) => ({ ...current, area, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] })); };
+  const changeLevel = (nivel) => setForm((current) => {
+    const area = areaAlCambiarNivel(nivel, current.area);
+    if (area === current.area) return { ...current, nivel, grado: "1.º" };
+    const competencia = competenciasDeArea(area)[0];
+    return { ...current, nivel, grado: "1.º", area, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] };
+  });
+  const changeArea = (area) => { const competencia = competenciasDeArea(area)[0]; setForm((current) => ({ ...current, area, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] })); };
   const changeCompetence = (competencia) => setForm((current) => ({ ...current, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] }));
   const toggleCapacity = (capacity) => setForm((current) => ({ ...current, capacidades: current.capacidades.includes(capacity) ? current.capacidades.filter((item) => item !== capacity) : [...current.capacidades, capacity] }));
 
@@ -1251,9 +1302,9 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
 
     <div className="instrument-steps">{["Contexto","Evidencia","Revisión"].map((label,index)=><div key={label} className={step>=index+1?"active":""}><b>{step>index+1?<CheckCircle2 size={14}/>:index+1}</b><span>{label}</span></div>)}</div>
     {step===1&&<div className="wizard-card"><div className="wizard-card__title"><span><GraduationCap size={18}/></span><div><h4>Contexto del instrumento</h4><p>Kantu utilizará esta información para alinearlo al CNEB.</p></div></div><div className="wizard-fields instrument-context-grid">
-      <label>Nivel *<select value={form.nivel} onChange={e=>changeLevel(e.target.value)}><option>Primaria</option><option>Secundaria</option></select></label><label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label><label>Área *<select value={form.area} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+      <label>Nivel *<select value={form.nivel} onChange={e=>changeLevel(e.target.value)}><option>Primaria</option><option>Secundaria</option></select></label><label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label><label>Área *<select value={form.area} onChange={e=>changeArea(e.target.value)}>{areasDeNivel(form.nivel).map(a=><option key={a}>{a}</option>)}</select></label>
       <label>Región *<select value={form.region} onChange={e=>update("region",e.target.value)}><option value="">Selecciona una región</option>{PERU_REGIONS.map(r=><option key={r}>{r}</option>)}</select></label><label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Cuidamos el agua de la comunidad"/></label>
-      <label className="wide">Competencia *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
+      <label className="wide">Competencia *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{competenciasDeArea(form.area).map(c=><option key={c}>{c}</option>)}</select></label>
       <fieldset className="wide capacity-picker"><legend>Capacidades que serán evaluadas *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
     </div></div>}
     {step===2&&<div className="wizard-card"><div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Evidencia de aprendizaje</h4><p>Indica qué producirá o realizará el estudiante para demostrar lo aprendido.</p></div></div><div className="evidence-editor"><div><strong>{form.competencia}</strong><small>{form.capacidades.length} capacidades seleccionadas</small></div><button type="button" onClick={suggestEvidence} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={15} className="animate-spin"/>:<Sparkles size={15}/>} {kantu.campoActivo?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Describe el producto, actuación o desempeño observable..."/></div><label className="criteria-count">Cantidad de criterios<select value={form.numeroCriterios} onChange={e=>update("numeroCriterios",e.target.value)}>{[4,5,6,7,8,9,10].map(n=><option key={n}>{n}</option>)}</select></label>
@@ -2426,9 +2477,14 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
 
   const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
   const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
-  function changeLevel(nivel){setForm(prev=>({...prev,nivel,grado:"1.º"}));}
+  function changeLevel(nivel){setForm(prev=>{
+    const areaCurricular=areaAlCambiarNivel(nivel,prev.areaCurricular);
+    if(areaCurricular===prev.areaCurricular) return {...prev,nivel,grado:"1.º"};
+    const competencia=competenciasDeArea(areaCurricular)[0];
+    return {...prev,nivel,grado:"1.º",areaCurricular,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]};
+  });}
   function changeArea(areaCurricular){
-    const competencia=GENERATOR_COMPETENCIES[areaCurricular][0];
+    const competencia=competenciasDeArea(areaCurricular)[0];
     setForm(prev=>({...prev,areaCurricular,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));
   }
   function changeCompetence(competencia){setForm(prev=>({...prev,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
@@ -2521,8 +2577,8 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
         <label className="wide ai-field"><span>Situación significativa *</span><button type="button" onClick={()=>suggest("situacion")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="situacion"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="situacion"?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.situacion} onChange={e=>update("situacion",e.target.value)} placeholder="Describe brevemente el problema, necesidad o situación de la escuela o comunidad."/></label>
         <label className="wide ai-field"><span>Reto o pregunta guía</span><button type="button" onClick={()=>suggest("reto")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="reto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="reto"?kantu.espera:"Sugerir con Kantu"}</button><input value={form.reto} onChange={e=>update("reto",e.target.value)} placeholder="Ej.: ¿Cómo podríamos reducir el desperdicio de agua en nuestra escuela?"/></label>
         <fieldset className="wide steam-area-picker"><legend>¿Qué áreas STEAM intervienen? * <small>Selecciona al menos 2</small></legend>{["Ciencia","Tecnología","Ingeniería","Arte","Matemática"].map(area=><label key={area} className={form.areasSTEAM.includes(area)?"selected":""}><input type="checkbox" checked={form.areasSTEAM.includes(area)} onChange={()=>toggleSteamArea(area)}/><span>{area}</span></label>)}</fieldset>
-        <label className="wide">Área curricular principal *<select value={form.areaCurricular} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
-        <label className="wide">Competencia CNEB principal *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.areaCurricular].map(c=><option key={c}>{c}</option>)}</select></label>
+        <label className="wide">Área curricular principal *<select value={form.areaCurricular} onChange={e=>changeArea(e.target.value)}>{areasDeNivel(form.nivel).map(a=><option key={a}>{a}</option>)}</select></label>
+        <label className="wide">Competencia CNEB principal *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{competenciasDeArea(form.areaCurricular).map(c=><option key={c}>{c}</option>)}</select></label>
         <fieldset className="wide capacity-picker"><legend>Capacidades que se movilizarán *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
       </div>
     </div>}
@@ -2695,7 +2751,7 @@ ${cuerpo}${metacognicion}`;
     {!resource?<div className="wizard-card"><div className="wizard-card__title"><span>{isReading?<BookOpen size={18}/>:<FileText size={18}/>}</span><div><h4>{isReading?"Ficha de lectura":"Ficha de trabajo"}</h4><p>{isReading?"Genera una lectura original con preguntas por niveles de comprensión.":"Genera una ficha de preguntas y respuestas lista para tus estudiantes."}</p></div></div><div className="wizard-fields">
       <label>Nivel *<select value={form.nivel} onChange={e=>setForm(prev=>({...prev,nivel:e.target.value,grado:"1.º"}))}><option>Primaria</option><option>Secundaria</option></select></label>
       <label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
-      <label className="wide">Área curricular *<select value={form.area} onChange={e=>update("area",e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+      <label className="wide">Área curricular *<select value={form.area} onChange={e=>update("area",e.target.value)}>{areasDeNivel(form.nivel).map(a=><option key={a}>{a}</option>)}</select></label>
       <label className="wide">Tema *<input value={form.tema} maxLength={LIMITE_TEMA} onChange={e=>update("tema",e.target.value)} placeholder={isReading?"Ej.: Las festividades de mi comunidad":"Ej.: El ciclo del agua"}/></label>
       <label className="wide ai-field"><span>Contexto o indicación adicional</span><button type="button" onClick={()=>kantu.pedir(campoDeEnfoque,form,{destino:"contexto"})} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.contexto} maxLength={LIMITE_CONTEXTO} onChange={e=>update("contexto",e.target.value)} placeholder="Opcional: contexto rural, festividad, situación del aula..."/>
         <small className={form.contexto.length > LIMITE_CONTEXTO - 80 ? "field-count is-near" : "field-count"}>
@@ -2724,7 +2780,7 @@ function ValuationScaleGenerator({initialGrade="primaria",profile={}}){
   });
   const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
   const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
-  function changeArea(area){const competencia=GENERATOR_COMPETENCIES[area][0];setForm(prev=>({...prev,area,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
+  function changeArea(area){const competencia=competenciasDeArea(area)[0];setForm(prev=>({...prev,area,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
   function changeCompetence(competencia){setForm(prev=>({...prev,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
   async function generate(){
     if(!form.tema.trim()||!form.region||!form.evidencia.trim())return setError("Completa tema, región y evidencia.");
@@ -2775,9 +2831,9 @@ ${Array.from({length:25},(_,i)=>`${i+1}. | ______________________________ | ___ 
     <label>Nivel<select value={form.nivel} onChange={e=>setForm(prev=>({...prev,nivel:e.target.value,grado:"1.º"}))}><option>Primaria</option><option>Secundaria</option></select></label>
     <label>Grado<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
     <label className="wide">Región *<select value={form.region} onChange={e=>update("region",e.target.value)}><option value="">Selecciona una región</option>{PERU_REGIONS.map(r=><option key={r}>{r}</option>)}</select></label>
-    <label className="wide">Área<select value={form.area} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
+    <label className="wide">Área<select value={form.area} onChange={e=>changeArea(e.target.value)}>{areasDeNivel(form.nivel).map(a=><option key={a}>{a}</option>)}</select></label>
     <label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)}/></label>
-    <label className="wide">Competencia<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
+    <label className="wide">Competencia<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{competenciasDeArea(form.area).map(c=><option key={c}>{c}</option>)}</select></label>
     <label className="wide ai-field"><span>Conducta o desempeño a observar *</span><button type="button" onClick={()=>kantu.pedir("evidencia",form)} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Qué vas a observar en el aula y en qué se nota."/></label>
   </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} Generar escala</button></div></div>:<div className="instrument-result"><div className="instrument-result__actions"><div><small>ESCALA DE VALORACIÓN</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadResource("rating_scale",resource,form,profile)}><Download size={14}/> Word</button></div></div><pre className="resource-document-preview">{text()}</pre></div>}</div>;
 }

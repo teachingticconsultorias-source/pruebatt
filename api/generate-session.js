@@ -13,6 +13,9 @@ import { withCredit, chargesCreditForModule } from "./_lib/credits.js";
 import { claveObligatoria } from "./_lib/idempotency.js";
 import { bloqueDeContexto, tieneTema } from "./_lib/contexto-sugerencia.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
+// Catálogo curricular único, compartido con el navegador. Es un módulo de
+// datos puro: no arrastra React ni dependencias al bundle de la función.
+import { normalizarArea } from "../config/curriculum.js";
 
 const SESSION_SCHEMA = {
   type: "object",
@@ -194,15 +197,28 @@ const DIDACTIC_PROCESSES = {
   "Personal Social": ["Problematización", "Análisis de información", "Toma de decisiones"],
   "Arte y Cultura": ["Exploración y experimentación", "Aplicación de procesos creativos", "Socialización", "Evaluación y comunicación"],
   "Educación para el Trabajo": ["Problematización", "Diseño de la propuesta de valor", "Aplicación de habilidades técnicas", "Trabajo cooperativo", "Evaluación de resultados"],
+
+  /* ---- áreas propias de Secundaria -----------------------------------
+     Sin entrada aquí caían todas en la secuencia genérica de abajo, que
+     sirve para salir del paso pero no es la didáctica del área.        */
+  "Desarrollo Personal, Ciudadanía y Cívica (DPCC)": ["Problematización", "Análisis de información", "Toma de decisiones o acuerdos"],
+  "Ciencias Sociales": ["Problematización", "Análisis de fuentes e información", "Interpretación y explicación", "Toma de postura"],
+  "Educación Física": ["Activación corporal", "Exploración y práctica", "Aplicación en situación motriz", "Vuelta a la calma y reflexión"],
+  "Castellano como Segunda Lengua": { lee: ["Antes de la lectura", "Durante la lectura", "Después de la lectura"], escribe: ["Planificación", "Textualización", "Revisión y publicación"], oral: ["Antes del discurso", "Durante el discurso", "Después del discurso"] },
+  "Inglés como Lengua Extranjera": { lee: ["Antes de la lectura", "Durante la lectura", "Después de la lectura"], escribe: ["Planificación", "Textualización", "Revisión y publicación"], oral: ["Antes del discurso", "Durante el discurso", "Después del discurso"] },
+  "Educación Religiosa": ["Ver la realidad", "Juzgar a la luz de la fe", "Actuar y celebrar"],
 };
 
 function didacticProcessList(form) {
-  const area=DIDACTIC_PROCESSES[form.area];
+  // Un material antiguo puede traer «Historia» o «Biología», que no son áreas
+  // sino contenidos: se traducen para leerlos, nunca para reescribirlos.
+  const nombre=normalizarArea(form.area);
+  const area=DIDACTIC_PROCESSES[nombre];
   if (!area) return ["Exploración del reto", "Construcción del aprendizaje", "Aplicación", "Evaluación y comunicación"];
   if (Array.isArray(area)) return area;
   const competence=(form.competencia||"").toLowerCase();
-  if (form.area === "Ciencia y Tecnología") return competence.includes("indaga")?area.indaga:competence.includes("diseña")?area.disena:area.explica;
-  if (form.area === "Comunicación") return competence.includes("lee ")?area.lee:competence.includes("escribe")?area.escribe:area.oral;
+  if (nombre === "Ciencia y Tecnología") return competence.includes("indaga")?area.indaga:competence.includes("diseña")?area.disena:area.explica;
+  if (nombre === "Comunicación" || nombre === "Castellano como Segunda Lengua" || nombre === "Inglés como Lengua Extranjera") return competence.includes("lee ")?area.lee:competence.includes("escribe")?area.escribe:area.oral;
   return Object.values(area)[0];
 }
 
