@@ -17,6 +17,7 @@
 
 import { callRpc } from "./supabase.js";
 import { Errors } from "./errors.js";
+import { cerrarOperacion, reservarOperacion } from "./idempotency.js";
 
 /**
  * Consume 1 crédito. Lanza `creditsExhausted` si no quedan.
@@ -86,17 +87,54 @@ export function chargesCreditForModule(moduleName) {
  * @template T
  */
 export async function withCredit(auth, operation) {
+  // ---- Idempotencia -------------------------------------------------------
+  //
+  // Se reserva ANTES de consumir. Si dos peticiones llegan a la vez con la
+  // misma clave, la clave primaria de Postgres deja pasar a una: la otra no
+  // consume crédito ni llama a Gemini.
+  //
+  // Sin clave —cliente antiguo, o migración 010 sin aplicar— todo sigue como
+  // antes. La protección se añade, no se impone.
+  let reserva = { estado: "sin_soporte" };
+  if (auth?.idempotencyKey) {
+    reserva = await reservarOperacion({
+      token: auth.token, url: auth.url, key: auth.key,
+      clave: auth.idempotencyKey, tool: auth.reason,
+    });
+    if (reserva.estado === "duplicada") {
+      console.warn("[sciverse:idempotencia]", JSON.stringify({
+        tool: auth.reason, estado: "duplicada",
+      }));
+      throw Errors.duplicateOperation();
+    }
+  }
+
   const credits = await consumeCredit(auth);
   try {
     const result = await operation();
+    if (reserva.estado === "nueva") {
+      await cerrarOperacion({
+        token: auth.token, url: auth.url, key: auth.key,
+        clave: auth.idempotencyKey, estado: "completed",
+      });
+    }
     return { result, credits };
   } catch (error) {
-    // La generación no entregó nada: el crédito se devuelve.
+    // La generación no entregó nada: el crédito se devuelve. Una sola vez,
+    // porque sólo hay un vale y `refund_ai_credit` es idempotente contra él.
     await refundCredit({
       ...auth,
       consumptionId: credits?.consumption_id,
       reason: auth.reason || "generation_failed",
     });
+    if (reserva.estado === "nueva") {
+      // Se marca fallida, no completada: así un reintento legítimo con OTRA
+      // clave puede volver a intentarlo sin arrastrar este resultado.
+      await cerrarOperacion({
+        token: auth.token, url: auth.url, key: auth.key,
+        clave: auth.idempotencyKey, estado: "failed",
+      });
+    }
     throw error;
   }
 }

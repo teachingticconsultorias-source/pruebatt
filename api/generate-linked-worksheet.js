@@ -149,30 +149,26 @@ ${wrapTeacherContext(guard.values.contexto, { volatile: guard.flags.volatile })}
     // rellenando para cerrar el esquema. Se escala con la cantidad pedida.
     const maxOutputTokens = Math.min(16000, Math.max(7500, questionCount * 700));
 
+    // TODA llamada a Gemini pasa por `_lib/gemini.js`: de ahí salen el
+    // timeout, los reintentos ante 429/5xx, el parseo, el `finishReason`, el
+    // uso de tokens y la traducción de errores. Antes este endpoint tenía su
+    // propio `fetch` y, con él, su propia política: los picos de Gemini le
+    // llegaban a la docente a la primera mientras sesión y STEAM aguantaban.
     async function intentar(reforzar) {
       const texto = reforzar
         ? `${prompt}
 El intento anterior incluyó preguntas de relleno o repetidas. Escríbelas todas completas, distintas entre sí y específicas del tema.`
         : prompt;
 
-      const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: texto }] }],
-          systemInstruction: { parts: [{ text: "Eres especialista peruano en CNEB. Entrega JSON válido, claro y aplicable en aula." }] },
-          generationConfig: { maxOutputTokens, responseMimeType: "application/json", responseSchema: SCHEMA }
-        })
+      const { data } = await generateJson({
+        prompt: texto,
+        systemInstruction: "Eres especialista peruano en CNEB. Entrega JSON válido, claro y aplicable en aula.",
+        responseSchema: SCHEMA,
+        maxOutputTokens,
+        tool: `ficha-vinculada${reforzar ? ":refuerzo" : ""}`,
       });
 
-      const data = await r.json();
-      if (!r.ok) throw Object.assign(new Error(data?.error?.message || "Error de Gemini"), { status: r.status });
-      const candidate = data?.candidates?.[0];
-      const text = candidate?.content?.parts?.map(x => x.text).join("") || "";
-      if (!text) throw new Error("Gemini no devolvió contenido");
-      if (candidate?.finishReason === "MAX_TOKENS") throw qualityError(["la respuesta se cortó por longitud"]);
-
-      const resource = JSON.parse(text);
+      const resource = data;
       resource.preguntas = arr(resource.preguntas).slice(0, questionCount);
       return resource;
     }

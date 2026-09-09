@@ -116,6 +116,19 @@ export const Errors = {
     ),
 
   /**
+   * La misma operación ya está en curso o terminó.
+   *
+   * No es un error de la docente: normalmente es un doble clic o un reintento
+   * del navegador. El mensaje lo trata como lo que es.
+   */
+  duplicateOperation: () =>
+    new AppError(
+      "DUPLICATE_OPERATION",
+      "Esta creación ya se está procesando. Espera unos segundos antes de volver a intentarlo.",
+      409
+    ),
+
+  /**
    * El proveedor está saturado y los reintentos no bastaron.
    *
    * Mensaje distinto del genérico a propósito: aquí no hay nada que la
@@ -216,6 +229,12 @@ export function sendGenerationError(res, error, pieza = "el material", devuelto 
       error: "Tu perfil no terminó de crearse. Escríbenos y lo activamos.",
       code: "PROFILE_MISSING",
     });
+  }
+
+  // Errores con código propio: su mensaje ya está pensado para la docente y
+  // dice algo más útil que el genérico. Se respetan tal cual.
+  if (error?.code === "AI_BUSY" || error?.code === "DUPLICATE_OPERATION") {
+    return res.status(error.status).json({ error: error.message, code: error.code });
   }
 
   // Fallo de calidad detectado por _lib/quality.js: llega con code explícito

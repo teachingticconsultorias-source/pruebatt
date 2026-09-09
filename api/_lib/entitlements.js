@@ -127,21 +127,39 @@ export async function planEfectivo(auth) {
 /**
  * Normaliza una cantidad pedida por el cliente contra el límite del plan.
  *
- * Recorta en vez de rechazar cuando el exceso es plausible —la interfaz pudo
- * quedarse con un valor viejo— y lanza sólo cuando el valor no tiene sentido.
- * Un error a media generación cuesta más que entregar 10 preguntas cuando se
- * pidieron 12.
+ * DEVUELVE LOS TRES NÚMEROS, no sólo el final: `pedido`, `valor` y `limite`.
+ * El recorte es una defensa contra peticiones manipuladas, no una forma de
+ * atender al docente: en el flujo normal la interfaz debe impedir pedir de
+ * más, y para eso necesita conocer el límite. Si aquí sólo se devolviera el
+ * número recortado, la única manera de enterarse sería contar las preguntas
+ * del resultado.
  *
- * @returns {{valor:number, recortado:boolean, limite:number}}
+ * Se recorta en vez de rechazar porque el exceso suele ser plausible —una
+ * pestaña con un valor viejo— y un error a media generación cuesta más que
+ * entregar 10 preguntas cuando se pidieron 12.
+ *
+ * @returns {{pedido:number|null, valor:number, recortado:boolean, limite:number}}
  */
-export function cantidadPermitida(pedida, { minimo = 1, limite, porDefecto }) {
+export function cantidadPermitida(pedida, { minimo = 1, limite, porDefecto, tool, plan }) {
   const tope = entero(limite, porDefecto);
   const n = Number.parseInt(pedida, 10);
+  const pedido = Number.isFinite(n) ? n : null;
 
-  if (!Number.isFinite(n)) return { valor: entero(porDefecto, tope), recortado: false, limite: tope };
-  if (n < minimo) return { valor: minimo, recortado: true, limite: tope };
-  if (n > tope) return { valor: tope, recortado: true, limite: tope };
-  return { valor: n, recortado: false, limite: tope };
+  const resultado = (valor, recortado) => {
+    if (recortado && pedido !== null) {
+      // Queda registrado para poder distinguir una interfaz desactualizada de
+      // alguien editando la petición a mano. Sin correo, sin nombre, sin id.
+      console.warn("[sciverse:clamp]", JSON.stringify({
+        tool: tool || null, plan: plan || null, pedido, efectivo: valor, limite: tope,
+      }));
+    }
+    return { pedido, valor, recortado, limite: tope };
+  };
+
+  if (pedido === null) return { pedido: null, valor: entero(porDefecto, tope), recortado: false, limite: tope };
+  if (pedido < minimo) return resultado(minimo, true);
+  if (pedido > tope) return resultado(tope, true);
+  return resultado(pedido, false);
 }
 
 /**

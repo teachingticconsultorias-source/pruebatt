@@ -4,7 +4,7 @@
 // Instrumentos: rubric, checklist, observation_guide, rating_scale
 // Materiales: worksheet, reading, questionnaire
 
-import { getGeminiModel } from "./_lib/gemini.js";
+import { generateJson, getGeminiModel } from "./_lib/gemini.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 import { sendGenerationError } from "./_lib/errors.js";
 import { validateSessionResource, qualityError } from "./_lib/quality.js";
@@ -378,34 +378,27 @@ export default async function handler(req,res){
 
     const p=prompt(type,c,opciones);
 
+    // TODA llamada a Gemini pasa por `_lib/gemini.js`: timeout, reintentos
+    // ante 429/5xx, parseo, finishReason, uso de tokens y traducción de
+    // errores. Antes este endpoint tenía su propio `fetch` y su propia
+    // política, así que un pico de Gemini le llegaba a la docente a la
+    // primera mientras sesión y STEAM lo absorbían.
     async function intentar(reforzar){
       const texto = reforzar
         ? `${p}
 El intento anterior dejó secciones vacías o menos preguntas de las pedidas. Escribe todas las actividades completas, distintas entre sí y específicas del tema.`
         : p;
 
-      const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`,{
-        method:"POST",
-        headers:{"Content-Type":"application/json","x-goog-api-key":apiKey},
-        body:JSON.stringify({
-          contents:[{parts:[{text:texto}]}],
-          systemInstruction:{parts:[{text:"Eres especialista peruano en CNEB. Entrega JSON válido y pedagógicamente aplicable."}]},
-          generationConfig:{
-            // La ficha por secciones necesita más margen: con 6000 el modelo
-            // llegaba justo y recortaba actividades.
-            maxOutputTokens:type==="worksheet"?9000:(type==="reading"?6000:4500),
-            responseMimeType:"application/json",
-            responseSchema:SCHEMAS[type]
-          }
-        })
+      const { data } = await generateJson({
+        prompt: texto,
+        systemInstruction: "Eres especialista peruano en CNEB. Entrega JSON válido y pedagógicamente aplicable.",
+        responseSchema: SCHEMAS[type],
+        // La ficha por secciones necesita más margen: con 6000 el modelo
+        // llegaba justo y recortaba actividades.
+        maxOutputTokens: type==="worksheet"?9000:(type==="reading"?6000:4500),
+        tool: `recurso:${type}${reforzar ? ":refuerzo" : ""}`,
       });
-      const data=await r.json();
-      if(!r.ok) throw Object.assign(new Error(data?.error?.message || "Error de Gemini"),{status:r.status});
-      const candidate=data?.candidates?.[0];
-      const text=candidate?.content?.parts?.map(x=>x.text).join("") || "";
-      if(!text) throw new Error("Gemini no devolvió contenido");
-      if(candidate?.finishReason==="MAX_TOKENS") throw qualityError(["la respuesta se cortó por longitud"]);
-      return JSON.parse(text);
+      return data;
     }
 
     // Sólo la ficha de trabajo se valida por ahora: es la que se mostraba
