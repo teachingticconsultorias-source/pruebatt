@@ -89,15 +89,27 @@ export async function reservarOperacion({ token, url, key, clave, tool }) {
   }
 }
 
-/** Cierra la operación. Nunca lanza: es contabilidad, no el trabajo. */
+/**
+ * Cierra la operación. Nunca lanza: es contabilidad, no el trabajo.
+ *
+ * `finish_ai_operation` devuelve `{ok:false, reason:"not_found"}` cuando no
+ * tocó ninguna fila. No se ignora: significa que se está cerrando una clave
+ * que no existe o que es de otra cuenta, y eso sólo puede venir de un fallo
+ * de programación. Queda registrado para poder encontrarlo.
+ */
 export async function cerrarOperacion({ token, url, key, clave, estado }) {
   if (!clave) return false;
   try {
-    await callRpc({
+    const r = await callRpc({
       name: "finish_ai_operation",
       token, url, key,
       body: { p_key: clave, p_status: estado },
     });
+    if (r?.ok === false) {
+      console.warn("[sciverse:idempotencia]",
+        JSON.stringify({ estado: "cierre_sin_fila", motivo: r?.reason || null }));
+      return false;
+    }
     return true;
   } catch {
     return false;

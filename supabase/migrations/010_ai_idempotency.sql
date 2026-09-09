@@ -31,6 +31,10 @@
 --     · No toca créditos, planes, pagos ni suscripciones.
 --     · No borra datos existentes.  · No desactiva RLS.
 --     · Idempotente y transaccional.
+--     · La clave foránea es ON DELETE RESTRICT: eliminar físicamente una
+--       cuenta queda BLOQUEADO mientras tenga operaciones. El flujo normal de
+--       SciVerse es desactivar cuentas (`docentes.activo`), no borrarlas.
+--       Para un borrado real, purgar antes con `purge_ai_operations`.
 -- ============================================================================
 
 begin;
@@ -61,7 +65,24 @@ $$;
 --    El resultado ya vive en `materiales_docente` cuando la docente lo guarda.
 -- ============================================================================
 create table if not exists sciverse_private.ai_operations (
-  user_id     uuid        not null references auth.users(id) on delete cascade,
+  -- ON DELETE RESTRICT, no CASCADE.
+  --
+  -- SciVerse va hacia el borrado lógico de cuentas: desactivar, no eliminar.
+  -- Una cascada aquí sería una puerta trasera para que borrar una fila de
+  -- `auth.users` arrastre en silencio filas de otras tablas, y ese hábito es
+  -- el que hay que no adquirir. Con RESTRICT, eliminar físicamente a una
+  -- usuaria queda BLOQUEADO mientras tenga operaciones asociadas, y quien lo
+  -- intente recibe un error en vez de un borrado silencioso.
+  --
+  -- No se usa SET NULL porque `user_id` forma parte de la clave primaria y
+  -- debe seguir siendo NOT NULL: es lo que hace que la clave de una docente
+  -- no colisione con la de otra.
+  --
+  -- Esto NO congela la tabla: `purge_ai_operations` sigue borrando operaciones
+  -- antiguas. Son datos técnicos efímeros —«esta generación ya empezó»—, no
+  -- historial pedagógico ni comercial. Vaciarlos no pierde nada que la
+  -- docente pueda echar de menos.
+  user_id     uuid        not null references auth.users(id) on delete restrict,
   key         text        not null,
   tool        text,
   status      text        not null default 'processing',
@@ -90,13 +111,39 @@ comment on table sciverse_private.ai_operations is
 -- ============================================================================
 -- 2. RESERVAR
 --
---    Devuelve `started` sólo a quien insertó la fila. Cualquier otra petición
---    con la misma clave recibe `duplicate` y no debe cobrar ni generar.
+--    Devuelve `started` sólo a quien ADQUIRIÓ la operación. Cualquier otra
+--    petición con la misma clave recibe `duplicate` y no debe cobrar ni
+--    generar.
 --
 --    UNA EXCEPCIÓN DELIBERADA: si la operación anterior quedó en `failed`, se
 --    permite volver a empezar con la misma clave. El caso real es una
 --    generación que falló y la docente pulsa «reintentar» sin que el
 --    navegador cambie la clave; negárselo la dejaría atascada.
+--
+--    DOS ADQUISICIONES ATÓMICAS, NINGUNA LECTURA PREVIA
+--    --------------------------------------------------
+--    Este bloque tuvo un fallo de concurrencia que conviene dejar explicado,
+--    porque es fácil de reintroducir: leía el estado con un SELECT y decidía
+--    después. Entre esa lectura y el UPDATE cabe otra transacción, así que
+--    dos reintentos simultáneos sobre la MISMA operación fallida podían ver
+--    los dos `failed` y declararse los dos `started`. Resultado: dos créditos
+--    y dos llamadas a Gemini, que es justo lo que esta tabla existe para
+--    impedir.
+--
+--    Un SELECT nunca es una garantía de exclusión. Las dos únicas sentencias
+--    que deciden aquí son:
+--
+--      1. INSERT ... ON CONFLICT DO NOTHING   → gana quien inserta
+--      2. UPDATE ... WHERE status = 'failed'  → gana quien transiciona
+--
+--    En la segunda, dos transacciones concurrentes se serializan sobre el
+--    bloqueo de la fila: la que llega después reevalúa el WHERE contra la
+--    fila ya actualizada, ve `processing` y afecta a CERO filas. Por eso la
+--    respuesta la decide ROW_COUNT (`FOUND`), no lo que dijera un SELECT.
+--
+--    El SELECT del final sólo sirve para informar de qué estado había. Si
+--    para entonces el dato hubiera cambiado, daría igual: la decisión ya está
+--    tomada.
 -- ============================================================================
 create or replace function public.begin_ai_operation(
   p_key  text,
@@ -116,25 +163,34 @@ begin
     raise exception 'IDEMPOTENCY_KEY_INVALID';
   end if;
 
+  -- ---- Adquisición 1: la operación no existía ----------------------------
   insert into sciverse_private.ai_operations (user_id, key, tool, status)
   values (v_uid, p_key, p_tool, 'processing')
   on conflict (user_id, key) do nothing;
 
   if found then
-    return jsonb_build_object('status', 'started');
+    return jsonb_build_object('status', 'started', 'reintento', false);
   end if;
 
+  -- ---- Adquisición 2: existía y estaba fallida ---------------------------
+  -- Sólo transiciona quien encuentra la fila TODAVÍA en `failed`.
+  update sciverse_private.ai_operations
+     set status     = 'processing',
+         tool       = coalesce(p_tool, tool),
+         updated_at = now()
+   where user_id = v_uid
+     and key     = p_key
+     and status  = 'failed';
+
+  if found then
+    return jsonb_build_object('status', 'started', 'reintento', true);
+  end if;
+
+  -- ---- No se adquirió: es un duplicado -----------------------------------
+  -- Sólo informativo. `processing` (otra petición en curso) o `completed`.
   select status into v_estado
     from sciverse_private.ai_operations
    where user_id = v_uid and key = p_key;
-
-  -- Reintento legítimo de algo que falló: se reabre.
-  if v_estado = 'failed' then
-    update sciverse_private.ai_operations
-       set status = 'processing', updated_at = now()
-     where user_id = v_uid and key = p_key;
-    return jsonb_build_object('status', 'started', 'reintento', true);
-  end if;
 
   return jsonb_build_object('status', 'duplicate', 'estado_previo', v_estado);
 end;
@@ -143,6 +199,16 @@ $$;
 
 -- ============================================================================
 -- 3. CERRAR
+--
+--    Antes devolvía `{ok:true}` pasara lo que pasara, incluso sin haber
+--    tocado ninguna fila. Eso es peor que un error: un cliente que cierre una
+--    clave equivocada recibiría confirmación de algo que no ocurrió, y el día
+--    que la contabilidad no cuadre no habría por dónde empezar a mirar.
+--
+--    El UPDATE está acotado a `user_id = auth.uid()`, así que «no existe» y
+--    «es de otra persona» producen exactamente la misma respuesta. Es
+--    deliberado: distinguirlas confirmaría a un tercero que cierta clave
+--    existe en la cuenta de alguien.
 -- ============================================================================
 create or replace function public.finish_ai_operation(
   p_key    text,
@@ -165,7 +231,11 @@ begin
      set status = p_status, updated_at = now()
    where user_id = v_uid and key = p_key;
 
-  return jsonb_build_object('ok', true);
+  if not found then
+    return jsonb_build_object('ok', false, 'reason', 'not_found');
+  end if;
+
+  return jsonb_build_object('ok', true, 'status', p_status);
 end;
 $$;
 

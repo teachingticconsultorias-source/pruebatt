@@ -7,7 +7,7 @@ import {
   CAPACIDADES_POR_DEFECTO, cantidadPermitida, capacidadesDe, mensajeDeLimite,
   permiteQuitarMarca, planEfectivo,
 } from "../api/_lib/entitlements.js";
-import { claveDeOperacion } from "../api/_lib/idempotency.js";
+import { cerrarOperacion, claveDeOperacion } from "../api/_lib/idempotency.js";
 
 /* ============================================================================
    PICOS DE CONCURRENCIA Y AUTORIDAD DEL SERVIDOR
@@ -762,5 +762,298 @@ describe("idempotencia · la clave", () => {
     expect(sql).toContain("'processing', 'completed', 'failed'");
     expect(sql).toContain("purge_ai_operations");
     expect(sql).not.toMatch(/\bdelete from public\./i);
+  });
+});
+
+/* ============================================================================
+   CONCURRENCIA REAL SOBRE LA MISMA CLAVE
+
+   El primer diseño leía el estado con un SELECT y decidía después. Entre esa
+   lectura y el UPDATE cabe otra transacción: dos reintentos simultáneos sobre
+   la MISMA operación fallida podían verse los dos en `failed` y declararse
+   los dos `started`. Dos créditos, dos llamadas a Gemini — exactamente lo
+   que esta tabla existe para impedir.
+
+   El simulador de abajo reproduce la semántica corregida: las dos únicas
+   sentencias que deciden son el INSERT con ON CONFLICT y el UPDATE acotado
+   a `status = 'failed'`. Quien no afecta filas, pierde.
+   ========================================================================== */
+describe("idempotencia · adquisición atómica", () => {
+  /**
+   * Postgres simulado.
+   *
+   * `filas` está indexado por `user::key`, igual que la clave primaria real.
+   * `begin` NO consulta antes de decidir: replica insert-o-update-condicional
+   * y responde según haya afectado filas o no.
+   */
+  function postgresFalso(estadoInicial = {}) {
+    const filas = new Map(Object.entries(estadoInicial));
+    const contador = { begin: 0, finish: 0, consume: 0, refund: 0, gemini: 0 };
+    const iniciados = [];
+
+    const rpc = (nombre, usuario, cuerpo) => {
+      const id = `${usuario}::${cuerpo.p_key}`;
+
+      if (nombre === "begin_ai_operation") {
+        contador.begin += 1;
+
+        // Adquisición 1 · insert ... on conflict do nothing
+        if (!filas.has(id)) {
+          filas.set(id, "processing");
+          iniciados.push(usuario);
+          return { status: "started", reintento: false };
+        }
+
+        // Adquisición 2 · update ... where status = 'failed'
+        if (filas.get(id) === "failed") {
+          filas.set(id, "processing");
+          iniciados.push(usuario);
+          return { status: "started", reintento: true };
+        }
+
+        return { status: "duplicate", estado_previo: filas.get(id) };
+      }
+
+      if (nombre === "finish_ai_operation") {
+        contador.finish += 1;
+        // Acotado a la propia usuaria: si no hay fila suya, no toca nada.
+        if (!filas.has(id)) return { ok: false, reason: "not_found" };
+        filas.set(id, cuerpo.p_status);
+        return { ok: true, status: cuerpo.p_status };
+      }
+
+      if (nombre === "consume_ai_credit") {
+        contador.consume += 1;
+        return { ok: true, consumption_id: `vale-${contador.consume}` };
+      }
+      if (nombre === "refund_ai_credit") {
+        contador.refund += 1;
+        return { ok: true };
+      }
+      return {};
+    };
+
+    /** Devuelve un `fetch` que actúa como si el token fuera de `usuario`. */
+    const comoUsuario = (usuario) => async (url, opts) => {
+      const u = String(url);
+      if (!u.includes("/rpc/")) {
+        contador.gemini += 1;
+        return OK;
+      }
+      const nombre = u.split("/rpc/")[1];
+      const cuerpo = opts?.body ? JSON.parse(opts.body) : {};
+      return { ok: true, status: 200, json: async () => rpc(nombre, usuario, cuerpo) };
+    };
+
+    return { filas, contador, iniciados, comoUsuario };
+  }
+
+  const AUTH = (usuario = "ana") => ({
+    token: `token-${usuario}`, url: "https://p.supabase.co", key: "k",
+    reason: "prueba",
+  });
+
+  const operacion = async () => ({ hecho: true });
+
+  it("1 · dos begin simultáneos sobre clave nueva: exactamente uno arranca", async () => {
+    const pg = postgresFalso();
+    global.fetch = vi.fn(pg.comoUsuario("ana"));
+    const auth = { ...AUTH(), idempotencyKey: "op-nueva-00000001" };
+
+    const r = await Promise.allSettled([
+      withCredit(auth, operacion),
+      withCredit(auth, operacion),
+    ]);
+
+    expect(r.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    expect(r.filter((x) => x.status === "rejected")).toHaveLength(1);
+    expect(pg.contador.consume).toBe(1);
+    expect(pg.iniciados).toHaveLength(1);
+  });
+
+  it("2 · dos reintentos simultáneos sobre una operación FALLIDA: uno solo", async () => {
+    // Éste es el caso que el diseño anterior no cubría.
+    const pg = postgresFalso({ "ana::op-fallida-0000001": "failed" });
+    global.fetch = vi.fn(pg.comoUsuario("ana"));
+    const auth = { ...AUTH(), idempotencyKey: "op-fallida-0000001" };
+
+    const r = await Promise.allSettled([
+      withCredit(auth, operacion),
+      withCredit(auth, operacion),
+    ]);
+
+    const ok = r.filter((x) => x.status === "fulfilled");
+    const ko = r.filter((x) => x.status === "rejected");
+    expect(ok).toHaveLength(1);
+    expect(ko).toHaveLength(1);
+    expect(ko[0].reason.code).toBe("DUPLICATE_OPERATION");
+    expect(pg.contador.consume).toBe(1);
+    expect(pg.contador.gemini).toBe(0);   // el perdedor no llamó a Gemini
+  });
+
+  it("tres reintentos simultáneos sobre la misma fallida: sigue siendo uno", async () => {
+    const pg = postgresFalso({ "ana::op-fallida-0000002": "failed" });
+    global.fetch = vi.fn(pg.comoUsuario("ana"));
+    const auth = { ...AUTH(), idempotencyKey: "op-fallida-0000002" };
+
+    const r = await Promise.allSettled([
+      withCredit(auth, operacion), withCredit(auth, operacion), withCredit(auth, operacion),
+    ]);
+    expect(r.filter((x) => x.status === "fulfilled")).toHaveLength(1);
+    expect(pg.contador.consume).toBe(1);
+  });
+
+  it("3 · una operación COMPLETADA nunca se reabre", async () => {
+    const pg = postgresFalso({ "ana::op-completa-000001": "completed" });
+    global.fetch = vi.fn(pg.comoUsuario("ana"));
+
+    await expect(withCredit({ ...AUTH(), idempotencyKey: "op-completa-000001" }, operacion))
+      .rejects.toMatchObject({ code: "DUPLICATE_OPERATION" });
+    expect(pg.contador.consume).toBe(0);
+  });
+
+  it("4 · una operación EN CURSO nunca se reabre", async () => {
+    const pg = postgresFalso({ "ana::op-encurso-000001": "processing" });
+    global.fetch = vi.fn(pg.comoUsuario("ana"));
+
+    await expect(withCredit({ ...AUTH(), idempotencyKey: "op-encurso-000001" }, operacion))
+      .rejects.toMatchObject({ code: "DUPLICATE_OPERATION" });
+    expect(pg.contador.consume).toBe(0);
+  });
+
+  it("5 · la clave de una docente no bloquea ni alcanza la de otra", async () => {
+    const pg = postgresFalso({ "ana::op-compartida-001": "processing" });
+    const clave = "op-compartida-001";
+
+    // Beatriz usa la MISMA cadena: es su propia operación, arranca sin problema.
+    global.fetch = vi.fn(pg.comoUsuario("beatriz"));
+    await expect(withCredit({ ...AUTH("beatriz"), idempotencyKey: clave }, operacion))
+      .resolves.toBeTruthy();
+
+    // Y Ana sigue con la suya en curso: nadie se la ha tocado.
+    expect(pg.filas.get("ana::op-compartida-001")).toBe("processing");
+    expect(pg.filas.get("beatriz::op-compartida-001")).toBe("completed");
+  });
+
+  it("6 · cerrar una clave inexistente NO reporta éxito falso", async () => {
+    const pg = postgresFalso();
+    global.fetch = vi.fn(pg.comoUsuario("ana"));
+
+    const ok = await cerrarOperacion({
+      token: "t", url: "https://p.supabase.co", key: "k",
+      clave: "op-que-no-existe-1", estado: "completed",
+    });
+    expect(ok).toBe(false);
+    expect(logs.some((l) => l.includes("cierre_sin_fila"))).toBe(true);
+  });
+
+  it("un cierre real sí reporta éxito", async () => {
+    const pg = postgresFalso({ "ana::op-existente-0001": "processing" });
+    global.fetch = vi.fn(pg.comoUsuario("ana"));
+
+    const ok = await cerrarOperacion({
+      token: "t", url: "https://p.supabase.co", key: "k",
+      clave: "op-existente-0001", estado: "completed",
+    });
+    expect(ok).toBe(true);
+    expect(pg.filas.get("ana::op-existente-0001")).toBe("completed");
+  });
+});
+
+/* ============================================================================
+   LO QUE DEBE DECIR EL SQL
+   ========================================================================== */
+describe("idempotencia · el SQL no decide con un SELECT", () => {
+  const sql = fs.readFileSync("supabase/migrations/010_ai_idempotency.sql", "utf8");
+  const activo = sql.split("\n").filter((l) => !l.trim().startsWith("--")).join("\n");
+  const cuerpoBegin = activo.slice(
+    activo.indexOf("function public.begin_ai_operation"),
+    activo.indexOf("function public.finish_ai_operation")
+  );
+
+  it("la reapertura es un UPDATE condicionado al estado, no un IF tras SELECT", () => {
+    expect(cuerpoBegin).toMatch(/update sciverse_private\.ai_operations[\s\S]*?and status\s*=\s*'failed'/);
+    // El patrón antiguo: leer y decidir después.
+    expect(cuerpoBegin).not.toMatch(/if v_estado\s*=\s*'failed'\s*then/);
+  });
+
+  it("la decisión la toma FOUND, dos veces", () => {
+    expect((cuerpoBegin.match(/if found then/g) || []).length).toBe(2);
+  });
+
+  it("el único SELECT llega DESPUÉS de haber decidido", () => {
+    const iUpdate = cuerpoBegin.indexOf("update sciverse_private.ai_operations");
+    const iSelect = cuerpoBegin.indexOf("select status into v_estado");
+    expect(iUpdate).toBeGreaterThan(0);
+    expect(iSelect).toBeGreaterThan(iUpdate);
+  });
+
+  it("la inserción sigue siendo la primera adquisición atómica", () => {
+    expect(cuerpoBegin).toContain("on conflict (user_id, key) do nothing");
+  });
+
+  it("9 · la clave foránea ya no arrastra en cascada", () => {
+    expect(activo).toContain("on delete restrict");
+    expect(activo).not.toContain("on delete cascade");
+    expect(activo).not.toContain("on delete set null");
+  });
+
+  it("se documenta que el borrado de cuentas es lógico, no físico", () => {
+    expect(sql).toMatch(/desactivar/i);
+    expect(sql).toMatch(/RESTRICT/);
+  });
+
+  it("finish deja de mentir cuando no toca ninguna fila", () => {
+    const cuerpoFinish = activo.slice(activo.indexOf("function public.finish_ai_operation"));
+    expect(cuerpoFinish).toContain("if not found then");
+    expect(cuerpoFinish).toContain("'not_found'");
+  });
+
+  it("7 · anon no ejecuta ninguna de las tres", () => {
+    for (const f of ["begin_ai_operation", "finish_ai_operation", "purge_ai_operations"]) {
+      expect(activo, f).toMatch(
+        new RegExp(`revoke all on function public\\.${f}[^;]*from public, anon, authenticated`));
+      expect(activo, f).not.toMatch(
+        new RegExp(`grant execute on function public\\.${f}[^;]*anon`));
+    }
+  });
+
+  it("8 · purgar es sólo del servidor", () => {
+    expect(activo).toMatch(/grant execute on function public\.purge_ai_operations\(integer\) to service_role;/);
+    expect(activo).not.toMatch(/grant execute on function public\.purge_ai_operations[^;]*authenticated/);
+  });
+
+  it("la tabla sigue sin alcance para el cliente", () => {
+    expect(activo).toContain("revoke all on sciverse_private.ai_operations from anon, authenticated");
+    expect(activo).toContain("enable row level security");
+    expect(activo).not.toMatch(/create policy[^\n]*ai_operations/);
+    expect(activo).not.toMatch(/grant (select|insert|update|delete)[^;]*ai_operations/i);
+  });
+
+  it("las tres son SECURITY DEFINER con search_path vacío y usan auth.uid()", () => {
+    for (const f of ["begin_ai_operation", "finish_ai_operation", "purge_ai_operations"]) {
+      const i = activo.indexOf(`function public.${f}`);
+      const cuerpo = activo.slice(i, i + 900);
+      expect(cuerpo, f).toContain("security definer");
+      expect(cuerpo, f).toContain("set search_path = ''");
+    }
+    expect(cuerpoBegin).toContain("auth.uid()");
+    expect(activo.slice(activo.indexOf("function public.finish_ai_operation"))).toContain("auth.uid()");
+  });
+
+  it("ninguna función acepta un identificador de usuario como parámetro", () => {
+    for (const f of ["begin_ai_operation(", "finish_ai_operation("]) {
+      const i = activo.indexOf(`function public.${f}`);
+      const firma = activo.slice(i, activo.indexOf(")", i));
+      expect(firma, f).not.toMatch(/uuid|user_id|p_user/);
+    }
+  });
+
+  it("el único DELETE está en la purga, y es por antigüedad", () => {
+    const deletes = activo.match(/delete from[^\n;]*/g) || [];
+    expect(deletes).toHaveLength(1);
+    expect(deletes[0]).toContain("sciverse_private.ai_operations");
+    expect(activo).toContain("created_at < now() - (v_dias || ' days')::interval");
+    expect(activo).toContain("greatest(coalesce(p_dias, 7), 1)");
   });
 });
