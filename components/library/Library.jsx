@@ -29,6 +29,7 @@ export const MATERIAL_TYPES = {
   reading:           { label: "Ficha de lectura",      short: "Lecturas",    icon: BookOpen,      tone: "amber" },
   questionnaire:     { label: "Cuestionario",          short: "Cuestionarios", icon: FileText,    tone: "amber" },
   challenge:         { label: "Reto grupal",           short: "Retos",       icon: Users,         tone: "accent" },
+  wordsearch:        { label: "Sopa de letras",         short: "Sopas",       icon: Search,        tone: "accent" },
 };
 
 export function labelForType(tipo) {

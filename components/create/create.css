@@ -237,3 +237,118 @@
   .session-wizard .wizard-progress::-webkit-scrollbar { display: none; }
   .wizard-card__title { grid-template-columns: 1fr; gap: var(--space-3); }
 }
+
+/* Aviso bajo un campo del generador: dice que se dejo algo fuera y por que.
+   Antes esas exclusiones —palabras repetidas, con tilde o demasiado largas—
+   ocurrian en silencio y la docente no se enteraba hasta imprimir. */
+.generator-note {
+  display: block;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--warning-50);
+  color: var(--warning-700);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  font-weight: var(--weight-regular);
+}
+
+/* ==========================================================================
+   CRITERIOS SEMBRADOS POR KANTU (rubrica / lista de cotejo)
+
+   El instrumento redacta sus propios criterios, pero su prompt respeta
+   `criteriosBase`. Esta caja es donde caen los que Kantu propone, para que la
+   propuesta no sea decorativa.
+   ========================================================================== */
+.criteria-seed {
+  grid-column: 1 / -1;
+  display: grid; gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px dashed var(--border-brand);
+  border-radius: var(--radius-md);
+  background: var(--bg-brand-soft);
+}
+
+.criteria-seed > div { display: grid; gap: 2px; }
+.criteria-seed strong { font-size: var(--text-body); color: var(--text-primary); }
+.criteria-seed small { font-size: var(--text-sm); color: var(--text-secondary); }
+
+.criteria-seed > button {
+  justify-self: start;
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-brand); border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  font-size: var(--text-sm); font-weight: var(--weight-semibold);
+  color: var(--text-brand); cursor: pointer;
+}
+
+.criteria-seed > button:disabled { opacity: .6; cursor: not-allowed; }
+.criteria-seed > button:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+
+.criteria-seed__lista {
+  display: grid; gap: var(--space-1);
+  margin: 0; padding-left: var(--space-5);
+  font-size: var(--text-sm); line-height: var(--leading-normal);
+  color: var(--text-secondary);
+}
+
+/* ==========================================================================
+   SOPA DE LETRAS GUARDADA (visor de biblioteca)
+   ========================================================================== */
+.sopa-guardada { display: grid; gap: var(--space-4); }
+
+.sopa-guardada__meta {
+  display: flex; flex-wrap: wrap; gap: var(--space-3);
+  margin: 0; font-size: var(--text-sm); color: var(--text-secondary);
+}
+
+.sopa-guardada__grid {
+  display: grid; gap: 2px;
+  /* La cuadricula manda a lo ancho, pero nunca desborda el modal. */
+  width: 100%; max-width: 520px;
+  font-family: var(--font-mono);
+}
+
+.sopa-guardada__grid span {
+  display: grid; place-items: center;
+  aspect-ratio: 1;
+  border: 1px solid var(--border-subtle);
+  border-radius: 3px;
+  background: var(--bg-surface);
+  font-size: clamp(9px, 2.4vw, 13px);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+.sopa-guardada__grid.is-solucion span.is-marcada {
+  background: var(--amber-100);
+  border-color: var(--amber-400);
+  color: var(--amber-700);
+}
+
+.sopa-guardada__acciones button {
+  min-height: 40px;
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-default); border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  font-size: var(--text-sm); font-weight: var(--weight-semibold);
+  color: var(--text-secondary); cursor: pointer;
+}
+
+.sopa-guardada__acciones button:hover { border-color: var(--border-brand); color: var(--text-brand); }
+.sopa-guardada__acciones button:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+
+.sopa-guardada__palabras {
+  display: flex; flex-wrap: wrap; gap: var(--space-2);
+  margin: 0; padding: 0; list-style: none;
+}
+
+.sopa-guardada__palabras li {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--bg-sunken);
+  font-size: var(--text-sm); color: var(--text-primary);
+}

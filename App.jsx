@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "./supabaseClient.js";
 import AuthGate from "./AuthGate.jsx";
 import { GUIDE_ACTIVITIES } from "./steamGuideActivities.js";
@@ -12,6 +12,10 @@ import Library, { MATERIAL_TYPES } from "./components/library/Library.jsx";
 // Carga diferida: Three.js y los 32 MB de geometría no se piden hasta que
 // alguien abre un atlas. Ver features/atlas/index.jsx.
 import { AtlasCuerpoHumano, AtlasOralMaxilofacial } from "./features/atlas/index.jsx";
+import SuggestionModal from "./components/ui/SuggestionModal.jsx";
+import { useSugerenciaKantu } from "./lib/kantu/useSugerencia.js";
+import { avisoDePalabras, prepararPalabras } from "./lib/kantu/palabras.js";
+import { DESTINO_POR_CAMPO, INTRO_POR_CAMPO, SOLO_LECTURA } from "./lib/kantu/contexto.js";
 import Account from "./components/account/Account.jsx";
 import "./components/account/account.css";
 import "./components/library/library-v2.css";
@@ -1033,7 +1037,7 @@ const GENERATOR_CAPACITIES = {
 };
 const PERU_REGIONS = ["Amazonas","Áncash","Apurímac","Arequipa","Ayacucho","Cajamarca","Callao","Cusco","Huancavelica","Huánuco","Ica","Junín","La Libertad","Lambayeque","Lima","Loreto","Madre de Dios","Moquegua","Pasco","Piura","Puno","San Martín","Tacna","Tumbes","Ucayali"];
 
-function SteamGenerator({ initialGrade = "primaria", documentType = "session", profile = {}, completeClass = false, onNext = null }) {
+function SteamGenerator({ initialGrade = "primaria", documentType = "session", profile = {}, completeClass = false, onNext = null, onNavigate = null }) {
   // Clave estable del intento: dos clics comparten la misma.
   const claveOp = useClaveDeOperacion("sesion");
   const documentNames = { session: "sesión de aprendizaje", project: "proyecto STEAM", rubric: "rúbrica de evaluación", checklist: "lista de cotejo" };
@@ -1047,7 +1051,13 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const materialSave = useMaterialSave();
-  const [suggesting, setSuggesting] = useState(null);
+  const { toast } = useUI();
+  const kantu = useSugerenciaKantu({
+    herramienta: "sesion",
+    endpoint: "/api/generate-session",
+    obtenerToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
+    avisar: toast,
+  });
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [activeModule, setActiveModule] = useState(null);
   const [completedModules, setCompletedModules] = useState([]);
@@ -1075,17 +1085,12 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
     setStep((current) => Math.min(3, current + 1));
   }
 
-  async function suggestField(field) {
-    if (!form.tema.trim()) return setError("Escribe primero el tema para que Kantu pueda sugerir.");
-    if (!form.region) return setError("Selecciona la región para contextualizar la sugerencia.");
-    setSuggesting(field); setError(null);
-    try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token=sessionData.session?.access_token; if(!token) throw new Error("Tu sesión venció. Vuelve a iniciar sesión.");
-      const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({mode:"suggestion",field,form})});
-      const data=await response.json(); if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar la sugerencia"));
-      update(field,data.suggestion);
-    } catch(e) { setError(e.message); } finally { setSuggesting(null); }
+  // La sugerencia ya no escribe sola sobre el formulario: se revisa primero.
+  // Y el contexto que viaja son TODOS los campos completados de esta
+  // herramienta, no el campo suelto. Ver lib/kantu/contexto.js.
+  function suggestField(field) {
+    setError(null);
+    kantu.pedir(field, form);
   }
 
   async function handleGenerate() {
@@ -1169,6 +1174,17 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
 
   return (
     <div className="session-wizard">
+      <SuggestionModal
+        open={Boolean(kantu.propuesta)}
+        titulo="Kantu propone esto"
+        introduccion={INTRO_POR_CAMPO[kantu.propuesta?.campo] || "Revisa la propuesta antes de usarla."}
+        sugerencia={kantu.propuesta?.sugerencia}
+        cargando={Boolean(kantu.campoActivo)}
+        reemplaza={kantu.propuesta?.reemplaza}
+        onUsar={() => { update(kantu.propuesta.campo, kantu.propuesta.sugerencia); kantu.cerrar(); }}
+        onReintentar={kantu.reintentar}
+        onCerrar={kantu.cerrar}
+      />
       <div className="wizard-progress">
         {[{n:1,t:"Datos básicos"},{n:2,t:"Propósito y contexto"},{n:3,t:"Revisión"}].map((item)=><React.Fragment key={item.n}><button className={step>=item.n?"is-active":""} onClick={()=>item.n<step&&setStep(item.n)}><i>{step>item.n?<CheckCircle2 size={15}/>:item.n}</i><span>{item.t}</span></button>{item.n<3&&<b className={step>item.n?"is-complete":""}/>}</React.Fragment>)}
       </div>
@@ -1193,9 +1209,9 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
           <label className="wide">Tema o título provisional *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Cuidamos el agua de nuestra comunidad"/></label>
           <label className="wide">Competencia CNEB *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
           <fieldset className="wide capacity-picker"><legend>Capacidades que se movilizarán *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
-          <div className="wide ai-field"><label htmlFor={`${documentType}-purpose`}>Propósito de aprendizaje *</label><button type="button" onClick={()=>suggestField("proposito")} disabled={suggesting==="proposito"}>{suggesting==="proposito"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea id={`${documentType}-purpose`} value={form.proposito} onChange={e=>update("proposito",e.target.value)} placeholder="Qué aprenderán, cómo lo demostrarán y para qué les servirá."/></div>
-          <div className="wide ai-field"><label htmlFor={`${documentType}-context`}>Situación significativa o contexto regional *</label><button type="button" onClick={()=>suggestField("contexto")} disabled={suggesting==="contexto"}>{suggesting==="contexto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea id={`${documentType}-context`} value={form.contexto} onChange={e=>update("contexto",e.target.value)} placeholder="Describe brevemente a tus estudiantes, su región o el problema que abordarán."/></div>
-          <div className="wide ai-field"><label htmlFor={`${documentType}-evidence`}>Evidencia o producto esperado *</label><button type="button" onClick={()=>suggestField("evidencia")} disabled={suggesting==="evidencia"}>{suggesting==="evidencia"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea id={`${documentType}-evidence`} value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="¿Qué elaborarán, explicarán o demostrarán al finalizar?"/></div>
+          <div className="wide ai-field"><label htmlFor={`${documentType}-purpose`}>Propósito de aprendizaje *</label><button type="button" onClick={()=>suggestField("proposito")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="proposito"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="proposito"?kantu.espera:"Sugerir con Kantu"}</button><textarea id={`${documentType}-purpose`} value={form.proposito} onChange={e=>update("proposito",e.target.value)} placeholder="Qué aprenderán, cómo lo demostrarán y para qué les servirá."/></div>
+          <div className="wide ai-field"><label htmlFor={`${documentType}-context`}>Situación significativa o contexto regional *</label><button type="button" onClick={()=>suggestField("contexto")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="contexto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="contexto"?kantu.espera:"Sugerir con Kantu"}</button><textarea id={`${documentType}-context`} value={form.contexto} onChange={e=>update("contexto",e.target.value)} placeholder="Describe brevemente a tus estudiantes, su región o el problema que abordarán."/></div>
+          <div className="wide ai-field"><label htmlFor={`${documentType}-evidence`}>Evidencia o producto esperado *</label><button type="button" onClick={()=>suggestField("evidencia")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="evidencia"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="evidencia"?kantu.espera:"Sugerir con Kantu"}</button><textarea id={`${documentType}-evidence`} value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="¿Qué elaborarán, explicarán o demostrarán al finalizar?"/></div>
           <label className="wide">Recursos disponibles<input value={form.recursos} onChange={e=>update("recursos",e.target.value)} placeholder="Ej.: botellas, cartulina, tabletas, materiales de la comunidad"/></label>
         </div>
         <div className="wizard-switches"><label><input type="checkbox" checked={form.steam} onChange={e=>update("steam",e.target.checked)}/><span><strong>Integrar enfoque STEAM</strong><small>Conecta dos o más áreas mediante un reto.</small></span></label><label><input type="checkbox" checked={form.inclusivo} onChange={e=>update("inclusivo",e.target.checked)}/><span><strong>Incluir orientaciones DUA</strong><small>Considera distintas formas de participar y demostrar lo aprendido.</small></span></label></div>
@@ -1301,7 +1317,10 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
             <button className="available" onClick={()=>setEvaluationFlow("rubric")}><span><ClipboardList size={22}/></span><strong>Rúbrica analítica</strong><small>Sugerida para valorar niveles de logro</small><b>Crear rúbrica <ArrowRight size={14}/></b></button>
             <button className="available" onClick={()=>setEvaluationFlow("checklist")}><span><CheckCircle2 size={22}/></span><strong>Lista de cotejo</strong><small>Verificación rápida con Sí, No y observaciones</small><b>Crear lista <ArrowRight size={14}/></b></button>
             <button disabled><span><BookOpen size={22}/></span><strong>Guía de observación</strong><small>Próximamente</small></button>
-            <button disabled><span><Target size={22}/></span><strong>Escala de valoración</strong><small>Próximamente</small></button>
+            {/* La escala SÍ existe como herramienta propia. Decía
+                «Próximamente», que es falso y manda a la docente a esperar
+                algo que ya puede usar. */}
+            <button className="available" onClick={()=>onNavigate?.("herramientas")}><span><Target size={22}/></span><strong>Escala de valoración</strong><small>Disponible en Herramientas</small><b>Ir a Herramientas <ArrowRight size={14}/></b></button>
           </div></div>}
           {(evaluationFlow==="rubric"||evaluationFlow==="checklist")&&<div className="linked-instrument-flow"><div className="linked-instrument-head"><div><small>INSTRUMENTO VINCULADO A LA SESIÓN</small><h3>{evaluationFlow==="rubric"?"Rúbrica analítica":"Lista de cotejo"}</h3><p>{form.area} · {form.grado} · {result.titulo}</p></div><button onClick={()=>setEvaluationFlow("choose")}>Cambiar instrumento</button></div><EvaluationInstrumentGenerator profile={profile} initialGrade={initialGrade} instrumentType={evaluationFlow} initialContext={{nivel:form.nivel,grado:form.grado,area:form.area,region:form.region,tema:result.titulo||form.tema,competencia:form.competencia,capacidades:form.capacidades,evidencia:result.evidencia,proposito:result.proposito,fecha:form.fecha,duracion:form.duracion,seccion:form.seccion,criteriosBase:result.criteriosDetallados||[],numeroCriterios:String(result.criteriosDetallados?.length||6)}} /></div>}
         </div>
@@ -1323,7 +1342,13 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
   const [editing, setEditing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
-  const [suggesting, setSuggesting] = useState(false);
+  const { toast } = useUI();
+  const kantu = useSugerenciaKantu({
+    herramienta: "instrumento",
+    endpoint: "/api/generate-session",
+    obtenerToken: getToken,
+    avisar: toast,
+  });
   const [error, setError] = useState(null);
   const grades = form.nivel === "Primaria" ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"] : ["1.º", "2.º", "3.º", "4.º", "5.º"];
   const update = (key, value) => setForm((current) => ({ ...current, [key]: value }));
@@ -1333,10 +1358,29 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
   const toggleCapacity = (capacity) => setForm((current) => ({ ...current, capacidades: current.capacidades.includes(capacity) ? current.capacidades.filter((item) => item !== capacity) : [...current.capacidades, capacity] }));
 
   async function getToken() { const { data } = await supabase.auth.getSession(); const token = data.session?.access_token; if (!token) throw new Error("Tu sesión venció. Vuelve a iniciar sesión."); return token; }
-  async function suggestEvidence() {
-    if (!form.tema.trim() || !form.region || !form.capacidades.length) return setError("Completa el tema, la región y las capacidades para que Kantu pueda sugerir la evidencia.");
-    setSuggesting(true); setError(null);
-    try { const token = await getToken(); const response = await fetch("/api/generate-session", { method:"POST", headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`}, body:JSON.stringify({mode:"suggestion",field:"evidencia",form}) }); const data=await response.json(); if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo sugerir la evidencia")); update("evidencia",data.suggestion); } catch(e) { setError(e.message); } finally { setSuggesting(false); }
+  // Una rúbrica pide criterios graduables; una lista de cotejo, indicadores
+  // que se responden con Sí o No. Es lo mismo salvo en cómo se redactan, y de
+  // eso se encarga la instrucción del servidor.
+  const campoDeCriterios = instrumentType === "checklist" ? "indicadores" : "criterios";
+
+  function suggestEvidence() {
+    setError(null);
+    // El contexto lleva competencia, capacidades y tipo de instrumento, que es
+    // lo que hace que la evidencia propuesta sirva para ESTE instrumento.
+    kantu.pedir("evidencia", form);
+  }
+
+  /**
+   * Aplica la propuesta al campo que corresponde.
+   *
+   * Nada se escribe hasta aquí: el hook sólo guarda lo que Kantu devolvió, y
+   * este es el único sitio que toca el formulario.
+   */
+  function aplicarSugerencia() {
+    const { campo, lista, sugerencia } = kantu.propuesta;
+    const destino = DESTINO_POR_CAMPO[campo] || campo;
+    update(destino, lista || sugerencia);
+    kantu.cerrar();
   }
   function continueFlow() {
     setError(null);
@@ -1369,6 +1413,20 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
   }
 
   return <div className="instrument-builder">
+    <SuggestionModal
+      open={Boolean(kantu.propuesta)}
+      titulo="Kantu propone esto"
+      introduccion={INTRO_POR_CAMPO[kantu.propuesta?.campo] || "Revisa la propuesta antes de usarla."}
+      sugerencia={kantu.propuesta?.sugerencia}
+      lista={kantu.propuesta?.lista}
+      cargando={Boolean(kantu.campoActivo)}
+      reemplaza={kantu.propuesta?.reemplaza}
+      textoUsar={kantu.propuesta?.lista ? "Usar estos criterios" : "Usar sugerencia"}
+      onUsar={aplicarSugerencia}
+      onReintentar={kantu.reintentar}
+      onCerrar={kantu.cerrar}
+    />
+
     <div className="instrument-steps">{["Contexto","Evidencia","Revisión"].map((label,index)=><div key={label} className={step>=index+1?"active":""}><b>{step>index+1?<CheckCircle2 size={14}/>:index+1}</b><span>{label}</span></div>)}</div>
     {step===1&&<div className="wizard-card"><div className="wizard-card__title"><span><GraduationCap size={18}/></span><div><h4>Contexto del instrumento</h4><p>Kantu utilizará esta información para alinearlo al CNEB.</p></div></div><div className="wizard-fields instrument-context-grid">
       <label>Nivel *<select value={form.nivel} onChange={e=>changeLevel(e.target.value)}><option>Primaria</option><option>Secundaria</option></select></label><label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label><label>Área *<select value={form.area} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
@@ -1376,7 +1434,22 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
       <label className="wide">Competencia *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
       <fieldset className="wide capacity-picker"><legend>Capacidades que serán evaluadas *</legend>{(GENERATOR_CAPACITIES[form.competencia]||[]).map(cap=><label key={cap}><input type="checkbox" checked={form.capacidades.includes(cap)} onChange={()=>toggleCapacity(cap)}/><span>{cap}</span></label>)}</fieldset>
     </div></div>}
-    {step===2&&<div className="wizard-card"><div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Evidencia de aprendizaje</h4><p>Indica qué producirá o realizará el estudiante para demostrar lo aprendido.</p></div></div><div className="evidence-editor"><div><strong>{form.competencia}</strong><small>{form.capacidades.length} capacidades seleccionadas</small></div><button onClick={suggestEvidence} disabled={suggesting}>{suggesting?<Loader2 size={15} className="animate-spin"/>:<Sparkles size={15}/>} Sugerir con Kantu</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Describe el producto, actuación o desempeño observable..."/></div><label className="criteria-count">Cantidad de criterios<select value={form.numeroCriterios} onChange={e=>update("numeroCriterios",e.target.value)}>{[4,5,6,7,8,9,10].map(n=><option key={n}>{n}</option>)}</select></label></div>}
+    {step===2&&<div className="wizard-card"><div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Evidencia de aprendizaje</h4><p>Indica qué producirá o realizará el estudiante para demostrar lo aprendido.</p></div></div><div className="evidence-editor"><div><strong>{form.competencia}</strong><small>{form.capacidades.length} capacidades seleccionadas</small></div><button type="button" onClick={suggestEvidence} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={15} className="animate-spin"/>:<Sparkles size={15}/>} {kantu.campoActivo?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Describe el producto, actuación o desempeño observable..."/></div><label className="criteria-count">Cantidad de criterios<select value={form.numeroCriterios} onChange={e=>update("numeroCriterios",e.target.value)}>{[4,5,6,7,8,9,10].map(n=><option key={n}>{n}</option>)}</select></label>
+      {/* Los criterios los redacta el propio instrumento, pero su prompt ya
+          respeta `criteriosBase` («cuando existan criterios aprobados,
+          consérvalos»). Así la propuesta de Kantu no es decorativa: siembra
+          los criterios que la generación va a conservar. */}
+      <div className="criteria-seed">
+        <div>
+          <strong>{campoDeCriterios==="indicadores"?"Indicadores observables":"Criterios de evaluación"}</strong>
+          <small>{form.criteriosBase?.length?`${form.criteriosBase.length} en uso. La generación los conservará.`:"Opcional. Si los defines, la generación los conservará."}</small>
+        </div>
+        <button type="button" onClick={()=>kantu.pedir(campoDeCriterios, form, { destino: "criteriosBase" })} disabled={Boolean(kantu.campoActivo)}>
+          {kantu.campoActivo===campoDeCriterios?<Loader2 size={15} className="animate-spin"/>:<Sparkles size={15}/>}
+          {kantu.campoActivo===campoDeCriterios?kantu.espera:"Sugerir con Kantu"}
+        </button>
+        {form.criteriosBase?.length>0&&<ol className="criteria-seed__lista">{form.criteriosBase.map((c,i)=><li key={i}>{typeof c==="string"?c:c?.criterio||""}</li>)}</ol>}
+      </div></div>}
     {step===3&&!instrument&&<div className="wizard-card instrument-review"><div className="wizard-card__title"><span><ClipboardList size={18}/></span><div><h4>{initialContext?"Contexto recuperado de la sesión":"Revisa el contexto"}</h4><p>{initialContext?"Kantu utilizará la competencia, capacidades, criterios y evidencia ya generados.":"Puedes volver y editar cualquier dato antes de generar."}</p></div></div><div className="context-summary"><div><small>Contexto</small><strong>{form.area} · {form.grado} · {form.region}</strong><p>{form.tema}</p></div>{!initialContext&&<button onClick={()=>setStep(1)}>Editar contexto</button>}</div><div className="context-summary"><div><small>Evidencia</small><p>{form.evidencia}</p></div>{!initialContext&&<button onClick={()=>setStep(2)}>Editar evidencia</button>}</div></div>}
     {error&&<p className="wizard-error">{error}</p>}
     {!instrument&&<div className="wizard-actions">{step>1&&!initialContext&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<3?<button className="wizard-next" onClick={continueFlow}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={generateInstrument} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está trabajando...":`Generar ${instrumentName}`}</button>}</div>}
@@ -1811,8 +1884,10 @@ async function downloadWordSearch({ titulo, palabras, gridData, dificultad, grad
 
     await triggerWordDownload(doc, `${slug}.docx`);
   } catch (error) {
+    // Se propaga para que lo cuente quien tiene acceso a los avisos: esta
+    // funcion vive fuera de React y no puede mostrar nada por si misma.
     console.error("Error descargando Word:", error);
-    alert("Error al descargar. Intenta de nuevo.");
+    throw new Error("No pudimos preparar el documento de Word.");
   }
 }
 
@@ -1821,85 +1896,128 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
   const [form, setForm] = useState({ tema: "", palabras: "", grado: initialGrade, area: "", dificultad: "media" });
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [suggesting, setSuggesting] = useState(false);
+  const [aviso, setAviso] = useState("");
+  const { toast, openComingSoon } = useUI();
+  // El mismo mecanismo que el resto de materiales: sólo dice «guardado» si el
+  // INSERT salió bien, y si falla lo cuenta y deja reintentar.
+  const sopaSave = useMaterialSave();
 
-  const suggestPalabras = async () => {
-    if (!form.tema) {
-      alert("Por favor ingresa un tema primero");
-      return;
-    }
-    setSuggesting(true);
-    try {
-      // Palabras sugeridas por tema (base de datos simple)
-      const temaPalabras = {
-        animales: ["jaguar", "anaconda", "loro", "cocodrilo", "tapir", "guacamayo", "caimán", "venado", "armadillo"],
-        frutas: ["manzana", "plátano", "naranja", "uva", "fresa", "piña", "papaya", "mango", "sandía"],
-        colores: ["rojo", "azul", "verde", "amarillo", "naranja", "morado", "rosa", "negro", "blanco"],
-        numeros: ["uno", "dos", "tres", "cuatro", "cinco", "seis", "siete", "ocho", "nueve"],
-        cuerpo: ["cabeza", "brazo", "pierna", "mano", "pie", "ojo", "nariz", "boca", "oreja"],
-        escuela: ["libro", "lápiz", "mesa", "silla", "pizarra", "alumno", "maestro", "cuaderno", "tiza"],
-        familia: ["padre", "madre", "hijo", "hija", "abuelo", "hermano", "tía", "tío", "primo"],
-        casa: ["puerta", "ventana", "techo", "piso", "pared", "sala", "cocina", "dormitorio", "baño"],
-        transporte: ["auto", "bicicleta", "avión", "barco", "tren", "bus", "moto", "bote", "carro"],
-        naturaleza: ["árbol", "flor", "hierba", "agua", "montaña", "río", "lago", "mar", "bosque"]
-      };
+  // Kantu de verdad.
+  //
+  // Antes esto no llamaba a Kantu: era un diccionario de diez categorias
+  // ("animales", "frutas", "colores"...) y, cuando el tema no coincidia con
+  // ninguna, devolvia en silencio las palabras de "naturaleza". De ahi que un
+  // tema como "Heroes de Dota 2" acabara produciendo arbol, flor y hierba.
+  const kantu = useSugerenciaKantu({
+    herramienta: "sopa",
+    endpoint: "/api/generate-session",
+    obtenerToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
+    avisar: toast,
+  });
 
-      // Buscar palabras relevantes por tema
-      let palabrasSugeridas = [];
-      const temaBajo = form.tema.toLowerCase();
+  // Las palabras sugeridas pasan por la misma limpieza que las escritas a
+  // mano: la cuadricula no distingue de donde vinieron.
+  const palabrasPropuestas = kantu.propuesta?.lista
+    ? prepararPalabras(kantu.propuesta.lista, form.dificultad).validas
+    : null;
 
-      for (const [categoria, palabras] of Object.entries(temaPalabras)) {
-        if (temaBajo.includes(categoria)) {
-          palabrasSugeridas = palabras;
-          break;
-        }
-      }
-
-      // Si no encuentra coincidencia, usar palabras relacionadas al tema
-      if (palabrasSugeridas.length === 0) {
-        palabrasSugeridas = temaPalabras.naturaleza;
-      }
-
-      // Seleccionar 10 palabras al azar
-      const seleccionadas = palabrasSugeridas
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 10);
-
-      setForm({...form, palabras: seleccionadas.join(", ")});
-      alert(`Kantu sugirió ${seleccionadas.length} palabras para: "${form.tema}"`);
-    } catch (err) {
-      console.error("Error sugerencia:", err);
-      alert("No se pudo generar las palabras. Intenta escribirlas manualmente.");
-    }
-    setSuggesting(false);
-  };
+  function usarPalabras() {
+    if (!palabrasPropuestas?.length) return;
+    setForm(prev => ({ ...prev, palabras: palabrasPropuestas.join(", ") }));
+    setAviso("");
+    kantu.cerrar();
+    toast({ tone: "success", title: `Kantu anadio ${palabrasPropuestas.length} palabras` });
+  }
 
   const handleGenerate = () => {
-    setLoading(true);
-    setTimeout(() => {
-      const palabrasList = form.palabras.split(",").map(p => p.trim()).filter(Boolean);
-      if (palabrasList.length === 0) {
-        alert("Por favor ingresa al menos una palabra");
-        setLoading(false);
-        return;
-      }
+    // La limpieza decide que entra en la cuadricula: sin tildes, sin
+    // repetidas y sin palabras mas largas que el lado. Ver lib/kantu/palabras.js.
+    const revision = prepararPalabras(form.palabras, form.dificultad);
 
-      const gridData = generateWordSearchGrid(palabrasList, form.dificultad);
+    if (!revision.validas.length) {
+      toast({
+        tone: "warning",
+        title: "Escribe al menos una palabra",
+        description: "Separalas con comas. Solo letras, de 3 letras en adelante.",
+      });
+      return;
+    }
+
+    setLoading(true);
+    setAviso(avisoDePalabras(revision, form.dificultad));
+
+    setTimeout(() => {
+      const gridData = generateWordSearchGrid(revision.validas, form.dificultad);
+
+      // La lista impresa se saca de lo que SE COLOCO, no de lo que se pidio.
+      // Antes se imprimian todas y el estudiante buscaba palabras que no
+      // estaban en el tablero: la cuadricula descarta en silencio las que no
+      // encuentran hueco tras cincuenta intentos.
+      const colocadas = gridData.placedWords.map(p => p.word);
+      const perdidas = revision.validas.filter(p => !colocadas.includes(p));
 
       setPreview({
         titulo: `Sopa de letras: ${form.tema}`,
-        palabras: palabrasList,
+        palabras: colocadas,
         grado: form.grado,
         dificultad: form.dificultad.charAt(0).toUpperCase() + form.dificultad.slice(1),
         gridData: gridData
       });
+
+      if (perdidas.length) {
+        toast({
+          tone: "info",
+          title: perdidas.length === 1
+            ? "Una palabra no encontro sitio en la cuadricula"
+            : `${perdidas.length} palabras no encontraron sitio en la cuadricula`,
+          description: "Prueba con una dificultad mayor, que usa una cuadricula mas grande.",
+        });
+      }
       setStep(2);
       setLoading(false);
-    }, 1500);
+    }, 400);
   };
 
-  const handleDownloadWord = () => {
-    downloadWordSearch({
+  /**
+   * Guarda la sopa en la biblioteca.
+   *
+   * Se guarda TODO lo necesario para reabrirla sin regenerarla: regenerar
+   * daría otra cuadrícula y el solucionario ya impreso dejaría de servir.
+   *
+   * Las palabras que no cupieron NO se guardan: no están en el tablero, y
+   * guardarlas repetiría el fallo que se acaba de corregir.
+   */
+  async function guardarEnBiblioteca() {
+    if (!preview) return;
+    const ok = await sopaSave.save({
+      tipo: "wordsearch",
+      titulo: preview.titulo,
+      form: { nivel: form.grado, grado: form.grado, area: form.area, tema: form.tema },
+      contenido: {
+        formato: "wordsearch",
+        tema: form.tema,
+        dificultad: preview.dificultad,
+        lado: preview.gridData.gridSize,
+        palabras: preview.palabras,
+        cuadricula: preview.gridData.grid,
+        solucionario: preview.gridData.placedWords.map((p) => ({
+          palabra: p.word, fila: p.row, columna: p.col, direccion: p.direction,
+        })),
+      },
+    });
+    if (ok) toast({ tone: "success", title: "Guardado en tu biblioteca" });
+  }
+
+  const handleDownloadWord = async () => {
+    try {
+      await descargarSopaEnWord();
+    } catch (error) {
+      toast({ tone: "error", title: error.message, description: "Intentalo nuevamente en unos segundos." });
+    }
+  };
+
+  const descargarSopaEnWord = () => {
+    return downloadWordSearch({
       titulo: preview.titulo,
       palabras: preview.palabras,
       gridData: preview.gridData,
@@ -1908,14 +2026,17 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
     });
   };
 
-  const handleDownloadPdf = () => {
-    alert("PDF download coming soon. Por ahora descarga en Word y convierte a PDF con tu navegador (Imprimir > Guardar como PDF)");
-  };
+  // No esta implementado. Se dice como tal en vez de fingir un boton activo
+  // que abre un cuadro del navegador diciendo «coming soon».
+  const handleDownloadPdf = () => openComingSoon({
+    title: "Descarga en PDF",
+    description: "Todavia no generamos PDF desde SciVerse. Mientras tanto, descarga en Word y usa Imprimir › Guardar como PDF en tu navegador.",
+  });
 
   const handleDownloadImage = async () => {
     try {
       if (!preview || !preview.gridData) {
-        alert("No hay datos para generar la imagen. Intenta generar nuevamente.");
+        toast({ tone: "warning", title: "Genera primero la sopa de letras" });
         return;
       }
       const imageUrl = await generateWordSearchImage({
@@ -1931,14 +2052,14 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
       await downloadImageFile(imageUrl, `${slug}-student.png`);
     } catch (err) {
       console.error("Error descargando imagen estudiante:", err);
-      alert(`Error al generar la imagen: ${err.message}`);
+      toast({ tone: "error", title: "No pudimos generar la imagen.", description: "Intentalo nuevamente en unos segundos." });
     }
   };
 
   const handleDownloadSolutionImage = async () => {
     try {
       if (!preview || !preview.gridData) {
-        alert("No hay datos para generar la imagen. Intenta generar nuevamente.");
+        toast({ tone: "warning", title: "Genera primero la sopa de letras" });
         return;
       }
       const imageUrl = await generateWordSearchImage({
@@ -1954,7 +2075,7 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
       await downloadImageFile(imageUrl, `${slug}-solution.png`);
     } catch (err) {
       console.error("Error descargando imagen solucionario:", err);
-      alert(`Error al generar la imagen: ${err.message}`);
+      toast({ tone: "error", title: "No pudimos generar el solucionario.", description: "Intentalo nuevamente en unos segundos." });
     }
   };
 
@@ -2010,12 +2131,15 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
             <label>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>Palabras (separadas por comas)</span>
-                <button onClick={suggestPalabras} disabled={suggesting || !form.tema} style={{ fontSize: '12px', padding: '4px 12px', marginTop: '0' }}>
-                  {suggesting ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                  {suggesting ? "Sugiriendo..." : "Sugerir con Kantu"}
+                {/* Sin `!form.tema` en `disabled`: un boton que no responde y
+                    no explica por que es peor que uno que avisa. */}
+                <button type="button" onClick={() => kantu.pedir("palabras", form)} disabled={Boolean(kantu.campoActivo)} style={{ fontSize: '12px', padding: '4px 12px', marginTop: '0' }}>
+                  {kantu.campoActivo ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                  {kantu.campoActivo ? kantu.espera : "Sugerir con Kantu"}
                 </button>
               </div>
               <textarea value={form.palabras} onChange={(e) => setForm({...form, palabras: e.target.value})} placeholder="jaguar, anaconda, loro, cocodrilo, tapir" rows="5" />
+              {aviso && <small className="generator-note">{aviso}</small>}
             </label>
             <label>
               <span>Nivel de dificultad</span>
@@ -2101,6 +2225,12 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
             </div>
           </div>
 
+          <SaveStatus
+            state={sopaSave.state}
+            onRetry={sopaSave.retry}
+            onDownload={handleDownloadWord}
+          />
+
           <div className="preview-actions">
             <button onClick={() => setStep(1)} className="secondary">
               Editar parámetros
@@ -2118,10 +2248,29 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {} }) {
               <button onClick={handleDownloadPdf} className="primary">
                 <Download size={16} /> PDF
               </button>
+              <button onClick={guardarEnBiblioteca} className="primary" disabled={sopaSave.state.status === "saving"}>
+                {sopaSave.state.status === "saving"
+                  ? <><Loader2 size={16} className="animate-spin" /> Guardando…</>
+                  : <><Star size={16} /> Guardar en mi biblioteca</>}
+              </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* Se revisa antes de tocar el formulario. Cancelar no cambia nada. */}
+      <SuggestionModal
+        open={Boolean(kantu.propuesta)}
+        titulo="Kantu encontro algunas palabras"
+        introduccion={`Estas palabras van con el tema "${form.tema}". Puedes usarlas tal cual o pedir otras.`}
+        lista={palabrasPropuestas}
+        cargando={Boolean(kantu.campoActivo)}
+        reemplaza={kantu.propuesta?.reemplaza}
+        textoUsar="Usar palabras"
+        onUsar={usarPalabras}
+        onReintentar={kantu.reintentar}
+        onCerrar={kantu.cerrar}
+      />
     </div>
   );
 }
@@ -2540,7 +2689,13 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
   const [loading,setLoading]=useState(false);
   const [result,setResult]=useState(null);
   const [error,setError]=useState("");
-  const [suggesting,setSuggesting]=useState("");
+  const { toast } = useUI();
+  const kantu = useSugerenciaKantu({
+    herramienta: "steam",
+    endpoint: "/api/generate-project-steam",
+    obtenerToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
+    avisar: toast,
+  });
 
   const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
   const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
@@ -2553,16 +2708,9 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
   function toggleSteamArea(area){setForm(prev=>({...prev,areasSTEAM:prev.areasSTEAM.includes(area)?prev.areasSTEAM.filter(x=>x!==area):[...prev.areasSTEAM,area]}));}
   function toggleCapacity(cap){setForm(prev=>({...prev,capacidades:prev.capacidades.includes(cap)?prev.capacidades.filter(x=>x!==cap):[...prev.capacidades,cap]}));}
 
-  async function suggest(field){
-    if(!form.tema.trim()) return setError("Escribe primero un tema o idea para el proyecto.");
-    setSuggesting(field);setError("");
-    try{
-      const {data:{session}}=await supabase.auth.getSession();
-      const response=await fetch("/api/generate-project-steam",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"suggestion",field,form})});
-      const data=await response.json();
-      if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar la sugerencia."));
-      update(field,data.suggestion);
-    }catch(e){setError(e.message);}finally{setSuggesting("");}
+  function suggest(field){
+    setError("");
+    kantu.pedir(field, form);
   }
 
   function next(){
@@ -2590,7 +2738,14 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
           form:{...form,area:form.areaCurricular,tema:form.tema},
           contenido:data.project
         });
-      }catch(saveError){console.error(saveError);}
+      }catch(saveError){
+        // Antes esto era `console.error` y nada más: el proyecto quedaba en
+        // pantalla, la docente cerraba la pestaña y no estaba en su
+        // biblioteca. Un guardado que falla en silencio es peor que uno que
+        // falla, porque nadie hace nada al respecto.
+        console.error(saveError);
+        setError(describeSaveError(saveError)+" Tu proyecto sigue en pantalla y puedes descargarlo.");
+      }
     }catch(e){setError(e.message);}finally{setLoading(false);}
   }
 
@@ -2639,6 +2794,18 @@ ${sessions}`;
   }
 
   return <div className="project-steam-v2">
+    <SuggestionModal
+      open={Boolean(kantu.propuesta)}
+      titulo="Kantu propone esto"
+      introduccion={INTRO_POR_CAMPO[kantu.propuesta?.campo] || "Revisa la propuesta antes de usarla."}
+      sugerencia={kantu.propuesta?.sugerencia}
+      cargando={Boolean(kantu.campoActivo)}
+      reemplaza={kantu.propuesta?.reemplaza}
+      onUsar={() => { update(kantu.propuesta.campo, kantu.propuesta.sugerencia); kantu.cerrar(); }}
+      onReintentar={kantu.reintentar}
+      onCerrar={kantu.cerrar}
+    />
+
     <div className="project-teacher-card">
       <div className="project-avatar">{(profile.nombres?.[0]||"D").toUpperCase()}</div>
       <div><small>DATOS TOMADOS DE TU CUENTA</small><strong>{getTeacherFullName(profile)}</strong><p>{profile.ie||"Institución educativa no registrada"}</p></div>
@@ -2664,8 +2831,8 @@ ${sessions}`;
       <div className="wizard-card__title"><span><Sparkles size={18}/></span><div><h4>Situación significativa e integración STEAM</h4><p>Cuéntale a Kantu qué problema o necesidad abordarán.</p></div></div>
       <div className="wizard-fields">
         <label className="wide">Tema o título provisional *<input value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Guardianes del agua"/></label>
-        <label className="wide ai-field"><span>Situación significativa *</span><button type="button" onClick={()=>suggest("situacion")} disabled={suggesting==="situacion"}>{suggesting==="situacion"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.situacion} onChange={e=>update("situacion",e.target.value)} placeholder="Describe brevemente el problema, necesidad o situación de la escuela o comunidad."/></label>
-        <label className="wide ai-field"><span>Reto o pregunta guía</span><button type="button" onClick={()=>suggest("reto")} disabled={suggesting==="reto"}>{suggesting==="reto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><input value={form.reto} onChange={e=>update("reto",e.target.value)} placeholder="Ej.: ¿Cómo podríamos reducir el desperdicio de agua en nuestra escuela?"/></label>
+        <label className="wide ai-field"><span>Situación significativa *</span><button type="button" onClick={()=>suggest("situacion")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="situacion"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="situacion"?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.situacion} onChange={e=>update("situacion",e.target.value)} placeholder="Describe brevemente el problema, necesidad o situación de la escuela o comunidad."/></label>
+        <label className="wide ai-field"><span>Reto o pregunta guía</span><button type="button" onClick={()=>suggest("reto")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="reto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="reto"?kantu.espera:"Sugerir con Kantu"}</button><input value={form.reto} onChange={e=>update("reto",e.target.value)} placeholder="Ej.: ¿Cómo podríamos reducir el desperdicio de agua en nuestra escuela?"/></label>
         <fieldset className="wide steam-area-picker"><legend>¿Qué áreas STEAM intervienen? * <small>Selecciona al menos 2</small></legend>{["Ciencia","Tecnología","Ingeniería","Arte","Matemática"].map(area=><label key={area} className={form.areasSTEAM.includes(area)?"selected":""}><input type="checkbox" checked={form.areasSTEAM.includes(area)} onChange={()=>toggleSteamArea(area)}/><span>{area}</span></label>)}</fieldset>
         <label className="wide">Área curricular principal *<select value={form.areaCurricular} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
         <label className="wide">Competencia CNEB principal *<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.areaCurricular].map(c=><option key={c}>{c}</option>)}</select></label>
@@ -2676,8 +2843,8 @@ ${sessions}`;
     {step===3&&<div className="wizard-card">
       <div className="wizard-card__title"><span><Target size={18}/></span><div><h4>Producto y evidencias</h4><p>Define qué construirán o presentarán los estudiantes.</p></div></div>
       <div className="wizard-fields">
-        <label className="wide ai-field"><span>Producto esperado *</span><button type="button" onClick={()=>suggest("producto")} disabled={suggesting==="producto"}>{suggesting==="producto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.producto} onChange={e=>update("producto",e.target.value)} placeholder="Ej.: prototipo de un sistema sencillo para reutilizar agua."/></label>
-        <label className="wide ai-field"><span>Evidencias del proyecto *</span><button type="button" onClick={()=>suggest("evidencias")} disabled={suggesting==="evidencias"}>{suggesting==="evidencias"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} Sugerir con Kantu</button><textarea value={form.evidencias} onChange={e=>update("evidencias",e.target.value)} placeholder="Ej.: boceto, registro de pruebas, prototipo y exposición final."/></label>
+        <label className="wide ai-field"><span>Producto esperado *</span><button type="button" onClick={()=>suggest("producto")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="producto"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="producto"?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.producto} onChange={e=>update("producto",e.target.value)} placeholder="Ej.: prototipo de un sistema sencillo para reutilizar agua."/></label>
+        <label className="wide ai-field"><span>Evidencias del proyecto *</span><button type="button" onClick={()=>suggest("evidencias")} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo==="evidencias"?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo==="evidencias"?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.evidencias} onChange={e=>update("evidencias",e.target.value)} placeholder="Ej.: boceto, registro de pruebas, prototipo y exposición final."/></label>
         <label className="wide">Recursos disponibles<input value={form.recursos} onChange={e=>update("recursos",e.target.value)} placeholder="Ej.: material reciclado, cartulina, tabletas, botellas"/></label>
       </div>
     </div>}
@@ -2719,6 +2886,17 @@ function ResourceFromAI({ kind, initialGrade="primaria", profile={} }) {
   const claveOp = useClaveDeOperacion("recurso");
   const isReading=kind==="reading";
   const [form,setForm]=useState({nivel:initialGrade==="secundaria"?"Secundaria":"Primaria",grado:initialGrade==="secundaria"?"2.º":"4.º",area:isReading?"Comunicación":"Ciencia y Tecnología",tema:"",proposito:"",contexto:""});
+  const { toast }=useUI();
+  // Kantu propone el ENFOQUE, no la ficha. Generar la ficha sí cuesta un
+  // crédito, así que decidir el enfoque antes es exactamente lo que evita
+  // gastarlo dos veces.
+  const campoDeEnfoque=isReading?"enfoqueLectura":"enfoque";
+  const kantu=useSugerenciaKantu({
+    herramienta:"recurso",
+    endpoint:"/api/generate-session",
+    obtenerToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
+    avisar: toast,
+  });
   const [loading,setLoading]=useState(false);const [resource,setResource]=useState(null);const [error,setError]=useState("");
   const resourceSave = useMaterialSave();
   const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
@@ -2814,12 +2992,25 @@ Instrucciones: ${resource.instrucciones || "Lee cada actividad con atención y r
 ${cuerpo}${metacognicion}`;
   }
   return <div className="resource-ai-v2">
+    <SuggestionModal
+      open={Boolean(kantu.propuesta)}
+      titulo="Kantu propone un enfoque"
+      introduccion={INTRO_POR_CAMPO[kantu.propuesta?.campo] || "Revisa la propuesta antes de usarla."}
+      sugerencia={kantu.propuesta?.sugerencia}
+      lista={kantu.propuesta?.lista}
+      cargando={Boolean(kantu.campoActivo)}
+      reemplaza={kantu.propuesta?.reemplaza}
+      textoUsar="Usar como contexto"
+      onUsar={()=>{update("contexto",kantu.propuesta.sugerencia);kantu.cerrar();}}
+      onReintentar={kantu.reintentar}
+      onCerrar={kantu.cerrar}
+    />
     {!resource?<div className="wizard-card"><div className="wizard-card__title"><span>{isReading?<BookOpen size={18}/>:<FileText size={18}/>}</span><div><h4>{isReading?"Ficha de lectura":"Ficha de trabajo"}</h4><p>{isReading?"Genera una lectura original con preguntas por niveles de comprensión.":"Genera una ficha de preguntas y respuestas lista para tus estudiantes."}</p></div></div><div className="wizard-fields">
       <label>Nivel *<select value={form.nivel} onChange={e=>setForm(prev=>({...prev,nivel:e.target.value,grado:"1.º"}))}><option>Primaria</option><option>Secundaria</option></select></label>
       <label>Grado *<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
       <label className="wide">Área curricular *<select value={form.area} onChange={e=>update("area",e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
       <label className="wide">Tema *<input value={form.tema} maxLength={LIMITE_TEMA} onChange={e=>update("tema",e.target.value)} placeholder={isReading?"Ej.: Las festividades de mi comunidad":"Ej.: El ciclo del agua"}/></label>
-      <label className="wide">Contexto o indicación adicional<textarea value={form.contexto} maxLength={LIMITE_CONTEXTO} onChange={e=>update("contexto",e.target.value)} placeholder="Opcional: contexto rural, festividad, situación del aula..."/>
+      <label className="wide ai-field"><span>Contexto o indicación adicional</span><button type="button" onClick={()=>kantu.pedir(campoDeEnfoque,form,{destino:"contexto"})} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.contexto} maxLength={LIMITE_CONTEXTO} onChange={e=>update("contexto",e.target.value)} placeholder="Opcional: contexto rural, festividad, situación del aula..."/>
         <small className={form.contexto.length > LIMITE_CONTEXTO - 80 ? "field-count is-near" : "field-count"}>
           {form.contexto.length} / {LIMITE_CONTEXTO} · complementa el tema y el área; no los reemplaza
         </small>
@@ -2835,6 +3026,15 @@ function ValuationScaleGenerator({initialGrade="primaria",profile={}}){
   const initialLevel=initialGrade==="secundaria"?"Secundaria":"Primaria";
   const [form,setForm]=useState({nivel:initialLevel,grado:initialLevel==="Primaria"?"4.º":"2.º",area:"Ciencia y Tecnología",tema:"",competencia:CNEB.indaga,capacidades:GENERATOR_CAPACITIES[CNEB.indaga],evidencia:"",region:""});
   const [resource,setResource]=useState(null);const[loading,setLoading]=useState(false);const[error,setError]=useState("");
+  const { toast }=useUI();
+  // La conducta a observar es el campo que decide los criterios que saldrán:
+  // es el único de este formulario donde una sugerencia cambia el resultado.
+  const kantu=useSugerenciaKantu({
+    herramienta:"escala",
+    endpoint:"/api/generate-session",
+    obtenerToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
+    avisar: toast,
+  });
   const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
   const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
   function changeArea(area){const competencia=GENERATOR_COMPETENCIES[area][0];setForm(prev=>({...prev,area,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
@@ -2871,14 +3071,27 @@ ${c[1]?.criterio||""}
 N.º | APELLIDOS Y NOMBRES | SIEMPRE | A VECES | NO LO HACE | NO OBSERVADO | SIEMPRE | A VECES | NO LO HACE | NO OBSERVADO
 ${Array.from({length:25},(_,i)=>`${i+1}. | ______________________________ | ___ | ___ | ___ | ___ | ___ | ___ | ___ | ___`).join("\n")}`;
   }
-  return <div>{!resource?<div className="wizard-card"><div className="wizard-card__title"><span><ListChecks size={18}/></span><div><h4>Escala de valoración</h4><p>Genera criterios observables para el registro de aula.</p></div></div><div className="wizard-fields">
+  return <div>
+    <SuggestionModal
+      open={Boolean(kantu.propuesta)}
+      titulo="Kantu propone esto"
+      introduccion={INTRO_POR_CAMPO[kantu.propuesta?.campo] || "Revisa la propuesta antes de usarla."}
+      sugerencia={kantu.propuesta?.sugerencia}
+      lista={kantu.propuesta?.lista}
+      cargando={Boolean(kantu.campoActivo)}
+      reemplaza={kantu.propuesta?.reemplaza}
+      onUsar={()=>{update(kantu.propuesta.campo,kantu.propuesta.lista||kantu.propuesta.sugerencia);kantu.cerrar();}}
+      onReintentar={kantu.reintentar}
+      onCerrar={kantu.cerrar}
+    />
+    {!resource?<div className="wizard-card"><div className="wizard-card__title"><span><ListChecks size={18}/></span><div><h4>Escala de valoración</h4><p>Genera criterios observables para el registro de aula.</p></div></div><div className="wizard-fields">
     <label>Nivel<select value={form.nivel} onChange={e=>setForm(prev=>({...prev,nivel:e.target.value,grado:"1.º"}))}><option>Primaria</option><option>Secundaria</option></select></label>
     <label>Grado<select value={form.grado} onChange={e=>update("grado",e.target.value)}>{grades.map(g=><option key={g}>{g}</option>)}</select></label>
     <label className="wide">Región *<select value={form.region} onChange={e=>update("region",e.target.value)}><option value="">Selecciona una región</option>{PERU_REGIONS.map(r=><option key={r}>{r}</option>)}</select></label>
     <label className="wide">Área<select value={form.area} onChange={e=>changeArea(e.target.value)}>{GENERATOR_AREAS.map(a=><option key={a}>{a}</option>)}</select></label>
     <label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)}/></label>
     <label className="wide">Competencia<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{GENERATOR_COMPETENCIES[form.area].map(c=><option key={c}>{c}</option>)}</select></label>
-    <label className="wide">Evidencia *<textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)}/></label>
+    <label className="wide ai-field"><span>Conducta o desempeño a observar *</span><button type="button" onClick={()=>kantu.pedir("evidencia",form)} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Qué vas a observar en el aula y en qué se nota."/></label>
   </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} Generar escala</button></div></div>:<div className="instrument-result"><div className="instrument-result__actions"><div><small>ESCALA DE VALORACIÓN</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadWord("escala-de-valoracion.docx",text(),resource.titulo)}><Download size={14}/> Word</button></div></div><pre className="resource-document-preview">{text()}</pre></div>}</div>;
 }
 
@@ -2986,7 +3199,7 @@ function LinkedRatingScaleGenerator({sessionContext,profile={},onNext}){
   return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadWord("escala-de-valoracion.docx",text(),resource.titulo)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form,instrument:resource})}>Siguiente <ArrowRight size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
 }
 
-function CompleteClassFlow({preferredGrade="primaria",profile={}}){
+function CompleteClassFlow({preferredGrade="primaria",profile={},onNavigate=null}){
   const[stage,setStage]=useState("intro");
   const[sessionContext,setSessionContext]=useState(null);
   const[instrumentType,setInstrumentType]=useState(null);
@@ -2995,7 +3208,7 @@ function CompleteClassFlow({preferredGrade="primaria",profile={}}){
   const finish=()=>setStage("done");
 
   if(stage==="intro")return <CompleteClassIntro onStart={()=>setStage("session")}/>;
-  if(stage==="session")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="active">1 Sesión</span><span>2 Instrumento</span><span>3 Material</span></div><SteamGenerator initialGrade={preferredGrade} documentType="session" profile={profile} completeClass onNext={(ctx)=>{setSessionContext(ctx);setStage("choice")}}/></div>;
+  if(stage==="session")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="active">1 Sesión</span><span>2 Instrumento</span><span>3 Material</span></div><SteamGenerator initialGrade={preferredGrade} documentType="session" profile={profile} completeClass onNavigate={onNavigate} onNext={(ctx)=>{setSessionContext(ctx);setStage("choice")}}/></div>;
   if(stage==="choice")return <div className="flow-modal-shell"><div className="flow-modal-card"><div className="flow-modal-head"><div><small>SESIÓN LISTA</small><h2>¿Qué quieres hacer ahora?</h2><p>Continúa construyendo tu clase completa sin volver a ingresar los datos de la sesión.</p></div></div><div className="flow-choice-grid"><FlowChoiceCard icon={ClipboardList} title="Instrumentos de evaluación" description="Rúbrica, lista de cotejo o escala de valoración alineada a la sesión." onClick={()=>setStage("instrument-select")}/><FlowChoiceCard icon={FileText} title="Material" description="Ficha de trabajo, ficha de lectura o juegos para la sesión." onClick={()=>setStage("material-select")} accent="yellow"/></div></div></div>;
   if(stage==="instrument-select")return <div className="complete-flow-stage"><div className="complete-flow-topline"><button onClick={()=>setStage("choice")}>← Atrás</button><div><small>PASO 2 DE 3</small><h2>Instrumento de evaluación</h2></div></div><div className="instrument-select-grid"><FlowChoiceCard icon={ClipboardList} title="Rúbrica" description="Criterios con niveles de logro y descriptores observables." onClick={()=>{setInstrumentType("rubric");setStage("instrument")}}/><FlowChoiceCard icon={CheckCircle2} title="Lista de cotejo" description="Verificación rápida de criterios observables." onClick={()=>{setInstrumentType("checklist");setStage("instrument")}}/><FlowChoiceCard icon={ListChecks} title="Escala de valoración" description="Registro de frecuencia y observación del desempeño." onClick={()=>{setInstrumentType("rating-scale");setStage("instrument")}}/></div></div>;
   if(stage==="instrument")return <div className="complete-flow-stage"><div className="complete-flow-progress"><span className="done">✓ Sesión</span><span className="active">2 Instrumento</span><span>3 Material</span></div>{instrumentType==="rating-scale"?<LinkedRatingScaleGenerator sessionContext={sessionContext} profile={profile} onNext={()=>setStage("material-select")}/>:<EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={instrumentType} initialContext={initialContext} completeClass onNext={()=>setStage("material-select")}/>}</div>;
@@ -3060,8 +3273,8 @@ function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreati
         </Button>
       </header>
 
-      {creation==="complete"?<CompleteClassFlow preferredGrade={preferredGrade} profile={profile}/>
-      :creation==="session"?<SteamGenerator initialGrade={preferredGrade} documentType="session" profile={profile}/>
+      {creation==="complete"?<CompleteClassFlow preferredGrade={preferredGrade} profile={profile} onNavigate={onNavigate}/>
+      :creation==="session"?<SteamGenerator initialGrade={preferredGrade} documentType="session" profile={profile} onNavigate={onNavigate}/>
       :creation==="project-v2"?<ProjectSteamGenerator initialGrade={preferredGrade} profile={profile}/>
       :creation==="worksheet-v2"?<ResourceFromAI kind="worksheet" initialGrade={preferredGrade} profile={profile}/>
       :creation==="reading-v2"?<ResourceFromAI kind="reading" initialGrade={preferredGrade} profile={profile}/>
@@ -3422,13 +3635,17 @@ function LoginModal({ onClose, onSubmit, loading, error }) {
 function PasswordRecoveryModal({ onClose, onSubmit, loading }) {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
+  // El error de un campo se enseña junto al campo, no en un cuadro del
+  // sistema operativo que tapa el formulario que hay que corregir.
+  const [errorCampo, setErrorCampo] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email.trim()) {
-      alert("Ingresa tu correo electrónico");
+      setErrorCampo("Ingresa tu correo electrónico.");
       return;
     }
+    setErrorCampo("");
     await onSubmit(email);
     setSubmitted(true);
     setTimeout(() => {
@@ -3466,6 +3683,9 @@ function PasswordRecoveryModal({ onClose, onSubmit, loading }) {
                   fontFamily: "'Inter', sans-serif",
                 }}
               />
+              {errorCampo && (
+                <small role="alert" style={{ color: "#A8321A", fontSize: "13px" }}>{errorCampo}</small>
+              )}
             </label>
             <div className="legal-actions">
               <button type="button" onClick={onClose} className="secondary-btn">Cancelar</button>
@@ -3518,6 +3738,10 @@ function PlansModal({ onClose, onChoosePlan }) {
 }
 
 function RegistrationGate({ children }) {
+  // Este componente no está enlazado a ninguna vista hoy. El hook se declara
+  // igual: un identificador sin definir aquí sería un ReferenceError que sólo
+  // aparecería el día que alguien lo conecte, y ya pasó una vez.
+  const { toast } = useUI();
   const [checking, setChecking] = useState(true);
   const [profile, setProfile] = useState(null);
   const [view, setView] = useState("landing"); // 'landing' | 'form' | 'login' | 'reset-password'
@@ -3613,7 +3837,12 @@ function RegistrationGate({ children }) {
       if (dbError) throw dbError;
 
       setError(null);
-      alert("✅ Registro exitoso. Revisa tu correo para confirmar tu cuenta.");
+      toast({
+        tone: "success",
+        title: "Cuenta creada",
+        description: "Revisa tu correo para confirmarla y ya podrás entrar.",
+        duration: 8000,
+      });
       setView("landing");
     } catch (e) {
       setError(e.message || "No se pudo crear tu cuenta. Intenta de nuevo.");
@@ -3669,7 +3898,7 @@ function RegistrationGate({ children }) {
       const { error } = await supabase.auth.updateUser({ password: resetForm.contrasena });
       if (error) throw error;
 
-      alert("✅ Contraseña actualizada correctamente.");
+      toast({ tone: "success", title: "Contraseña actualizada" });
       setView("landing");
       setResetForm({ contrasena: "", confirmarContrasena: "" });
     } catch (e) {
@@ -3707,7 +3936,7 @@ function RegistrationGate({ children }) {
       });
       if (resetError) throw resetError;
       setError(null);
-      alert("✅ Revisa tu correo para el link de recuperación de contraseña.");
+      toast({ tone: "success", title: "Te enviamos un correo", description: "Ahí está el enlace para recuperar tu contraseña.", duration: 8000 });
       setShowPasswordRecovery(false);
     } catch (e) {
       setError("No se pudo enviar el email de recuperación. Intenta de nuevo.");
@@ -4164,6 +4393,13 @@ function ChallengeCreator({profile,preferredGrade,onCreated}){
   const [form,setForm]=useState({nivel:preferredGrade,grado:preferredGrade==="primaria"?"5.º":"2.º",area:"Ciencia y Tecnología",tema:"",region:"",duracion:"45",estudiantes:"25",integrantes:"4",materiales:"papelotes, plumones y materiales reciclados",competencia:""});
   const [loading,setLoading]=useState(false); const [error,setError]=useState("");
   const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
+  const { toast }=useUI();
+  const kantu=useSugerenciaKantu({
+    herramienta:"reto",
+    endpoint:"/api/generate-session",
+    obtenerToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
+    avisar: toast,
+  });
   async function generate(){
     if(!form.tema.trim()) return setError("Escribe el tema o problema que deseas trabajar.");
     setLoading(true);setError("");
@@ -4171,17 +4407,98 @@ function ChallengeCreator({profile,preferredGrade,onCreated}){
       // El intento terminó: la próxima generación será otra operación.
       claveOp.renovar();const reto={...data.challenge,id:`kantu-${Date.now()}`,title:data.challenge.titulo,area:form.area,subject:"tecnologia",grades:[form.nivel],teamSize:data.challenge.equipo,icon:Wand2};try{await saveTeacherMaterial({tipo:"challenge",titulo:reto.title,form:{...form,grado:form.grado},contenido:reto});}catch(saveErr){console.error(saveErr);setError(describeSaveError(saveErr)+" El reto se creó, pero no quedó en tu biblioteca.");}onCreated(reto);}catch(e){setError(e.message);}finally{setLoading(false);}
   }
-  return <div className="challenge-creator"><div className="challenge-creator-intro"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Construyamos un reto para tu grupo</h2><p>Completa el contexto del aula. Kantu organizará la misión, los roles, las reglas, la secuencia y los criterios observables.</p></div></div><div className="challenge-form">
+  return <div className="challenge-creator">
+    {/* La dinámica es orientación para decidir antes de generar: este
+        formulario no tiene un campo «dinámica» y no se va a inventar uno para
+        que el botón «Usar» tenga a dónde escribir. Se lee y se cierra. */}
+    <SuggestionModal
+      open={Boolean(kantu.propuesta)}
+      titulo="Kantu propone una dinámica"
+      introduccion={INTRO_POR_CAMPO[kantu.propuesta?.campo] || "Una orientación para decidir antes de generar el reto."}
+      sugerencia={kantu.propuesta?.sugerencia}
+      lista={kantu.propuesta?.lista}
+      cargando={Boolean(kantu.campoActivo)}
+      soloLectura={SOLO_LECTURA.has(kantu.propuesta?.campo)}
+      onUsar={kantu.cerrar}
+      onReintentar={kantu.reintentar}
+      onCerrar={kantu.cerrar}
+    />
+    <div className="challenge-creator-intro"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Construyamos un reto para tu grupo</h2><p>Completa el contexto del aula. Kantu organizará la misión, los roles, las reglas, la secuencia y los criterios observables.</p></div></div><div className="challenge-form">
     <label>Nivel<select value={form.nivel} onChange={e=>update("nivel",e.target.value)}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><label>Grado<input value={form.grado} onChange={e=>update("grado",e.target.value)}/></label><label>Área curricular<select value={form.area} onChange={e=>update("area",e.target.value)}>{["Ciencia y Tecnología","Matemática","Comunicación","Personal Social","Arte y Cultura","Educación para el Trabajo"].map(x=><option key={x}>{x}</option>)}</select></label>
-    <label className="wide">Tema, problema o aprendizaje que deseas trabajar *<textarea value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Reducir el desperdicio de agua en nuestra escuela"/></label><label>Región o contexto<input value={form.region} onChange={e=>update("region",e.target.value)} placeholder="Ej.: Áncash, contexto rural"/></label><label>Duración (minutos)<input type="number" min="20" value={form.duracion} onChange={e=>update("duracion",e.target.value)}/></label><label>N.º de estudiantes<input type="number" min="4" value={form.estudiantes} onChange={e=>update("estudiantes",e.target.value)}/></label><label>Integrantes por equipo<input type="number" min="2" max="8" value={form.integrantes} onChange={e=>update("integrantes",e.target.value)}/></label><label className="wide">Materiales disponibles<textarea value={form.materiales} onChange={e=>update("materiales",e.target.value)}/></label><label className="wide">Competencia CNEB <small>Opcional: Kantu puede sugerirla</small><input value={form.competencia} onChange={e=>update("competencia",e.target.value)} placeholder="Déjalo vacío para recibir una sugerencia"/></label>
+    <label className="wide ai-field"><span>Tema, problema o aprendizaje que deseas trabajar *</span><button type="button" onClick={()=>kantu.pedir("dinamica",form)} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo?kantu.espera:"Sugerir dinámica"}</button><textarea value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Reducir el desperdicio de agua en nuestra escuela"/></label><label>Región o contexto<input value={form.region} onChange={e=>update("region",e.target.value)} placeholder="Ej.: Áncash, contexto rural"/></label><label>Duración (minutos)<input type="number" min="20" value={form.duracion} onChange={e=>update("duracion",e.target.value)}/></label><label>N.º de estudiantes<input type="number" min="4" value={form.estudiantes} onChange={e=>update("estudiantes",e.target.value)}/></label><label>Integrantes por equipo<input type="number" min="2" max="8" value={form.integrantes} onChange={e=>update("integrantes",e.target.value)}/></label><label className="wide">Materiales disponibles<textarea value={form.materiales} onChange={e=>update("materiales",e.target.value)}/></label><label className="wide">Competencia CNEB <small>Opcional: Kantu puede sugerirla</small><input value={form.competencia} onChange={e=>update("competencia",e.target.value)} placeholder="Déjalo vacío para recibir una sugerencia"/></label>
     {error&&<p className="challenge-error">{error}</p>}<button className="challenge-generate" onClick={generate} disabled={loading}><Sparkles size={17}/>{loading?"Kantu está construyendo el reto…":"Crear reto con Kantu"}</button>
   </div>{loading&&<div className="kantu-generation-overlay"><div className="kantu-working kantu-working--overlay"><div className="kantu-working__visual"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu trabajando"/><span className="kantu-orbit"><Sparkles size={17}/></span></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando la misión y los equipos…</h4><p>También estoy alineando el reto al CNEB y redactando criterios que puedas observar durante la actividad.</p><div className="kantu-progress"><i/><i/><i/></div></div></div></div>}</div>;
 }
 
 function LibraryEmpty({onCreate,onChallenges,onActivities}){return <div className="library-empty-state library-empty-kantu"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Tu biblioteca está lista para empezar</h2><p>Crea una sesión, un reto grupal o un instrumento. Todo lo que prepares con Kantu se guardará automáticamente aquí.</p><div><button onClick={onCreate}>Crear sesión</button><button onClick={onChallenges}>Crear reto grupal</button><button onClick={onActivities}>Explorar actividades</button></div></div></div>}
 
+/**
+ * Una sopa de letras guardada, tal como se generó.
+ *
+ * `MaterialContentView` es un volcador genérico de JSON: para una cuadrícula
+ * daría una lista de listas de letras, ilegible. Y regenerarla al abrirla
+ * daría OTRA cuadrícula, con lo que el solucionario que la docente ya imprimió
+ * dejaría de coincidir. Por eso se guarda y se dibuja tal cual.
+ */
+function SopaGuardadaView({ contenido }) {
+  const { cuadricula = [], palabras = [], solucionario = [], dificultad, tema } = contenido;
+  const [verSolucion, setVerSolucion] = useState(false);
+
+  // Celdas que forman parte de alguna palabra, para el solucionario.
+  const marcadas = useMemo(() => {
+    const set = new Set();
+    const vectores = {
+      horizontal: [0, 1], horizontal_back: [0, -1],
+      vertical: [1, 0], vertical_back: [-1, 0],
+      diagonal: [1, 1], diagonal_back: [-1, -1],
+      diagonal2: [1, -1], diagonal2_back: [-1, 1],
+    };
+    for (const { palabra, fila, columna, direccion } of solucionario) {
+      const [dF, dC] = vectores[direccion] || [0, 1];
+      for (let i = 0; i < String(palabra).length; i += 1) {
+        set.add(`${fila + i * dF}:${columna + i * dC}`);
+      }
+    }
+    return set;
+  }, [solucionario]);
+
+  return (
+    <div className="sopa-guardada">
+      <p className="sopa-guardada__meta">
+        {tema && <strong>{tema}</strong>}
+        {dificultad && <span>Dificultad: {dificultad}</span>}
+        <span>{palabras.length} palabras</span>
+      </p>
+
+      <div
+        className={`sopa-guardada__grid${verSolucion ? " is-solucion" : ""}`}
+        style={{ gridTemplateColumns: `repeat(${cuadricula.length || 1}, 1fr)` }}
+        role="img"
+        aria-label={`Cuadrícula de ${cuadricula.length} por ${cuadricula.length} letras`}
+      >
+        {cuadricula.map((fila, f) => fila.map((letra, c) => (
+          <span key={`${f}-${c}`} className={marcadas.has(`${f}:${c}`) ? "is-marcada" : ""}>{letra}</span>
+        )))}
+      </div>
+
+      <div className="sopa-guardada__acciones">
+        <button type="button" onClick={() => setVerSolucion(v => !v)}>
+          {verSolucion ? "Ocultar solucionario" : "Ver solucionario"}
+        </button>
+      </div>
+
+      <h4>Palabras a encontrar</h4>
+      <ul className="sopa-guardada__palabras">
+        {palabras.map(p => <li key={p}>{p}</li>)}
+      </ul>
+    </div>
+  );
+}
+
 function MaterialContentView({value,level=0}){
   if(value===null||value===undefined||value==="")return null;
+  // Discriminador escrito al guardar: ver 011_wordsearch_material.sql.
+  if(level===0&&value?.formato==="wordsearch")return <SopaGuardadaView contenido={value}/>;
   if(typeof value!=="object")return <p>{String(value)}</p>;
   if(Array.isArray(value))return <ul>{value.map((item,index)=><li key={index}>{typeof item==="object"?<MaterialContentView value={item} level={level+1}/>:String(item)}</li>)}</ul>;
   return <div className={`material-structured level-${level}`}>{Object.entries(value).filter(([,item])=>item!==null&&item!==""&&!(Array.isArray(item)&&!item.length)).map(([key,item])=><section key={key}><h4>{key.replace(/([A-Z])/g," $1").replace(/^./,letter=>letter.toUpperCase())}</h4><MaterialContentView value={item} level={level+1}/></section>)}</div>;
@@ -4241,6 +4558,24 @@ function SciVerseApp({ profile, onLogout }) {
   const [accountOpen, setAccountOpen] = useState(false);
   const [accountTab, setAccountTab] = useState("perfil");
   const { toast, confirm } = useUI();
+
+  /**
+   * Cerrar sesión sí se pregunta.
+   *
+   * Es la única acción de la barra lateral que tira todo lo que hay en
+   * pantalla, y el botón está pegado al de «Mi cuenta». Navegar, abrir una
+   * herramienta o aceptar una sugerencia NO se preguntan: ahí la confirmación
+   * sólo sería un clic de más.
+   */
+  const cerrarSesionConfirmado = useCallback(async () => {
+    const seguro = await confirm({
+      title: "¿Cerrar sesión?",
+      description: "Se cerrará tu sesión en este dispositivo. Lo que ya guardaste en tu biblioteca se conserva.",
+      confirmText: "Cerrar sesión",
+      cancelText: "Seguir trabajando",
+    });
+    if (seguro) onLogout();
+  }, [confirm, onLogout]);
   const [activeSection, setActiveSection] = useState("inicio");
   const [createEntry, setCreateEntry] = useState(null);
   const openCreate = (entry=null) => { setCreateEntry(entry); setActiveSection("crear"); };
@@ -4335,7 +4670,7 @@ function SciVerseApp({ profile, onLogout }) {
       activeSection={activeSection}
       onNavigate={setActiveSection}
       onOpenAccount={(tab) => { setAccountTab(tab || "perfil"); setAccountOpen(true); }}
-      onLogout={onLogout}
+      onLogout={cerrarSesionConfirmado}
     >
 
       {activeSection === "inicio" && (

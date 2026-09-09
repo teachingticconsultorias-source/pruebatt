@@ -11,6 +11,7 @@ import { requireUser } from "./_lib/supabase.js";
 import { generateJson } from "./_lib/gemini.js";
 import { withCredit, chargesCreditForModule } from "./_lib/credits.js";
 import { claveObligatoria } from "./_lib/idempotency.js";
+import { bloqueDeContexto, tieneTema } from "./_lib/contexto-sugerencia.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 
 const SESSION_SCHEMA = {
@@ -39,6 +40,46 @@ const SUGGESTION_SCHEMA = {
   properties: { suggestion: { type: "string" } },
   required: ["suggestion"],
 };
+
+/**
+ * Sugerencias que se responden como lista: palabras, criterios, indicadores.
+ *
+ * Van aquí y no en Functions nuevas porque son exactamente lo mismo que el
+ * resto de sugerencias: baratas, sin crédito y frenadas por el mismo rate
+ * limit. Lo único distinto es la forma de la respuesta, y una sola forma
+ * —`items`— sirve para las tres.
+ */
+const LISTA_SCHEMA = {
+  type: "object",
+  properties: { items: { type: "array", items: { type: "string" } } },
+  required: ["items"],
+};
+
+/** Qué campos se contestan con una lista y no con un párrafo. */
+const CAMPOS_DE_LISTA = new Set(["palabras", "criterios", "indicadores"]);
+
+/** Tope de elementos. Una lista más larga no se lee y desplaza a la respuesta. */
+const MAX_ELEMENTOS = 14;
+
+/**
+ * Los campos que Kantu sabe sugerir, de las diez herramientas activas.
+ *
+ * Uno por lo que se pide, no uno por herramienta: la rúbrica y la escala
+ * piden lo mismo —criterios observables— y comparten campo. El contexto que
+ * viaja es lo que las distingue, y de eso se encarga el navegador
+ * (`lib/kantu/contexto.js`).
+ */
+const CAMPOS_SUGERIBLES = new Set([
+  "proposito",       // sesión
+  "contexto",        // sesión
+  "evidencia",       // sesión · rúbrica · lista de cotejo · escala
+  "criterios",       // rúbrica · escala          → lista
+  "indicadores",     // lista de cotejo           → lista
+  "palabras",        // sopa de letras            → lista
+  "enfoque",         // ficha de trabajo
+  "enfoqueLectura",  // ficha de lectura
+  "dinamica",        // reto grupal
+]);
 
 const CHALLENGE_SCHEMA = {
   type: "object",
@@ -218,6 +259,9 @@ export default async function handler(req, res) {
       instrumentType,
       module: moduleName,
       previous = {},
+      // Contexto ya elegido y ordenado por el navegador. Ver
+      // `lib/kantu/contexto.js` y `_lib/contexto-sugerencia.js`.
+      contexto: contextoKantu,
     } = req.body || {};
 
     // 2) Validación de entrada, antes de gastar nada.
@@ -227,10 +271,14 @@ export default async function handler(req, res) {
     const instrumentMode = mode === "instrument";
     const moduleMode = mode === "module";
     const challengeMode = mode === "challenge";
-    const allowedFields = ["proposito", "contexto", "evidencia"];
-
-    if (suggestionMode && !allowedFields.includes(field)) {
+    if (suggestionMode && !CAMPOS_SUGERIBLES.has(field)) {
       throw Errors.badRequest("Tipo de sugerencia no válido.");
+    }
+    // Sin tema, cualquier sugerencia sale genérica y no le sirve a nadie. Se
+    // comprueba aquí además de en el navegador porque el navegador puede ser
+    // una pestaña vieja.
+    if (suggestionMode && !tieneTema(contextoKantu)) {
+      throw Errors.badRequest("Escribe primero el tema para que Kantu pueda ayudarte.");
     }
     if (moduleMode && !MODULE_SCHEMAS[moduleName]) {
       throw Errors.badRequest("Módulo de generación no válido.");
@@ -253,12 +301,52 @@ export default async function handler(req, res) {
       proposito: "Redacta un propósito de aprendizaje breve en una sola oración. Debe expresar qué acción realizará el estudiante, qué contenido movilizará, en qué condición y para qué será útil.",
       contexto: "Propón una situación significativa auténtica y cercana a la región indicada. Relaciónala con el tema y la vida del estudiante, pero no inventes nombres, cifras, festividades ni problemas locales específicos que no hayan sido proporcionados.",
       evidencia: "Propón una evidencia concreta y verificable: un producto, actuación o desempeño que permita observar las capacidades seleccionadas y evaluar el propósito.",
+
+      /* ---- listas ------------------------------------------------------ */
+      criterios:
+        "Propón entre 4 y 8 criterios de evaluación para este instrumento. Cada uno en una línea, empezando por un verbo observable, nombrando el contenido concreto del tema y una condición de calidad. Deben derivarse de la competencia y de las capacidades indicadas, y ser observables en el producto o evidencia señalados. No repitas criterios ni uses adjetivos vagos como «bueno» o «adecuado» sin decir en qué.",
+      indicadores:
+        "Propón entre 5 y 10 indicadores observables para una lista de cotejo. Cada uno debe poder responderse con Sí o No mirando la evidencia o la actividad indicadas: una sola conducta verificable por indicador, en presente y sin graduaciones. Nada de «comprende» o «valora», que no se ven.",
+
+      /* ---- textos breves ----------------------------------------------- */
+      enfoque:
+        "Propón el enfoque de la ficha de trabajo: en dos o tres oraciones, qué debería trabajar, con qué tipo de preguntas y qué indicaciones conviene dar al estudiante. NO redactes la ficha ni las preguntas: sólo el enfoque, para que la docente decida antes de generar.",
+      enfoqueLectura:
+        "Propón el enfoque de la ficha de lectura: en dos o tres oraciones, de qué podría tratar el texto, qué objetivo de lectura tiene sentido para el grado y qué tipo de comprensión conviene evaluar. NO escribas el texto ni las preguntas.",
+      dinamica:
+        "Propón el enfoque del reto grupal: en dos o tres oraciones, qué dinámica de trabajo en equipo encaja con el tema y el grado, qué producto observable podrían construir y cómo se reparte el trabajo. Debe ser seguro, con materiales sencillos y exigir colaboración real. NO redactes los pasos ni los roles.",
     };
-    const suggestionPrompt = `Ayuda a un docente peruano a completar solamente el campo "${field}" de una sesión CNEB.
+    // El contexto lo elige el navegador y aquí sólo se valida y se vuelca: así
+    // añadir un campo al formulario no obliga a tocar este prompt. Si llega
+    // vacío —pestaña vieja— se cae a los campos de siempre, para no romper.
+    const bloqueKantu = bloqueDeContexto(contextoKantu) || `
 Nivel: ${form.nivel || "No indicado"}. Grado: ${form.grado || "No indicado"}. Área: ${form.area || "No indicada"}.
 Región: ${form.region || "No indicada"}. Tema: ${form.tema || "No indicado"}.
 Competencia: ${form.competencia || "No indicada"}. Capacidades: ${capacities || "No indicadas"}.
-Propósito actual: ${form.proposito || ""}. Contexto actual: ${form.contexto || ""}.
+Propósito actual: ${form.proposito || ""}. Contexto actual: ${form.contexto || ""}.`;
+
+    // Las palabras de la sopa tienen reglas propias porque van a una
+    // cuadrícula: una sola palabra, sin espacios y sin tildes. El resto de
+    // listas son frases.
+    const reglasDeLista = field === "palabras"
+      ? `- Entre 8 y ${MAX_ELEMENTOS} palabras, todas del tema indicado y sólo de ese tema.
+- Una sola palabra por elemento, sin espacios, sin guiones y sin signos.
+- Entre 3 y 12 letras. Sin repetir. Sin tildes ni ñ, porque van a una cuadrícula.
+- Nombres propios permitidos si el tema los pide.
+- Adecuadas al grado indicado y apropiadas para un aula.`
+      : `${suggestionInstructions[field] || ""}
+- Un elemento por línea, como máximo ${MAX_ELEMENTOS}.
+- Sin numerar y sin viñetas: el número lo pone la interfaz.`;
+
+    const suggestionPrompt = CAMPOS_DE_LISTA.has(field)
+      ? `Eres Kantu, asistente de una docente peruana.
+${bloqueKantu}
+${reglasDeLista}
+Devuelve únicamente un objeto JSON con esta forma exacta:
+{"items": ["primero", "segundo"]}
+Sin markdown, sin bloques de código y sin ningún texto fuera del JSON.`
+      : `Eres Kantu, asistente de una docente peruana. Ayúdala a completar solamente el campo "${field}".
+${bloqueKantu}
 ${suggestionInstructions[field] || ""}
 Devuelve únicamente un objeto JSON con esta forma exacta:
 {"suggestion": "la sugerencia lista para pegar, en español claro y sin encabezados"}
@@ -293,7 +381,7 @@ El reto debe exigir colaboración real, asignar roles complementarios y terminar
     const responseSchema = challengeMode
       ? CHALLENGE_SCHEMA
       : suggestionMode
-        ? SUGGESTION_SCHEMA
+        ? (CAMPOS_DE_LISTA.has(field) ? LISTA_SCHEMA : SUGGESTION_SCHEMA)
         : instrumentMode
           ? INSTRUMENT_SCHEMA
           : moduleMode
@@ -366,7 +454,22 @@ El reto debe exigir colaboración real, asignar roles complementarios y terminar
     const { data, model } = generation;
 
     // 6) Respuesta con la misma forma que ya esperaba el cliente.
-    if (suggestionMode) return res.status(200).json({ suggestion: data.suggestion });
+    if (suggestionMode) {
+      if (CAMPOS_DE_LISTA.has(field)) {
+        // Defensa de tamaño, nada más. La limpieza de verdad —tildes,
+        // repetidas, longitud que quepa en la cuadrícula— vive en el
+        // navegador (`lib/kantu/palabras.js`), que es donde está la
+        // cuadrícula y donde se sabe qué dificultad eligió la docente.
+        const crudos = Array.isArray(data.items) ? data.items : [];
+        return res.status(200).json({
+          items: crudos
+            .filter((x) => typeof x === "string" && x.trim())
+            .slice(0, MAX_ELEMENTOS)
+            .map((x) => x.trim().slice(0, 240)),
+        });
+      }
+      return res.status(200).json({ suggestion: data.suggestion });
+    }
     if (challengeMode) return res.status(200).json({ challenge: data, model, _credits: credits });
     if (instrumentMode) return res.status(200).json({ instrument: data, _credits: credits });
     if (moduleMode) {

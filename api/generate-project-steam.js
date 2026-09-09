@@ -21,6 +21,7 @@ import { generateJson } from "./_lib/gemini.js";
 import { withCredit } from "./_lib/credits.js";
 import { cantidadPermitida, planEfectivo } from "./_lib/entitlements.js";
 import { claveObligatoria } from "./_lib/idempotency.js";
+import { bloqueDeContexto } from "./_lib/contexto-sugerencia.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 
 const SUGGESTION_SCHEMA={type:"object",properties:{suggestion:{type:"string"}},required:["suggestion"]};
@@ -81,10 +82,18 @@ export default async function handler(req, res) {
       };
       if (!instructions[field]) throw Errors.badRequest("Campo de sugerencia no válido.");
 
-      const prompt=`Eres especialista peruano en CNEB y metodología STEAM.
+      // El contexto lo elige el navegador (`lib/kantu/contexto.js`) y aquí sólo
+      // se vuelca. Antes este prompt enumeraba cinco campos a mano, así que al
+      // pedir «sugerir evidencias» Kantu no veía el producto ni el reto que la
+      // docente acababa de escribir. Si llega vacío —pestaña vieja— se cae a
+      // los campos de siempre.
+      const bloqueKantu = bloqueDeContexto(req.body?.contexto) || `
 Nivel: ${form.nivel}. Grado: ${form.grado}. Región: ${form.region||"No indicada"}.
 Tema: ${form.tema||"No indicado"}. Situación actual: ${form.situacion||""}.
-Áreas STEAM: ${(form.areasSTEAM||[]).join(", ")}.
+Áreas STEAM: ${(form.areasSTEAM||[]).join(", ")}.`;
+
+      const prompt=`Eres especialista peruano en CNEB y metodología STEAM.
+${bloqueKantu}
 ${instructions[field]}
 
 Devuelve únicamente un objeto JSON con esta forma exacta:

@@ -180,11 +180,20 @@ describe("estructura · ninguna generación sale sin Idempotency-Key", () => {
   });
 
   it("las sugerencias de campo no la llevan, porque no cobran", () => {
-    const sugerencias = PANTALLAS_QUE_GENERAN
+    // Las cuatro sugerencias salen ahora de un solo sitio, el hook de Kantu.
+    // Ahí es donde hay que comprobar que NO viaja la clave: una sugerencia no
+    // consume crédito, así que no hay cobro doble del que protegerse, y
+    // mandarla llenaría `ai_operations` de filas que no significan nada.
+    const hook = leer("lib/kantu/useSugerencia.js");
+    expect(hook).toContain('mode: "suggestion"');
+    expect(hook).not.toContain("cabecerasDeGeneracion(");
+    expect(hook).not.toContain("Idempotency-Key");
+
+    // Y en las pantallas ya no debe quedar ninguna suelta.
+    const sueltas = PANTALLAS_QUE_GENERAN
       .flatMap((f) => llamadas(leer(f)))
       .filter((l) => l.sugerencia);
-    expect(sugerencias.length).toBeGreaterThan(0);
-    for (const l of sugerencias) {
+    for (const l of sueltas) {
       expect(l.trozo, `sugerencia en ${l.ruta}`).not.toContain("cabecerasDeGeneracion(");
     }
   });

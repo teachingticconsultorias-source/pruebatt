@@ -171,10 +171,18 @@ export function UIProvider({ children }) {
 export function useUI() {
   const context = useContext(UIContext);
   if (context) return context;
+  // Fuera del proveedor no hay dónde dibujar. Antes esto caía en el
+  // `window.confirm` del navegador: un cuadro del sistema operativo, en el
+  // idioma del sistema y sin relación con el producto, justo delante de una
+  // acción destructiva. Ahora se responde que NO y se registra: negarse es la
+  // única respuesta segura cuando no se puede preguntar.
   return {
     toast: () => {},
     openComingSoon: () => {},
-    confirm: async () => window.confirm("¿Confirmas esta acción?"),
+    confirm: async () => {
+      console.warn("[sciverse:ui] confirm() fuera de UIProvider: se cancela la acción.");
+      return false;
+    },
     dismissToast: () => {},
   };
 }

@@ -73,14 +73,28 @@
   animation: sv-fade-up var(--dur-fast) var(--ease-out);
   overflow-y: auto;
 }
+/* El panel NO scrollea: scrollea su cuerpo.
+
+   Antes todo el modal era una caja con `overflow-y: auto`, así que en un
+   contenido largo la cabecera, la X de cerrar y los botones de acción se iban
+   hacia arriba con el resto. En un portátil de 768 px de alto eso dejaba el
+   botón principal fuera de la pantalla y sin forma evidente de llegar a él.
+   Ahora cabecera y acciones quedan fijas y sólo el cuerpo se desplaza.
+
+   `dvh` y no `vh`: en móvil la barra de direcciones del navegador se cuenta
+   dentro de `vh`, y por eso los botones acababan debajo de ella. */
 .sv-modal {
   position: relative; width: 100%;
+  display: flex; flex-direction: column;
   background: var(--bg-surface); border-radius: var(--radius-xl);
   box-shadow: var(--elev-4); padding: var(--space-8);
   animation: sv-scale-in var(--dur-base) var(--ease-out);
-  max-height: calc(100vh - var(--space-8));
-  overflow-y: auto;
+  max-height: calc(100dvh - var(--space-8));
+  overflow: hidden;
 }
+/* Sin cuerpo propio no hay nada que desplazar por dentro: que scrollee el
+   panel, o una descripción muy larga quedaría cortada. */
+.sv-modal:not(:has(.sv-modal__body)) { overflow-y: auto; }
 .sv-modal:focus { outline: none; }
 .sv-modal--sm { max-width: 420px; }
 .sv-modal--md { max-width: 620px; }
@@ -96,7 +110,7 @@
 }
 .sv-modal__close:hover { background: var(--bg-sunken); color: var(--text-primary); }
 
-.sv-modal__head { margin-bottom: var(--space-5); padding-right: var(--space-8); }
+.sv-modal__head { flex: 0 0 auto; margin-bottom: var(--space-5); padding-right: var(--space-8); }
 .sv-modal__icon {
   display: grid; place-items: center; width: 48px; height: 48px;
   margin-bottom: var(--space-4); border-radius: var(--radius-lg);
@@ -111,19 +125,33 @@
 .sv-modal__title { margin: 0 0 var(--space-2); font: var(--weight-bold) var(--text-h3)/var(--leading-snug) var(--font-display); color: var(--text-primary); }
 .sv-modal__desc  { margin: 0; font-size: var(--text-body); line-height: var(--leading-normal); color: var(--text-secondary); }
 .sv-modal__detail{ margin: 0; padding: var(--space-3) var(--space-4); border-radius: var(--radius-md); background: var(--bg-sunken); font-size: var(--text-sm); color: var(--text-secondary); }
-.sv-modal__body  { font-size: var(--text-body); color: var(--text-secondary); }
-.sv-modal__actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-6); }
+/* `min-height: 0` es lo que permite que un hijo de flex encoja por debajo de
+   su contenido; sin él, `overflow-y` no llega a activarse nunca. */
+.sv-modal__body {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto;
+  font-size: var(--text-body); color: var(--text-secondary);
+  overscroll-behavior: contain;
+}
+.sv-modal__actions {
+  flex: 0 0 auto;
+  display: flex; flex-wrap: wrap; justify-content: flex-end;
+  gap: var(--space-2); margin-top: var(--space-6);
+}
 
 @media (max-width: 560px) {
   /* En móvil el modal se comporta como hoja inferior. */
   .sv-modal-overlay { align-items: flex-end; padding: 0; }
   .sv-modal {
     max-width: 100%; border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-    padding: var(--space-6) var(--space-5) var(--space-8);
-    max-height: 92vh;
+    padding: var(--space-6) var(--space-5) var(--space-5);
+    max-height: 92dvh;
   }
-  .sv-modal__actions { flex-direction: column-reverse; }
-  .sv-modal__actions .sv-btn { width: 100%; }
+  /* Las acciones se pegan abajo y respetan la barra de gestos del sistema. */
+  .sv-modal__actions {
+    flex-direction: column-reverse;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .sv-modal__actions .sv-btn { width: 100%; min-height: 44px; }
 }
 
 /* ==========================================================================
@@ -318,4 +346,97 @@
 
 @media (max-width: 560px) {
   .sv-genprog { padding: var(--space-5); margin: var(--space-4) 0; }
+}
+
+/* ==========================================================================
+   KANTU EN LOS MODALES DE SUGERENCIA
+
+   Un avatar de 44 px en la cabecera, no una ilustracion. El objetivo es que
+   se note que la propuesta viene de Kantu, no llenar el modal de mascota.
+   ========================================================================== */
+.sv-kantu-head { display: flex; align-items: center; gap: var(--space-3); }
+
+.sv-kantu-head__avatar {
+  flex: 0 0 auto; width: 44px; height: 44px; object-fit: contain;
+  border-radius: var(--radius-full); background: var(--bg-brand-soft);
+  animation: sv-kantu-respira 4.5s var(--ease-in-out) infinite;
+}
+
+.sv-kantu-head__texto { display: inline-flex; align-items: center; gap: var(--space-2); }
+.sv-kantu-head__texto svg { color: var(--amber-400); animation: sv-kantu-chispa 3.2s ease-in-out infinite; }
+
+@keyframes sv-kantu-respira {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-2px) scale(1.03); }
+}
+
+@keyframes sv-kantu-chispa {
+  0%, 72%, 100% { opacity: 1; transform: scale(1) rotate(0deg); }
+  80%           { opacity: .55; transform: scale(1.18) rotate(12deg); }
+  88%           { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+/* --------------------------------------------------------- la sugerencia */
+.sv-sugerencia__texto {
+  margin: 0; padding: var(--space-4);
+  border-radius: var(--radius-md); background: var(--bg-sunken);
+  border-left: 3px solid var(--teal-400);
+  font-size: var(--text-body); line-height: var(--leading-normal);
+  color: var(--text-primary); white-space: pre-wrap;
+}
+
+/* Una lista de criterios o de indicadores: frases, una debajo de otra y
+   numeradas, porque el orden importa al leerlas. */
+.sv-sugerencia__lista {
+  display: grid; gap: var(--space-2);
+  margin: 0; padding: 0; list-style: none;
+  counter-reset: sv-sug;
+}
+
+.sv-sugerencia__lista li {
+  counter-increment: sv-sug;
+  display: grid; grid-template-columns: 22px 1fr; gap: var(--space-2);
+  align-items: start;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--bg-sunken);
+  font-size: var(--text-sm); line-height: var(--leading-normal);
+  color: var(--text-primary);
+}
+
+.sv-sugerencia__lista li::before {
+  content: counter(sv-sug);
+  display: grid; place-items: center;
+  width: 22px; height: 22px;
+  border-radius: var(--radius-full);
+  background: var(--teal-600); color: var(--text-inverse);
+  font-size: var(--text-label); font-weight: var(--weight-bold);
+}
+
+/* Palabras sueltas —la sopa de letras— en fichas, no en lista numerada: ahí
+   el orden no significa nada y caben muchas más de un vistazo. */
+.sv-sugerencia__lista.is-palabras { display: flex; flex-wrap: wrap; counter-reset: none; }
+.sv-sugerencia__lista.is-palabras li {
+  display: block; padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-brand); border-radius: var(--radius-full);
+  background: var(--bg-brand-soft);
+  font-weight: var(--weight-medium); color: var(--text-brand);
+}
+.sv-sugerencia__lista.is-palabras li::before { content: none; }
+
+.sv-sugerencia__aviso {
+  margin: var(--space-4) 0 0; padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm); background: var(--warning-50);
+  font-size: var(--text-sm); color: var(--warning-700);
+}
+
+/* Se anuncia solo, sin robar el foco al boton que se acaba de pulsar. */
+.sv-kantu-estado {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-sm); color: var(--text-tertiary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sv-kantu-head__avatar,
+  .sv-kantu-head__texto svg { animation: none; }
 }
