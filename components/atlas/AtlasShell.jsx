@@ -1,5 +1,5 @@
 import React, {
-  useCallback, useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useReducer, useRef, useState,
 } from "react";
 import { Crosshair, Eye, EyeOff, Focus, X } from "lucide-react";
 
@@ -12,6 +12,7 @@ import { AtlasCargando, AtlasFalloDeCarga, AtlasSinWebgl } from "./AtlasLoading.
 import { cargarAtlas } from "../../lib/atlas/carga.js";
 import { crearIndice, crearIndiceDeBusqueda, fichaDe, sinTildes } from "../../lib/atlas/metadatos.js";
 import { hayWebgl } from "../../lib/atlas/visor.js";
+import { calcularVisibles, estadoInicial, reducir } from "../../lib/atlas/estado.js";
 import { T } from "../../lib/atlas/i18n.es.js";
 
 /* ==========================================================================
@@ -29,17 +30,24 @@ import { T } from "../../lib/atlas/i18n.es.js";
    inferiores que se pueden minimizar sin cerrarse, porque hay que poder
    seguir girando el modelo mientras se lee la ficha.
 
-   TRES ESTADOS DE VISIBILIDAD, Y NINGUNO PISA A OTRO
-   --------------------------------------------------
-   · `gruposActivos` — qué sistemas o categorías están encendidos
-   · `ocultas`       — estructuras sueltas que la docente quitó de en medio
-   · `aislado`       — ver sólo la seleccionada, temporalmente
+   CINCO PORCIONES DE ESTADO, Y NINGUNA PISA A OTRA
+   ------------------------------------------------
+   · `seleccion` — qué estructura está resaltada y descrita
+   · `aislada`   — qué estructura se ve sola, temporalmente
+   · `ocultas`   — piezas que la docente quitó de en medio, una a una
+   · `grupos`    — qué sistemas o categorías están encendidos
+   · la CÁMARA   — que NO está aquí: vive en el visor, tras una referencia
 
-   Aislar NO toca los otros dos: es una capa que se pone encima y se quita.
-   Por eso salir del aislamiento devuelve exactamente la vista anterior sin
-   guardar copia de nada. Y ocultar una pieza no reinicia los sistemas: son
-   preguntas distintas y mezclarlas obligaba a rehacer la vista entera por
-   quitar un hueso de delante.
+   Las cuatro primeras las gobierna un reducidor puro (`lib/atlas/estado.js`).
+   La cámara queda fuera del estado de React a propósito: cambia sesenta veces
+   por segundo mientras se arrastra el ratón, y meterla en `useState` sería
+   repintar el árbol en cada fotograma.
+
+   Aislar NO toca grupos ni ocultas: es una capa que se pone y se quita, y por
+   eso salir devuelve la vista anterior sin guardar copia. Ocultar una pieza no
+   reinicia los sistemas. Y ninguna acción de visibilidad mueve la cámara —era
+   el fallo de producción: hacer zoom, tocar un músculo y volver al cuerpo
+   completo.
    ========================================================================== */
 
 const LIMITE_RESULTADOS = 40;
@@ -113,14 +121,30 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
     return { propias, enfoque, conteos, colores, grafo, busqueda };
   }, [datos, fuente]);
 
-  /* ----------------------------------------------------------- estado de la UI */
-  const [gruposActivos, setGruposActivos] = useState(() => new Set(fuente.visiblesAlInicio));
-  const [ocultas, setOcultas] = useState(() => new Set());
-  const [seleccion, setSeleccion] = useState(null);
+  /* ----------------------------------------------------------- estado de la UI
+
+     Las cinco porciones de estado del atlas —selección, aislamiento, ocultas,
+     grupos y búsqueda— pasan por un solo reducidor puro
+     (`lib/atlas/estado.js`), y la cámara NO está entre ellas: vive en el
+     visor, detrás de una referencia. Así ninguna acción de visibilidad puede
+     mover la cámara por accidente, que es lo que pasaba en producción.       */
+  const [vista, despachar] = useReducer(
+    (estado, accion) => reducir(estado, accion, {
+      fuente,
+      grupoDe: (indice) => {
+        const parte = datos?.partes[indice];
+        return parte ? fuente.grupoDe(parte) : null;
+      },
+    }),
+    fuente,
+    estadoInicial
+  );
+
+  const { seleccion, aislada, ocultas, grupos: gruposActivos, busqueda, atajo: atajoActivo } = vista;
+
+  // El resaltado al pasar el ratón va aparte: cambia decenas de veces por
+  // segundo y no es estado del atlas, es estado del puntero.
   const [senalado, setSenalado] = useState(null);
-  const [aislado, setAislado] = useState(false);
-  const [busqueda, setBusqueda] = useState("");
-  const [atajoActivo, setAtajoActivo] = useState(fuente.atajos ? "todas" : null);
 
   const [panelGrupos, setPanelGrupos] = useState(true);
   const [panelInfo, setPanelInfo] = useState(true);
@@ -150,26 +174,15 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
     if (movil) { setPanelGrupos(false); setPanelInfo(false); }
   }, [movil]);
 
-  /* --------------------------------------------------------- qué está visible */
-  const visibles = useMemo(() => {
-    const set = new Set();
-    if (!modelo) return set;
+  /* --------------------------------------------------------- qué está visible
 
-    // Aislar es una capa encima, no una modificación: cuando se quita, los
-    // sistemas y las ocultas siguen exactamente como estaban.
-    if (aislado && seleccion != null) {
-      set.add(seleccion);
-      return set;
-    }
-
-    for (const p of modelo.propias) {
-      const i = p.indiceGlobal;
-      if (!gruposActivos.has(fuente.grupoDe(p))) continue;
-      if (ocultas.has(i)) continue;
-      set.add(i);
-    }
-    return set;
-  }, [modelo, gruposActivos, ocultas, aislado, seleccion, fuente]);
+     Derivado, no almacenado. No hay una lista de visibles que mantener en
+     sincronía con las otras porciones: de ahí salía el «panel en OFF pero la
+     malla encendida».                                                        */
+  const visibles = useMemo(
+    () => (modelo ? calcularVisibles(modelo.propias, vista, fuente.grupoDe) : new Set()),
+    [modelo, vista, fuente]
+  );
 
   /* ------------------------------------------------------------- búsqueda
 
@@ -204,72 +217,60 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
     );
   }, [datos, modelo, seleccion, fuente]);
 
-  /* ------------------------------------------------------------- acciones */
-  const elegir = useCallback((indice, { centrar = false } = {}) => {
-    setSeleccion(indice);
-    if (indice == null) { setAislado(false); return; }
+  /* ------------------------------------------------------------- acciones
 
-    if (centrar) visor.current?.enfocar(indice);
+     Cada acción hace UNA cosa. Las de visibilidad despachan al reducidor y no
+     tocan `visor`; las de cámara llaman al visor y no despachan nada. La tabla
+     de qué mueve la cámara está en `lib/atlas/estado.js` y hay un test que la
+     comprueba.
 
-    // Al llegar desde la búsqueda o desde una estructura relacionada, la
-    // pieza tiene que verse aunque su sistema estuviera apagado o ella misma
-    // oculta: si no, la docente la elige y no pasa nada visible.
-    setOcultas((previas) => {
-      if (!previas.has(indice)) return previas;
-      const copia = new Set(previas);
-      copia.delete(indice);
-      return copia;
-    });
-    const parte = datos?.partes[indice];
-    if (parte) {
-      const grupo = fuente.grupoDe(parte);
-      setGruposActivos((previos) => (previos.has(grupo) ? previos : new Set(previos).add(grupo)));
-    }
+     SELECCIONAR no lleva ninguna llamada a la cámara. Ésa es la corrección.  */
+  const elegir = useCallback((indice) => {
+    despachar({ tipo: "SELECCIONAR", indice });
+    if (indice != null && movil) { setPanelGrupos(false); setPanelInfo(true); setHojaMin(true); }
+  }, [movil]);
 
-    if (movil) { setPanelGrupos(false); setPanelInfo(true); setHojaMin(true); }
-  }, [datos, fuente, movil]);
-
-  /** Desde la búsqueda o desde «relacionadas»: además de elegir, encuadra. */
+  /**
+   * Desde la búsqueda o desde «relacionadas».
+   *
+   * Aquí SÍ se encuadra, y es la única selección que lo hace: la docente ha
+   * elegido una estructura de una lista, sin verla, así que llevarla hasta
+   * ella es el punto. Un clic en el modelo es otra cosa —ya la está viendo—
+   * y por eso no mueve nada.
+   */
   const irA = useCallback((indice) => {
-    elegir(indice, { centrar: true });
-    setBusqueda("");
-  }, [elegir]);
+    despachar({ tipo: "SELECCIONAR", indice });
+    despachar({ tipo: "BUSCAR", texto: "" });
+    if (indice != null) visor.current?.enfocar(indice);
+    if (movil) { setPanelGrupos(false); setPanelInfo(true); setHojaMin(true); }
+  }, [movil]);
 
-  const alternarGrupo = useCallback((clave) => {
-    setGruposActivos((previos) => {
-      const copia = new Set(previos);
-      if (copia.has(clave)) copia.delete(clave); else copia.add(clave);
-      return copia;
-    });
-    setAtajoActivo(null);
-    setAislado(false);
-  }, []);
+  /* ---- visibilidad: nada de esto toca la cámara ----------------------- */
+  const alternarGrupo = useCallback((clave) => despachar({ tipo: "ALTERNAR_GRUPO", clave }), []);
+  const aplicarAtajo = useCallback((atajo) => despachar({ tipo: "APLICAR_ATAJO", grupos: atajo.grupos, id: atajo.id }), []);
+  const alternarOculta = useCallback(() => despachar({ tipo: "ALTERNAR_OCULTA" }), []);
+  const alternarAislamiento = useCallback(() => despachar({ tipo: "ALTERNAR_AISLAMIENTO" }), []);
+  const quitarSeleccion = useCallback(() => despachar({ tipo: "QUITAR_SELECCION" }), []);
+  const restaurarOcultas = useCallback(() => despachar({ tipo: "RESTAURAR_OCULTAS" }), []);
+  const buscar = useCallback((texto) => despachar({ tipo: "BUSCAR", texto }), []);
 
-  const aplicarAtajo = useCallback((atajo) => {
-    setGruposActivos(new Set(atajo.grupos));
-    setAtajoActivo(atajo.id);
-    setAislado(false);
-  }, []);
+  /**
+   * Devuelve la visibilidad al arranque. NO mueve la cámara.
+   *
+   * Antes «Restablecer» hacía las dos cosas a la vez, y con ello volvía a
+   * encender los sistemas que la docente había apagado —incluida la piel— cada
+   * vez que quería recuperar el encuadre. Son dos intenciones distintas y
+   * ahora son dos botones distintos.
+   */
+  const restaurarVisibilidad = useCallback(() => despachar({ tipo: "RESTAURAR_VISIBILIDAD" }), []);
 
-  const alternarOculta = useCallback(() => {
-    if (seleccion == null) return;
-    setOcultas((previas) => {
-      const copia = new Set(previas);
-      if (copia.has(seleccion)) copia.delete(seleccion); else copia.add(seleccion);
-      return copia;
-    });
-    setAislado(false);
+  /* ---- cámara: nada de esto toca la visibilidad ----------------------- */
+  const restablecerVista = useCallback(() => visor.current?.restablecer(), []);
+  const centrarModelo = useCallback(() => visor.current?.centrar(), []);
+  const centrarEstructura = useCallback(() => {
+    if (seleccion != null) visor.current?.enfocar(seleccion);
   }, [seleccion]);
-
-  const restablecer = useCallback(() => {
-    visor.current?.restablecer();
-    setOcultas(new Set());
-    setAislado(false);
-    setGruposActivos(new Set(fuente.visiblesAlInicio));
-    setAtajoActivo(fuente.atajos ? "todas" : null);
-    setSeleccion(null);
-    setBusqueda("");
-  }, [fuente]);
+  const zoom = useCallback((factor) => visor.current?.zoom(factor), []);
 
   /* --------------------------------------------------------- pantalla completa
 
@@ -321,17 +322,17 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
       // pulsa Escape para «deshacer un paso».
       if (inmersivo) { setInmersivo(false); return; }
       if (document.fullscreenElement) { document.exitFullscreen?.(); return; }
-      if (aislado) { setAislado(false); return; }
+      if (aislada != null) { despachar({ tipo: "ALTERNAR_AISLAMIENTO" }); return; }
       if (movil && (panelGrupos || panelInfo)) {
         setPanelGrupos(false); setPanelInfo(false);
         visor.current?.enfocarLienzo();
         return;
       }
-      if (seleccion != null) setSeleccion(null);
+      if (seleccion != null) despachar({ tipo: "QUITAR_SELECCION" });
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [inmersivo, movil, panelGrupos, panelInfo, seleccion, aislado]);
+  }, [inmersivo, movil, panelGrupos, panelInfo, seleccion, aislada]);
 
   /* --------------------------------------------------------------- render */
   if (!soportaWebgl) return <AtlasSinWebgl onVolver={onVolver} />;
@@ -369,13 +370,14 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
       ocultas={ocultas.size}
       minimizado={!movil && gruposMin}
       campoRef={campoBusqueda}
-      onBuscar={setBusqueda}
+      onBuscar={buscar}
       onAlternar={alternarGrupo}
       onAtajo={aplicarAtajo}
-      onTodo={() => { setGruposActivos(new Set(Object.keys(fuente.grupos))); setAtajoActivo("todas"); setAislado(false); }}
-      onNada={() => { setGruposActivos(new Set()); setAtajoActivo(null); setAislado(false); }}
+      onTodo={() => despachar({ tipo: "MOSTRAR_TODO" })}
+      onNada={() => despachar({ tipo: "OCULTAR_TODO" })}
       onElegir={irA}
-      onRestaurarOcultas={() => setOcultas(new Set())}
+      onRestaurarOcultas={restaurarOcultas}
+      onRestaurarVisibilidad={restaurarVisibilidad}
       onMinimizar={() => setGruposMin((v) => !v)}
     />
   );
@@ -383,13 +385,13 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
   const panelDeInfo = (
     <AtlasInfoPanel
       ficha={ficha}
-      aislado={aislado}
+      aislado={aislada != null}
       oculta={estaOculta}
       minimizado={!movil && infoMin}
       onOcultar={alternarOculta}
-      onAislar={() => setAislado((v) => !v)}
-      onCentrar={() => seleccion != null && visor.current?.enfocar(seleccion)}
-      onQuitar={() => { setSeleccion(null); setAislado(false); }}
+      onAislar={alternarAislamiento}
+      onCentrar={centrarEstructura}
+      onQuitar={quitarSeleccion}
       onIrA={irA}
       onMinimizar={() => setInfoMin((v) => !v)}
     />
@@ -406,17 +408,17 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
         {ficha.fdi != null && <span className="atlas-resumen__fdi">FDI {ficha.fdi}</span>}
       </p>
       <div className="atlas-resumen__acciones">
-        <button type="button" onClick={() => visor.current?.enfocar(seleccion)}>
+        <button type="button" onClick={centrarEstructura}>
           <Crosshair size={18} aria-hidden="true" /> {T.centrar}
         </button>
         <button
           type="button"
-          className={aislado ? "is-activo" : ""}
-          aria-pressed={aislado}
-          onClick={() => setAislado((v) => !v)}
+          className={aislada != null ? "is-activo" : ""}
+          aria-pressed={aislada != null}
+          onClick={alternarAislamiento}
         >
           <Focus size={18} aria-hidden="true" />
-          {aislado ? T.dejarDeAislar : T.aislar}
+          {aislada != null ? T.dejarDeAislar : T.aislar}
         </button>
         <button type="button" onClick={alternarOculta}>
           {estaOculta
@@ -465,10 +467,10 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
 
           {/* Aviso de aislamiento: sin él, alguien que aísla y luego gira el
               modelo puede pensar que se rompió porque «desapareció todo». */}
-          {aislado && (
+          {aislada != null && (
             <div className="atlas__aviso" role="status">
               <span>{T.aislamientoActivo}</span>
-              <button type="button" onClick={() => setAislado(false)}>
+              <button type="button" onClick={alternarAislamiento}>
                 <X size={15} aria-hidden="true" /> {T.salirDelAislamiento}
               </button>
             </div>
@@ -480,9 +482,9 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
             panelGruposAbierto={panelGrupos}
             panelInfoAbierto={panelInfo}
             pantallaCompleta={pantallaCompleta || inmersivo}
-            onRestablecer={restablecer}
-            onCentrar={() => visor.current?.centrar()}
-            onZoom={(f) => visor.current?.zoom(f)}
+            onRestablecer={restablecerVista}
+            onCentrar={centrarModelo}
+            onZoom={zoom}
             onGrupos={() => {
               setPanelGrupos((v) => !v);
               if (movil) { setPanelInfo(false); setHojaMin(false); }

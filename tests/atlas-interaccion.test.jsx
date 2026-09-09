@@ -487,11 +487,23 @@ describe("móvil", () => {
    ========================================================================== */
 describe("armazón · estados de la vista", () => {
   const shell = leer("components/atlas/AtlasShell.jsx");
+  const estado = leer("lib/atlas/estado.js");
 
-  it("aislar es una capa: no toca sistemas ni ocultas", () => {
-    // Si aislar modificara `gruposActivos`, salir del aislamiento no podría
-    // devolver la vista anterior sin guardar una copia.
-    expect(shell).toMatch(/if \(aislado && seleccion != null\) \{\s*set\.add\(seleccion\);\s*return set;/);
+  it("las cinco porciones están separadas y la cámara no es una de ellas", () => {
+    // La cámara cambia sesenta veces por segundo mientras se arrastra: en
+    // `useState` repintaría el árbol en cada fotograma.
+    expect(estado).toContain("seleccion");
+    expect(estado).toContain("aislada");
+    expect(estado).toContain("ocultas");
+    expect(estado).toContain("grupos");
+    expect(estado).toMatch(/NO está aquí: vive en el visor/);
+    expect(shell).toContain("useReducer(");
+  });
+
+  it("aislar es una capa: no toca grupos ni ocultas", () => {
+    // Si aislar modificara `grupos`, salir del aislamiento no podría devolver
+    // la vista anterior sin guardar una copia.
+    expect(estado).toMatch(/if \(estado\.aislada != null\) \{\s*visibles\.add\(estado\.aislada\);\s*return visibles;/);
   });
 
   it("salir del aislamiento está a la vista mientras dura", () => {
@@ -501,33 +513,50 @@ describe("armazón · estados de la vista", () => {
   });
 
   it("ocultar una pieza no reinicia los sistemas", () => {
-    expect(shell).toMatch(/const alternarOculta[\s\S]{0,400}setOcultas/);
-    const cuerpo = shell.slice(shell.indexOf("const alternarOculta"), shell.indexOf("const restablecer"));
-    expect(cuerpo).not.toContain("setGruposActivos");
+    const caso = estado
+      .slice(estado.indexOf('case "ALTERNAR_OCULTA"'), estado.indexOf('case "RESTAURAR_OCULTAS"'))
+      .replace(/\/\/.*$/gm, "");
+    expect(caso).not.toContain("grupos:");
   });
 
   it("restaurar ocultas tampoco", () => {
-    expect(shell).toContain("onRestaurarOcultas={() => setOcultas(new Set())}");
+    const caso = estado
+      .slice(estado.indexOf('case "RESTAURAR_OCULTAS"'), estado.indexOf('case "ALTERNAR_GRUPO"'))
+      .replace(/\/\/.*$/gm, "");   // sin comentarios: el texto los menciona
+    expect(caso).toContain("ocultas: new Set()");
+    expect(caso).not.toContain("grupos:");
   });
 
-  it("elegir desde la búsqueda o desde una relacionada centra la cámara", () => {
-    expect(shell).toMatch(/const irA = useCallback\(\(indice\) => \{\s*elegir\(indice, \{ centrar: true \}\)/);
+  it("elegir desde la búsqueda o desde una relacionada SÍ encuadra", () => {
+    // Es la única selección que mueve la cámara, y por un motivo: la docente
+    // eligió de una lista, sin ver la estructura.
+    const cuerpo = shell.slice(shell.indexOf("const irA = useCallback"), shell.indexOf("/* ---- visibilidad"));
+    expect(cuerpo).toContain("visor.current?.enfocar(indice)");
   });
 
   it("y enciende su sistema si estaba apagado, o no se vería nada", () => {
-    const cuerpo = shell.slice(shell.indexOf("const elegir"), shell.indexOf("const irA"));
-    expect(cuerpo).toContain("setGruposActivos");
-    expect(cuerpo).toContain("setOcultas");
+    const caso = estado.slice(estado.indexOf('case "SELECCIONAR"'), estado.indexOf('case "QUITAR_SELECCION"'));
+    expect(caso).toContain("grupos = new Set(grupos).add(grupo)");
+    expect(caso).toContain("ocultas");
   });
 
   it("Escape deshace un paso cada vez, del más superficial al más profundo", () => {
-    const cuerpo = shell.slice(shell.indexOf("const onKey"), shell.indexOf("document.addEventListener(\"keydown\", onKey)"));
-    expect(cuerpo.indexOf("inmersivo")).toBeLessThan(cuerpo.indexOf("aislado"));
-    expect(cuerpo.indexOf("aislado")).toBeLessThan(cuerpo.indexOf("setSeleccion(null)"));
+    const cuerpo = shell.slice(shell.indexOf("const onKey"), shell.indexOf('document.addEventListener("keydown", onKey)'));
+    expect(cuerpo.indexOf("inmersivo")).toBeLessThan(cuerpo.indexOf("aislada"));
+    expect(cuerpo.indexOf("aislada")).toBeLessThan(cuerpo.indexOf("QUITAR_SELECCION"));
   });
 
   it("limpiar la selección también quita el aislamiento", () => {
-    expect(shell).toContain('onQuitar={() => { setSeleccion(null); setAislado(false); }}');
+    const caso = estado.slice(estado.indexOf('case "QUITAR_SELECCION"'), estado.indexOf('/* ==================================================== AISLAMIENTO'));
+    expect(caso).toContain("seleccion: null");
+    expect(caso).toContain("aislada: null");
+  });
+
+  it("ocultar la estructura seleccionada limpia la selección", () => {
+    // Si no, la ficha sigue describiendo algo que ya no se ve.
+    const caso = estado.slice(estado.indexOf('case "ALTERNAR_OCULTA"'), estado.indexOf('case "RESTAURAR_OCULTAS"'));
+    expect(caso).toMatch(/seOculta && indice === estado\.seleccion/);
+    expect(caso).toContain("seleccion: null");
   });
 });
 
@@ -556,10 +585,13 @@ describe("motor 3D", () => {
   });
 
   it("el encuadre sale del tamaño de la estructura, no de un zoom fijo", () => {
-    const enfocar = visor.slice(visor.indexOf("enfocar(indice)"), visor.indexOf("zoom(factor)"));
-    expect(enfocar).toContain("camara.fov");
+    const camara = leer("lib/atlas/camara.js");
+    const enfocar = camara.slice(camara.indexOf("enfocarCaja(min, max)"));
     expect(enfocar).toContain("Math.tan");
-    expect(enfocar).toMatch(/Math\.max\(tamano\.x, tamano\.y, tamano\.z/);
+    expect(enfocar).toContain("degToRad(fov)");
+    expect(enfocar).toMatch(/Math\.max\(\s*max\[0\] - min\[0\]/);
+    // Y el visor sólo delega: la matemática no está duplicada.
+    expect(visor).toContain("orbita.enfocarCaja(p.bounds[0], p.bounds[1])");
   });
 
   it("el resaltado al pasar el ratón se resuelve una vez por fotograma", () => {
@@ -572,8 +604,10 @@ describe("motor 3D", () => {
   it("hay cuatro estados y el seleccionado no es un color estridente", () => {
     expect(visor).toContain("ESTADO_SENALADA");
     expect(visor).toContain("ESTADO_SELECCIONADA");
-    // Verde azulado de SciVerse, mezclado al 55 %: destaca sin competir.
-    expect(visor).toMatch(/colorSeleccion.*Vector3\(0\.09, 0\.46, 0\.44\)/);
+    // Contorno, no repintado: el color base se conserva y lo que destaca es
+    // el borde. Teñir al 55 % hacía irreconocible la estructura elegida.
+    expect(visor).toContain("vec3 realce = color * 1.12 + colorSeleccion * borde * 1.7;");
+    expect(visor).not.toMatch(/mix\(color, colorSeleccion, 0\.55\)/);
   });
 
   it("la iluminación tiene tres aportes y curva de exposición", () => {

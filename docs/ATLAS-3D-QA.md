@@ -41,7 +41,7 @@ humano* / *Atlas oral y maxilofacial*.
 | # | Comprobación | Chrome | Edge |
 |---|---|---|---|
 | 2.1 | Al pasar el ratón por encima, la estructura se aclara y el cursor pasa a mano | ☐ | ☐ |
-| 2.2 | Al hacer clic, esa misma estructura queda teñida de verde azulado | ☐ | ☐ |
+| 2.2 | Al hacer clic, esa estructura gana un contorno verde azulado y **conserva su color base** | ☐ | ☐ |
 | 2.3 | El resto del modelo **sigue visible** | ☐ | ☐ |
 | 2.4 | El panel de información se abre solo y muestra el nombre correcto | ☐ | ☐ |
 | 2.5 | Clic en el fondo (fuera del modelo) quita la selección | ☐ | ☐ |
@@ -296,3 +296,97 @@ Prueba en Chrome de Android o en el emulador con **el modo táctil activado**
 | Fecha | Navegador / dispositivo | Bloques probados | Incidencias |
 |---|---|---|---|
 | | | | |
+
+---
+
+## 17 · Los dos bugs de produccion (verificacion dirigida)
+
+Estos dos se reportaron desde produccion. Son la prueba mas importante de la
+lista: si alguno vuelve, el atlas es inusable.
+
+### 17.1 · La camara no se mueve al seleccionar
+
+| # | Comprobación | Humano | Oral |
+|---|---|---|---|
+| a | Entrar al atlas y esperar a que cargue | ☐ | ☐ |
+| b | Girar el modelo a una orientacion cualquiera | ☐ | ☐ |
+| c | Hacer zoom hasta una zona concreta (abdomen, brazo, un diente) | ☐ | ☐ |
+| d | Hacer clic sobre una estructura | ☐ | ☐ |
+| e | **La estructura se resalta** | ☐ | ☐ |
+| f | **La camara NO se mueve**: mismo angulo, misma distancia, mismo centro | ☐ | ☐ |
+| g | El panel de informacion se abre con esa estructura | ☐ | ☐ |
+| h | Hacer clic en otra: la camara sigue igual | ☐ | ☐ |
+| i | Cinco selecciones seguidas: la camara nunca se mueve | ☐ | ☐ |
+| j | Con la rueda, tras seleccionar: el zoom parte de donde estaba | ☐ | ☐ |
+| k | Con pinch tactil, idem | ☐ | ☐ |
+| l | Seleccionar una pieza pequeña (un nervio, un diente) tampoco la mueve | ☐ | ☐ |
+
+Y las que SI deben moverla:
+
+| # | Comprobación | ☐ |
+|---|---|---|
+| m | Con algo seleccionado, **Centrar estructura** acerca a esa pieza | ☐ |
+| n | El angulo se conserva al centrar: no da un salto brusco | ☐ |
+| o | **Centrar modelo** devuelve el encuadre general | ☐ |
+| p | **Restablecer vista** devuelve angulo y distancia iniciales | ☐ |
+| q | **Restablecer vista** NO cambia que sistemas estan encendidos | ☐ |
+| r | Buscar una estructura y pulsarla SI acerca a ella (se eligio de una lista, sin verla) | ☐ |
+| s | Pulsar una «estructura relacionada» tambien acerca | ☐ |
+
+> **f es el bug.** Antes: zoom al abdomen, clic en un musculo y la vista
+> volvia al cuerpo completo. La causa era que el visor se destruia y se
+> reconstruia en cada re-render de React.
+
+### 17.2 · Piel y anexos
+
+| # | Comprobación | ☐ |
+|---|---|---|
+| a | Al abrir el atlas humano, **el cuerpo NO esta cubierto de piel** | ☐ |
+| b | En Sistemas, «Piel y anexos» aparece con el ojo tachado | ☐ |
+| c | Activarla: aparecen la piel, las cejas, el vello y el labio (5 estructuras) | ☐ |
+| d | Desactivarla: **desaparecen de verdad** | ☐ |
+| e | Con la piel apagada, abrir y cerrar el panel de Sistemas: sigue apagada | ☐ |
+| f | Con la piel apagada, entrar y salir de pantalla completa: sigue apagada | ☐ |
+| g | Con la piel apagada, pasar el raton por el modelo: sigue apagada | ☐ |
+| h | Con la piel apagada, seleccionar varias estructuras: sigue apagada | ☐ |
+| i | **Restablecer vista** no la vuelve a encender | ☐ |
+| j | **Restaurar visibilidad** la deja apagada (es su estado de arranque) | ☐ |
+| k | **Mostrar todo** SI la enciende | ☐ |
+| l | Buscar «piel» y pulsarla: se enciende su sistema y se ve | ☐ |
+| m | El contador de visibles cuadra con lo que se ve en pantalla | ☐ |
+
+> **e, f y g eran el bug**: el panel decia OFF y la malla seguia encendida,
+> porque el visor se reconstruia con todo visible y la visibilidad solo se
+> reaplicaba si además cambiaba el conjunto de visibles.
+
+### 17.3 · Aislar, ocultar y seleccionar no se mezclan
+
+| # | Comprobación | ☐ |
+|---|---|---|
+| a | Apagar Arterias y Venas. Seleccionar un hueso. **Aislar** | ☐ |
+| b | Solo se ve ese hueso, y aparece el aviso ambar | ☐ |
+| c | La camara **no** se movio al aislar | ☐ |
+| d | Girar y hacer zoom estando aislado: funciona | ☐ |
+| e | **Salir del aislamiento**: Arterias y Venas siguen apagadas | ☐ |
+| f | La camara sigue donde la dejaste | ☐ |
+| g | Aislado, pulsar una relacionada: se aisla la nueva | ☐ |
+| h | Seleccionar y **Ocultar**: desaparece y la seleccion se limpia | ☐ |
+| i | Ocultar no apago su sistema: las demas piezas siguen ahi | ☐ |
+| j | **Restaurar ocultas** no cambia que sistemas estan encendidos | ☐ |
+| k | Escape sale del aislamiento; otra vez, quita la seleccion | ☐ |
+
+### 17.4 · El resaltado
+
+| # | Comprobación | ☐ |
+|---|---|---|
+| a | La estructura seleccionada conserva su color base | ☐ |
+| b | Lo que destaca es el contorno, en verde azulado | ☐ |
+| c | No es blanco solido ni amarillo fluorescente | ☐ |
+| d | Un musculo seleccionado sigue pareciendo un musculo | ☐ |
+| e | Al seleccionar otra, la primera vuelve a su aspecto normal | ☐ |
+| f | Al quitar la seleccion, todo vuelve a su aspecto normal | ☐ |
+| g | Pasar el raton por encima aclara sin cambiar el color | ☐ |
+| h | Cambiar de seleccion es instantaneo: no hay parpadeo ni negro | ☐ |
+
+> **h** es la prueba de que no se reconstruye la escena. Si hay un parpadeo o
+> el modelo desaparece un instante, el visor se esta recreando otra vez.

@@ -6,15 +6,33 @@ import { T } from "../../lib/atlas/i18n.es.js";
 /* ==========================================================================
    PUENTE ENTRE REACT Y EL MOTOR 3D
 
-   El visor se crea UNA vez y sobrevive a todos los re-renders. Lo único que
-   cruza la frontera después son órdenes: «este conjunto visible, ésta
-   seleccionada». Si el visor se recreara al cambiar de sistema, cada clic en
-   la lista costaría un contexto WebGL nuevo y medio segundo de negro.
+   EL FALLO QUE ESTE FICHERO CAUSABA
+   ---------------------------------
+   Producción: la docente hacía zoom sobre el abdomen, tocaba un músculo y la
+   cámara volvía al cuerpo completo. Y si había apagado «Piel y anexos», la
+   piel reaparecía con el interruptor todavía en OFF.
 
-   Por eso `alSeleccionar` se guarda en una referencia: el motor llama
-   siempre a la misma función, y esa función mira cuál es el callback actual.
-   Pasarlo directo obligaría a recrear el visor cada vez que el padre se
-   vuelve a pintar.
+   Las dos cosas salían de la misma línea: `onFallo` estaba en el array de
+   dependencias del efecto que CREA el visor, y en el padre se pasaba como
+   `onFallo={() => setFallo("carga")}` — una función nueva en cada render.
+   Así que cualquier re-render (seleccionar, abrir un panel, pasar el ratón)
+   cambiaba la identidad de la dependencia, React ejecutaba la limpieza y el
+   efecto otra vez, y el visor se destruía y se volvía a construir:
+
+     · cámara de vuelta al encuadre inicial;
+     · las 15 geometrías y el contexto WebGL, rehechos;
+     · la tabla de estados reinicializada con TODO visible.
+
+   Lo tercero era el «panel OFF pero malla ON»: la visibilidad sólo se
+   reaplicaba si además cambiaba `visibles`, y abrir un panel no la cambia.
+
+   CÓMO SE EVITA AHORA, Y NO SÓLO SE ARREGLA
+   -----------------------------------------
+   Las dependencias son EXCLUSIVAMENTE los datos del modelo, que se cargan una
+   vez por sesión. Todo callback entra por una referencia, así que su
+   identidad no puede volver a disparar la reconstrucción. Y justo después de
+   crear el visor se aplica el estado actual, para que un visor nuevo nunca
+   nazca mostrando lo que la docente había apagado.
    ========================================================================== */
 export default function AtlasCanvas({
   bloques,
@@ -31,10 +49,21 @@ export default function AtlasCanvas({
 }) {
   const contenedor = useRef(null);
   const visor = useRef(null);
+
+  /* ---- todo lo que cambia de identidad, por referencia ------------------
+
+     Estas cuatro NO pueden estar en las dependencias del efecto de abajo:
+     cambian en cada render del padre y reconstruirían la escena.            */
   const alSeleccionar = useRef(onSeleccion);
   alSeleccionar.current = onSeleccion;
   const alSenalar = useRef(onSenalar);
   alSenalar.current = onSenalar;
+  const alFallar = useRef(onFallo);
+  alFallar.current = onFallo;
+
+  // El estado más reciente, para poder aplicarlo en cuanto exista el visor.
+  const estado = useRef({ visibles, seleccion, senalado });
+  estado.current = { visibles, seleccion, senalado };
 
   useEffect(() => {
     const nodo = contenedor.current;
@@ -53,12 +82,18 @@ export default function AtlasCanvas({
       });
     } catch (error) {
       console.error("[sciverse:atlas]", error?.message || error);
-      onFallo?.();
+      alFallar.current?.();
       return undefined;
     }
 
     visor.current = instancia;
     if (visorRef) visorRef.current = instancia;
+
+    // El visor nace con todo visible. Si la docente ya había apagado un
+    // sistema —o si la geometría acabó de cargar después de que el estado se
+    // inicializara—, hay que aplicarlo AHORA. Sin esto, un visor recién
+    // creado contradice al panel.
+    instancia.aplicar(estado.current);
 
     return () => {
       // Soltar el contexto WebGL es obligatorio: el navegador sólo permite un
@@ -67,10 +102,15 @@ export default function AtlasCanvas({
       visor.current = null;
       if (visorRef) visorRef.current = null;
     };
-    // Las dependencias son los datos del modelo, que en la práctica no
-    // cambian: el pack se carga una vez por sesión.
-  }, [bloques, partes, colores, enfoque, onFallo, visorRef]);
+    // SÓLO los datos del modelo. Añadir aquí cualquier cosa que cambie de
+    // identidad en un render devuelve los dos bugs de arriba.
+  }, [bloques, partes, colores, enfoque, visorRef]);
 
+  /* ---- órdenes al visor ------------------------------------------------
+
+     Esto es lo único que cruza la frontera cuando la docente selecciona,
+     oculta o aísla: una escritura en la tabla de estados. No se reconstruye
+     geometría y NO se toca la cámara.                                       */
   useEffect(() => {
     visor.current?.aplicar({ visibles, seleccion, senalado });
   }, [visibles, seleccion, senalado]);

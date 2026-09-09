@@ -36,6 +36,7 @@ export default function AtlasSystemsPanel({
   onNada,
   onElegir,
   onRestaurarOcultas,
+  onRestaurarVisibilidad,
   onMinimizar,
   campoRef,
 }) {
@@ -163,6 +164,17 @@ export default function AtlasSystemsPanel({
                   <button type="button" onClick={onRestaurarOcultas}>
                     <RotateCcw size={14} aria-hidden="true" />
                     {T.restaurarOcultas} ({ocultas})
+                  </button>
+                )}
+                {/* Devolver la visibilidad al arranque vive AQUÍ y no en la
+                    barra de acciones: es una acción de visibilidad, y en la
+                    barra se confundía con «Restablecer vista», que sólo mueve
+                    la cámara. Volver a encender la piel al recuperar el
+                    encuadre era justo el problema. */}
+                {onRestaurarVisibilidad && (
+                  <button type="button" onClick={onRestaurarVisibilidad}>
+                    <RotateCcw size={14} aria-hidden="true" />
+                    {T.restaurarVisibilidad}
                   </button>
                 )}
               </footer>

@@ -204,7 +204,8 @@ describe("atlas · español e integración nativa", () => {
     expect(T.buscar).toBe("Buscar una estructura");
     expect(T.ocultar).toBe("Ocultar");
     expect(T.aislar).toBe("Aislar");
-    expect(T.restablecer).toBe("Restablecer");
+    expect(T.restablecer).toBe("Restablecer vista");
+    expect(T.restaurarVisibilidad).toBe("Restaurar visibilidad");
     expect(T.informacion).toBe("Información");
     expect(T.anterior).toBe("Anterior");
     expect(T.posterior).toBe("Posterior");
@@ -403,15 +404,15 @@ describe("atlas · controles", () => {
 
   it("están las siete acciones pedidas, con rótulo accesible", () => {
     const html = pintarBarra(false);
-    for (const rotulo of ["Restablecer", "Centrar modelo", "Acercar", "Alejar",
+    for (const rotulo of ["Restablecer vista", "Centrar modelo", "Acercar", "Alejar",
       "Sistemas", "Información", "Pantalla completa"]) {
       expect(html, rotulo).toContain(`aria-label="${rotulo}"`);
     }
   });
 
   it("en escritorio hay tooltip; en móvil no, porque taparía el botón", () => {
-    expect(pintarBarra(false)).toContain('title="Restablecer"');
-    expect(pintarBarra(true)).not.toContain('title="Restablecer"');
+    expect(pintarBarra(false)).toContain('title="Restablecer vista"');
+    expect(pintarBarra(true)).not.toContain('title="Restablecer vista"');
   });
 
   it("en móvil la barra cambia de forma, no sólo de tamaño", () => {
