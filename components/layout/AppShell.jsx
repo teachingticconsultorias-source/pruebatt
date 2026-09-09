@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import {
   LayoutDashboard, Wand2, FolderOpen, ClipboardList, Users, GraduationCap, Wrench,
   User, LogOut, ChevronRight, ChevronLeft, MoreHorizontal, X, CreditCard, Award,
+  PersonStanding, ScanFace,
 } from "lucide-react";
 
 import CreditsIndicator from "../CreditsIndicator.jsx";
@@ -35,6 +36,15 @@ const NAV_GROUPS = [
     ],
   },
   {
+    // Explorar no es crear ni organizar: la docente no produce nada aquí, y
+    // meterlo en «Crear» habría dado a entender que gasta una creación de IA.
+    title: "Explorar en 3D",
+    items: [
+      { id: "atlas-humano", label: "Atlas del cuerpo humano", icon: PersonStanding },
+      { id: "atlas-omf", label: "Atlas oral y maxilofacial", icon: ScanFace },
+    ],
+  },
+  {
     title: "Organizar",
     items: [{ id: "biblioteca", label: "Mi biblioteca", icon: FolderOpen }],
   },
@@ -53,6 +63,8 @@ const SECTION_TITLES = {
   herramientas: "Herramientas",
   actividades: "Actividades STEAM",
   retos: "Retos grupales",
+  "atlas-humano": "Atlas del cuerpo humano",
+  "atlas-omf": "Atlas oral y maxilofacial",
   biblioteca: "Mi biblioteca",
 };
 
@@ -248,6 +260,14 @@ export default function AppShell({
               </button>
               <button type="button" onClick={() => go("retos")}>
                 <Users size={18} /> Retos grupales <ChevronRight size={16} />
+              </button>
+              {/* La barra inferior sólo tiene cinco huecos y los cuatro
+                  primeros son los de uso diario: los atlas entran por aquí. */}
+              <button type="button" onClick={() => go("atlas-humano")}>
+                <PersonStanding size={18} /> Atlas del cuerpo humano <ChevronRight size={16} />
+              </button>
+              <button type="button" onClick={() => go("atlas-omf")}>
+                <ScanFace size={18} /> Atlas oral y maxilofacial <ChevronRight size={16} />
               </button>
               <button type="button" onClick={() => { onOpenAccount("perfil"); setMoreOpen(false); }}>
                 <User size={18} /> Mi cuenta <ChevronRight size={16} />

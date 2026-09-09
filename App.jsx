@@ -9,6 +9,9 @@ import Dashboard from "./components/dashboard/Dashboard.jsx";
 import GenerationProgress from "./components/ui/GenerationProgress.jsx";
 import ToolGrid from "./components/create/ToolGrid.jsx";
 import Library, { MATERIAL_TYPES } from "./components/library/Library.jsx";
+// Carga diferida: Three.js y los 32 MB de geometría no se piden hasta que
+// alguien abre un atlas. Ver features/atlas/index.jsx.
+import { AtlasCuerpoHumano, AtlasOralMaxilofacial } from "./features/atlas/index.jsx";
 import Account from "./components/account/Account.jsx";
 import "./components/account/account.css";
 import "./components/library/library-v2.css";
@@ -4386,6 +4389,15 @@ function SciVerseApp({ profile, onLogout }) {
               una sola fuente de verdad en config/tools.js. */}
           <ToolGrid onCreate={openCreate} onNavigate={setActiveSection} />
         </div>
+      )}
+
+      {/* EXPLORAR EN 3D · vistas internas, no pestañas externas */}
+      {activeSection === "atlas-humano" && (
+        <AtlasCuerpoHumano onVolver={() => setActiveSection("inicio")} />
+      )}
+
+      {activeSection === "atlas-omf" && (
+        <AtlasOralMaxilofacial onVolver={() => setActiveSection("inicio")} />
       )}
 
       {activeSection === "biblioteca" && (
