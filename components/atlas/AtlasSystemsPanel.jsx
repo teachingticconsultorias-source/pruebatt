@@ -1,32 +1,41 @@
 import React from "react";
-import { ChevronDown, Eye, EyeOff, Search, X } from "lucide-react";
+import { ChevronDown, Eye, EyeOff, RotateCcw, Search, X } from "lucide-react";
 
 import { T } from "../../lib/atlas/i18n.es.js";
 
 /* ==========================================================================
-   SISTEMAS (o CATEGORÍAS) Y BÚSQUEDA
+   SISTEMAS (o CATEGORÍAS), ATAJOS Y BÚSQUEDA
 
-   Van juntos porque son la misma pregunta hecha de dos maneras: «enséñame
-   los músculos» y «enséñame el masetero». Separarlos en dos paneles obligaba
-   a cerrar uno para usar el otro justo cuando se usan a la vez.
+   Van juntos porque son la misma pregunta hecha de dos maneras: «enséñame los
+   nervios» y «enséñame el nervio nasociliar». Separarlos en dos paneles
+   obligaba a cerrar uno para usar el otro justo cuando se usan a la vez.
 
-   La lista de resultados sale sólo cuando hay algo escrito. Con 2.234
+   La lista de resultados sale sólo cuando hay algo escrito: con 2.234
    estructuras, una lista permanente es un muro que nadie lee.
+
+   La búsqueda entiende las tres formas de nombrar lo mismo —«corazón»,
+   «heart» y «FMA7088»— porque el material de consulta que hay fuera de
+   SciVerse está casi todo en inglés y con identificador FMA.
    ========================================================================== */
 export default function AtlasSystemsPanel({
   grupos,
   conteos,
   activos,
+  atajos,
+  atajoActivo,
   etiquetaGrupos,
   busqueda,
   resultados,
-  nombreDe,
+  totalVisible,
+  ocultas,
   minimizado,
   onBuscar,
   onAlternar,
+  onAtajo,
   onTodo,
   onNada,
   onElegir,
+  onRestaurarOcultas,
   onMinimizar,
   campoRef,
 }) {
@@ -77,10 +86,11 @@ export default function AtlasSystemsPanel({
                 {resultados.length ? T.resultados(resultados.length) : T.sinResultados}
               </p>
               <ul>
-                {resultados.map((indice) => (
-                  <li key={indice}>
-                    <button type="button" onClick={() => onElegir(indice)}>
-                      {nombreDe(indice)}
+                {resultados.map((r) => (
+                  <li key={r.indice}>
+                    <button type="button" onClick={() => onElegir(r.indice)}>
+                      <span className="atlas-resultados__nombre">{r.nombre}</span>
+                      {r.fma && <span className="atlas-resultados__fma">{r.fma}</span>}
                     </button>
                   </li>
                 ))}
@@ -88,6 +98,23 @@ export default function AtlasSystemsPanel({
             </div>
           ) : (
             <>
+              {/* --------------------------------------------------- atajos */}
+              {atajos && (
+                <div className="atlas-atajos" role="group" aria-label="Vistas rápidas">
+                  {atajos.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className={atajoActivo === a.id ? "is-activo" : ""}
+                      aria-pressed={atajoActivo === a.id}
+                      onClick={() => onAtajo(a)}
+                    >
+                      {a.nombre}
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="atlas-panel__acciones">
                 <button type="button" onClick={onTodo}>{T.mostrarTodo}</button>
                 <button type="button" onClick={onNada}>{T.ocultarTodo}</button>
@@ -106,8 +133,8 @@ export default function AtlasSystemsPanel({
                         onClick={() => onAlternar(clave)}
                         aria-pressed={activo}
                       >
-                        {/* El color acompaña, no informa por sí solo: el
-                            estado se lee también en el icono y en aria-pressed. */}
+                        {/* El color acompaña, no informa por sí solo: el estado
+                            se lee también en el icono y en aria-pressed. */}
                         <span
                           className="atlas-sistemas__color"
                           style={{ background: grupos[clave].color }}
@@ -123,6 +150,22 @@ export default function AtlasSystemsPanel({
                   );
                 })}
               </ul>
+
+              {/* --------------------------------------------- pie de estado
+
+                  El contador es lo que responde a «¿por qué no veo nada?»
+                  cuando alguien ha apagado sistemas sin darse cuenta. Y las
+                  ocultas se restauran desde aquí SIN tocar los sistemas:
+                  esconder una pieza no puede deshacer el resto de la vista. */}
+              <footer className="atlas-panel__pie">
+                <span>{T.estructurasVisibles(totalVisible)}</span>
+                {ocultas > 0 && (
+                  <button type="button" onClick={onRestaurarOcultas}>
+                    <RotateCcw size={14} aria-hidden="true" />
+                    {T.restaurarOcultas} ({ocultas})
+                  </button>
+                )}
+              </footer>
             </>
           )}
         </div>

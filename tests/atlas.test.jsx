@@ -260,7 +260,8 @@ describe("atlas · paneles", () => {
         etiquetaGrupos="sistemas"
         busqueda=""
         resultados={[]}
-        nombreDe={() => ""}
+        totalVisible={698}
+        ocultas={0}
         minimizado={minimizado}
         onBuscar={() => {}}
         onAlternar={() => {}}
@@ -303,8 +304,12 @@ describe("atlas · paneles", () => {
         activos={new Set()}
         etiquetaGrupos="sistemas"
         busqueda="fémur"
-        resultados={[7, 9]}
-        nombreDe={(i) => (i === 7 ? "Fémur derecho" : "Fémur izquierdo")}
+        resultados={[
+          { indice: 7, nombre: "Fémur derecho", fma: "FMA24474" },
+          { indice: 9, nombre: "Fémur izquierdo", fma: "FMA24475" },
+        ]}
+        totalVisible={9}
+        ocultas={0}
         minimizado={false}
         onBuscar={() => {}}
         onAlternar={() => {}}
@@ -319,31 +324,39 @@ describe("atlas · paneles", () => {
     expect(html).toContain("Fémur izquierdo");
   });
 
-  function pintarInfo(estructura, minimizado = false) {
+  function pintarInfo(ficha, minimizado = false) {
     return renderToStaticMarkup(
       <AtlasInfoPanel
-        estructura={estructura}
+        ficha={ficha}
         aislado={false}
         oculta={false}
         minimizado={minimizado}
         onOcultar={() => {}}
         onAislar={() => {}}
+        onCentrar={() => {}}
         onQuitar={() => {}}
+        onIrA={() => {}}
         onMinimizar={() => {}}
       />
     );
   }
+
+  /** Ficha con lo mínimo que trae CUALQUIER estructura del pack. */
+  const FICHA_MINIMA = {
+    indice: 3, id: "FJ0001", nombre: "Arteria carótida común derecha",
+    sinTraducir: false, nombreOriginal: "Right common carotid artery",
+    sistema: "Arterias", color: "#D9421F", fma: "FMA3939",
+    descripcion: null, funcion: null, regiones: [], grupos: [],
+    relacionadas: [], origenRelacion: null, tema: null, fdi: null,
+    notaDocente: null,
+  };
 
   it("sin selección, el panel de información invita a tocar el modelo", () => {
     expect(pintarInfo(null)).toContain("Toca una estructura del modelo");
   });
 
   it("con selección muestra nombre, sistema y las acciones", () => {
-    const html = pintarInfo({
-      nombre: "Arteria carótida común derecha",
-      id: "FJ0001", conceptId: "FMA3939",
-      grupo: "Arterias", color: "#D9421F",
-    });
+    const html = pintarInfo(FICHA_MINIMA);
     expect(html).toContain("Arteria carótida común derecha");
     expect(html).toContain("Arterias");
     expect(html).toContain("FMA3939");
@@ -352,7 +365,7 @@ describe("atlas · paneles", () => {
   });
 
   it("minimizado, el panel de información también se pliega", () => {
-    const html = pintarInfo({ nombre: "X", id: "a", grupo: "b", color: "#fff" }, true);
+    const html = pintarInfo(FICHA_MINIMA, true);
     expect(html).not.toContain("Aislar");
     expect(html).toContain('aria-expanded="false"');
   });
@@ -590,6 +603,7 @@ describe("atlas · gestión de la vista y de la memoria", () => {
 describe("atlas · qué enseña cada uno", () => {
   const manifiesto = JSON.parse(leer("public/models/atlas.json"));
   const nombres = JSON.parse(leer("public/models/atlas-es.json"));
+  const enEspanol = nombres.partes;
   const partes = manifiesto.parts.map((p, i) => ({ ...p, indiceGlobal: i }));
 
   it("el manifiesto es el de BodyParts3D 4.0 con sus 2.234 estructuras", () => {
@@ -599,12 +613,12 @@ describe("atlas · qué enseña cada uno", () => {
   });
 
   it("las 2.234 tienen nombre en español", () => {
-    expect(Object.keys(nombres).length).toBe(2234);
-    for (const p of manifiesto.parts) expect(nombres[p.id], p.name).toBeTruthy();
+    expect(Object.keys(enEspanol).length).toBe(2234);
+    for (const p of manifiesto.parts) expect(enEspanol[p.id], p.name).toBeTruthy();
   });
 
   it("y están bien traducidas, no transliteradas", () => {
-    const porNombre = (n) => nombres[manifiesto.parts.find((p) => p.name === n).id];
+    const porNombre = (n) => enEspanol[manifiesto.parts.find((p) => p.name === n).id];
     expect(porNombre("Right common carotid artery")).toBe("Arteria carótida común derecha");
     expect(porNombre("Left lower first secondary molar tooth"))
       .toBe("Primer molar permanente inferior izquierdo");

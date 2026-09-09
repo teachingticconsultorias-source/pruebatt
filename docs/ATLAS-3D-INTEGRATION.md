@@ -92,6 +92,11 @@ sea un compromiso que no conviene adquirir para un asset accesorio.
 |---|---|---|
 | Pack BodyParts3D 4.0 (`atlas.json` + 15 `.bin.gz`, 32,7 MB) | **Reutilizado** | CC BY 4.0: uso comercial permitido con atribución |
 | Esquema del formato binario y la lógica de descompresión de `model-download.ts` | **Reimplementado** en `lib/atlas/carga.js` | Código MIT; se cita la autoría en el fichero |
+| `SYSTEMS[].description` y `EXPLANATIONS` de `app/anatomy.ts` (human-atlas) | **Traducido** a `lib/atlas/textos-anatomia.es.js` | Texto MIT; se cita autoría y licencia en el fichero y en la ficha |
+| `topics` de `src/content.js` (OMFAtlas) — 5 temas con sus fuentes NCBI | **Traducido** al mismo fichero | Texto MIT; se conservan las referencias bibliográficas |
+| `toothNumber()` de `src/content.js` (OMFAtlas) — notación FDI | **Adaptado** en `lib/atlas/metadatos.js` | Algoritmo MIT; se cita la autoría |
+| `MASTICATORY` de OMFAtlas | **No usable** | Sus 14 identificadores FMA no existen en BodyParts3D 4.0 |
+| `schematic-anatomy.js` y sus 36 notas (OMFAtlas) | **No reutilizado** | Describen geometría propia de OMFAtlas que aquí no se sirve |
 | Interfaz, componentes y CSS de Human Atlas | **No reutilizados** | Están en inglés, con shadcn/ui y tokens ajenos. El encargo pedía que se viera nativo de SciVerse |
 | Interfaz y `src/` de OMFAtlas | **No reutilizados** | Mismo motivo; además es JS sin framework y SciVerse es React |
 | `open-full-jaw.bin` | **Descartado** | CC BY-NC-SA 4.0 — NonCommercial |
@@ -103,12 +108,32 @@ sea un compromiso que no conviene adquirir para un asset accesorio.
 
 El README de OMFAtlas declara que sus mallas de cabeza y cuello **son
 BodyParts3D 4.0** (643 de ellas). Filtrando el pack que ya se descargó por
-región anatómica —caja envolvente con `y_min > 1,38 m` en un modelo de 1,73 m—
-salen **648 estructuras**, incluidas las **28 piezas dentarias permanentes** y
-las dos encías.
+región anatómica salen **642 estructuras**, incluidas las **28 piezas dentarias
+permanentes** y las dos encías.
+
+El filtro es geométrico y tiene dos condiciones, no una:
+
+```
+y_min > 1,38 m           por encima del cuello, en un modelo de 1,73 m
+|x| máx ≤ 0,15 m         y sin separarse del eje más que la anchura del cuello
+```
+
+Sólo con la altura entraban el supraespinoso, el trapecio transverso y las ramas
+toracoacromiales: hombro, no cabeza. Con las dos condiciones quedan fuera esas
+diez y siguen dentro la clavícula y el platisma, que sí son referencias
+cervicales.
 
 Es decir: la misma cobertura anatómica, con una sola licencia limpia, sin
 ShareAlike, sin NonCommercial y sin 35 MB adicionales.
+
+**Lo que este pack no tiene.** Los músculos de la masticación —masetero,
+temporal, pterigoideos y buccinador— **no existen en BodyParts3D 4.0**. Se
+comprobó buscando por nombre y por identificador FMA: los catorce que OMFAtlas
+lista en su `MASTICATORY` no están en el manifiesto. Ésa es precisamente la
+razón por la que OMFAtlas añade 77 estructuras esquemáticas propias. En el atlas
+oral de SciVerse, la categoría «Músculos» contiene los 102 músculos de cabeza y
+cuello que sí trae el pack —extraoculares, suprahioideos, infrahioideos,
+linguales, faríngeos—, pero no los masticadores. Está en los pendientes.
 
 ### Atribución obligatoria
 
@@ -137,7 +162,9 @@ lib/atlas/
   i18n.es.js      Todo el texto de interfaz + nombre y color de cada sistema
   fuentes.js      Qué estructuras enseña cada atlas y cómo se agrupan
   carga.js        Descarga, descompresión, fusión de mallas y caché de sesión
-  visor.js        Motor Three.js: cámara, gestos, estados y selección por GPU
+  visor.js        Motor Three.js: cámara, gestos, estados y selección por rayo
+  metadatos.js    Ficha de cada estructura a partir del grafo FMA
+  textos-anatomia.es.js  Textos educativos traducidos, con su procedencia
 
 components/atlas/
   AtlasShell.jsx        Armazón común: estado, responsive, pantalla completa
@@ -156,12 +183,13 @@ features/atlas/
   omf/OmfAtlas.jsx      648 estructuras de cabeza y cuello, 7 categorías
 
 scripts/
-  atlas-lexico.es.mjs   Léxico anatómico inglés → español, escrito a mano
-  build-atlas-es.mjs    Genera public/models/atlas-es.json
+  atlas-lexico.es.mjs            Léxico de las 2.234 estructuras, a mano
+  atlas-lexico-conceptos.es.mjs  Léxico de los 3.432 conceptos FMA, a mano
+  build-atlas-es.mjs             Genera public/models/atlas-es.json
 
 public/models/
   atlas.json            Manifiesto original de BodyParts3D 4.0, sin tocar
-  atlas-es.json         Nombres en español (generado, 105 KB)
+  atlas-es.json         { partes, conceptos } en español (generado, 256 KB)
   body-0..14.bin.gz     Geometría, 31,4 MB
   ATRIBUCION.md         Atribución exigida por CC BY 4.0
 ```
@@ -177,10 +205,13 @@ por estructura, su color y si está oculta, visible o seleccionada. Mostrar,
 ocultar y aislar son escrituras en un array de floats: no se recorre la
 geometría ni se reconstruye nada.
 
-**Selección por GPU, no por rayo.** Lanzar un rayo contra 2,29 millones de
-triángulos tarda cientos de milisegundos. En su lugar se dibuja **un** píxel —el
-que hay bajo el dedo— con un material que pinta el índice de la estructura en
-vez de su color, y se lee. Cuesta lo mismo con 2.000 estructuras que con 10.
+**Selección por rayo, con descarte por caja.** Lanzar un rayo contra los 2,29
+millones de triángulos tarda cientos de milisegundos. Aquí primero se descarta
+con las cajas envolventes que ya trae el manifiesto, se ordenan las candidatas
+por distancia de entrada y se para en cuanto ninguna caja pendiente puede
+contener un impacto más cercano que el mejor encontrado. Medido sobre la
+geometría real: **0,20 ms por rayo**, con una media de **1,6 estructuras y
+2.837 triángulos** examinados. Barato hasta para el resaltado al pasar el ratón.
 
 **Un pack, dos atlas.** Los dos comparten manifiesto, geometría y caché de
 sesión. Cambiar de atlas no descarga nada.
@@ -191,6 +222,61 @@ el orden del español (el inglés antepone los modificadores, el español los
 pospone) y concordancia de género y número. Cobertura: **2.234/2.234 (100 %)**.
 El resultado se versiona, así que es revisable y corregible a mano.
 
+Los **3.432 conceptos FMA** se traducen igual, con un segundo léxico de 209
+términos más. Los dos diccionarios están separados a propósito: las estructuras
+se traducen sólo con el suyo, de modo que añadir vocabulario abstracto para los
+conceptos no puede cambiar en silencio un nombre de estructura ya revisado. El
+generador lo comprueba.
+
+---
+
+## 4 bis. La ficha de una estructura
+
+### De dónde sale cada campo
+
+| Campo | Origen | Cobertura |
+|---|---|---|
+| Nombre | `atlas-es.json`, generado del léxico | 2.234 / 2.234 |
+| Sistema o categoría | `part.system` del manifiesto | 2.234 |
+| Identificador FMA | `part.conceptId` | 2.234 |
+| Nombre original | `part.name` | 2.234 |
+| **Descripción** | `EXPLANATIONS` de human-atlas, traducido (MIT) | **6** |
+| Función del sistema | `SYSTEMS[].description` de human-atlas, traducido (MIT) | 2.234 |
+| Localización | Conceptos FMA de región del propio manifiesto | 1.258 |
+| Grupos anatómicos | Conceptos FMA de 2 a 60 elementos | 2.218 |
+| Estructuras relacionadas | Hermanas del concepto más específico | 2.208 |
+| Número FDI | Regla adaptada de `toothNumber()` de OMFAtlas (MIT) | 28 |
+| Tema de la región oral | `topics` de OMFAtlas, traducido (MIT) | 5 temas |
+| Para el aula | Redacción propia de SciVerse | 15 sistemas |
+
+### La regla: ninguna sección vacía
+
+Sólo **6 estructuras** de 2.234 tienen descripción propia, porque son las únicas
+para las que existe un texto en una fuente reutilizable. Las demás enseñan lo
+que sí hay y callan lo que no. No se rellena con una frase genérica ni se genera
+con IA: una descripción inventada en material que va a un aula es el peor
+resultado posible, y además parece correcta.
+
+### El grafo FMA como fuente de relaciones
+
+`atlas.json` no trae sólo geometría: trae 3.432 conceptos de la Foundational
+Model of Anatomy, cada uno con la lista de mallas que le pertenece. La mandíbula
+aparece en 23, desde «entidad anatómica» (las 2.234) hasta «esqueleto de la
+boca» (una). De ahí salen:
+
+- **Localización** — los conceptos que son regiones del cuerpo, ordenados de lo
+  general a lo concreto: *Cuerpo humano › Cabeza › Cara › Cráneo ›
+  Viscerocráneo › Boca*.
+- **Grupos anatómicos** — los conceptos más específicos, entre 2 y 60 mallas.
+  Se dice «pertenece a» y no «es un» ni «forma parte de»: el manifiesto guarda
+  a qué conceptos pertenece una malla pero **no** el tipo de relación, y
+  afirmarlo sería añadir información que el dato no tiene.
+- **Estructuras relacionadas** — las hermanas del concepto más específico que
+  tenga compañía, limitadas al atlas que se está mirando.
+
+Las clases de la ontología («órgano con cavidad», «componente de órgano») se
+filtran: son ciertas y no sitúan nada, y ocupaban el sitio de las que sí.
+
 ---
 
 ## 5. Rendimiento
@@ -199,13 +285,14 @@ El resultado se versiona, así que es revisable y corregible a mano.
 
 | Trozo | Tamaño | Gzip | Cuándo se descarga |
 |---|---|---|---|
-| `index.js` (principal) | 1.115,7 KB | 312,7 KB | Siempre |
-| `three-*.js` | 514,4 KB | 128,7 KB | Sólo al abrir un atlas |
-| `fuentes-*.js` (código del atlas) | 27,8 KB | 9,8 KB | Sólo al abrir un atlas |
+| `index.js` (principal) | 1.116,6 KB | 313,0 KB | Siempre |
+| `three-*.js` | 515,6 KB | 129,1 KB | Sólo al abrir un atlas |
+| `fuentes-*.js` (código del atlas) | 49,1 KB | 17,5 KB | Sólo al abrir un atlas |
 | `HumanAtlas` / `OmfAtlas` | 0,26 KB c/u | — | Sólo al abrir su atlas |
 
-**Coste añadido al bundle principal: +9,9 KB (+3,6 KB gzip)** y +12,6 KB de CSS
-(+1,8 KB gzip). Ese sobrante es deliberado: la pantalla de carga y la red de
+**Coste añadido al bundle principal, sobre SciVerse sin atlas: +10,8 KB
+(+3,9 KB gzip)** y +21,8 KB de CSS (+2,7 KB gzip). Toda la información
+anatómica —fichas, grafo FMA, textos, búsqueda— vive en el trozo diferido. Ese sobrante es deliberado: la pantalla de carga y la red de
 seguridad tienen que existir *antes* de que llegue el trozo diferido, o el
 primer instante sería una pantalla en blanco.
 
@@ -285,25 +372,62 @@ lienzo se redimensiona para no quedar estirado.
 
 ---
 
+## 7 bis. Calidad de imagen
+
+El primer sombreado tenía una sola luz hemisférica y un realce de borde. Sobre
+un modelo de dos millones de triángulos eso se lee plano: dos músculos vecinos
+del mismo color se funden en una sola mancha.
+
+Lo que se cambió, y por qué:
+
+| Antes | Ahora | Qué gana |
+|---|---|---|
+| Color en sRGB sumado directamente | Se linealiza (`pow(c, 2.2)`) antes de iluminar y se devuelve con gamma al final | Los medios tonos dejan de ensuciarse |
+| Sin curva de exposición | ACES en su forma reducida | Las caras orientadas a la luz no se queman |
+| Una luz hemisférica | Principal + relleno + ambiente hemisférico | Volumen donde antes había gris uniforme |
+| Sin especular | Especular de exponente 28 al 16 % | Sugiere curvatura sin parecer plástico |
+| Borde a la potencia 3, al 25 % | Potencia 3,5 al 22 %, teñido del color de la estructura | Siluetas separadas sin halo blanco |
+| Normales tal cual | Se voltean si miran en contra de la cámara | Deja de haber medias estructuras negras |
+| Sin resaltado al pasar el ratón | Aclarado suave, cursor de mano | Se sabe qué se va a seleccionar antes de pulsar |
+| Selección de color plano | Mezcla al 55 % con el verde azulado de SciVerse + borde reforzado | Destaca sin competir con el modelo |
+
+Lo que **no** se tocó, porque el coste no compensa en un móvil de aula: sombras
+proyectadas, oclusión ambiental, mapas de entorno y suavizado en móvil. El DPR
+sigue limitado a 1,5 en pantallas táctiles y a 2 en escritorio, y el bucle sigue
+dibujando sólo cuando algo cambia.
+
+---
+
 ## 8. Qué queda pendiente
 
-1. **Medir en dispositivos reales.** Las cifras de rendimiento son estimaciones.
-   Falta probar en gama baja andina, que es el caso que más importa.
-2. **Carga progresiva por región.** Hoy se descargan los 15 bloques aunque el
+1. **Los músculos de la masticación.** Masetero, temporal, pterigoideos y
+   buccinador no están en BodyParts3D 4.0 (ver arriba). Es la carencia más
+   visible del atlas oral. Traerlos exige otra fuente de geometría con licencia
+   compatible, o modelarlos.
+2. **Medir en dispositivos reales.** Las cifras de rendimiento son estimaciones.
+   Falta probar en gama baja andina, que es el caso que más importa. La lista
+   está en `docs/ATLAS-3D-QA.md`.
+3. **Descripción por estructura.** Sólo 6 de 2.234 la tienen. Ampliarlo exige
+   una fuente con licencia compatible o redacción propia revisada por alguien
+   del área; lo que no se va a hacer es generarla.
+4. **Localización para el 44 % restante.** 1.258 estructuras de 2.234 tienen
+   conceptos de región en el manifiesto. Las demás —dientes incluidos— no, y
+   por eso ese apartado no aparece en su ficha.
+5. **Carga progresiva por región.** Hoy se descargan los 15 bloques aunque el
    atlas maxilofacial sólo use estructuras de tres o cuatro. Repaquetar por
    región bajaría esa primera carga de 32,7 MB a unos 8 MB para el atlas oral.
-3. **Draco o Meshopt.** El pack de origen no los usa. Recomprimir la geometría
+6. **Draco o Meshopt.** El pack de origen no los usa. Recomprimir la geometría
    podría bajar bastante los 32,7 MB, a cambio de un decodificador extra.
-4. **Revisión odontológica de los 2.234 nombres.** La traducción está generada a
+7. **Revisión odontológica de los 2.234 nombres.** La traducción está generada a
    partir de un léxico revisado y comprobada sobre una muestra, pero merece una
    pasada de alguien del área. El fichero es editable a mano.
-5. **Vistas anatómicas predefinidas.** El motor ya tiene `vista("anterior")`,
+8. **Vistas anatómicas predefinidas.** El motor ya tiene `vista("anterior")`,
    `"posterior"`, `"izquierda"`, `"derecha"` y `"superior"`; falta exponerlas en
    la interfaz.
-6. **Cabeceras de caché.** Vercel sirve `/public` con revalidación; unas
+9. **Cabeceras de caché.** Vercel sirve `/public` con revalidación; unas
    cabeceras `immutable` para los `.bin.gz` ahorrarían la ida y vuelta entre
    sesiones.
-7. **`dental.bin` de OMFAtlas (CC BY 4.0).** Es legalmente reutilizable y añade
+10. **`dental.bin` de OMFAtlas (CC BY 4.0).** Es legalmente reutilizable y añade
    detalle dental que BodyParts3D no tiene (pulpa, ligamento periodontal). Si
    algún día hace falta ese nivel, es el único de los cuatro que se puede
    incorporar, y habría que sumar su atribución a `ATRIBUCION.md`.

@@ -1,6 +1,7 @@
 import React, {
   useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
+import { Crosshair, Eye, EyeOff, Focus, X } from "lucide-react";
 
 import AtlasCanvas from "./AtlasCanvas.jsx";
 import AtlasInfoPanel from "./AtlasInfoPanel.jsx";
@@ -9,29 +10,39 @@ import AtlasSystemsPanel from "./AtlasSystemsPanel.jsx";
 import AtlasToolbar from "./AtlasToolbar.jsx";
 import { AtlasCargando, AtlasFalloDeCarga, AtlasSinWebgl } from "./AtlasLoading.jsx";
 import { cargarAtlas } from "../../lib/atlas/carga.js";
+import { crearIndice, crearIndiceDeBusqueda, fichaDe, sinTildes } from "../../lib/atlas/metadatos.js";
 import { hayWebgl } from "../../lib/atlas/visor.js";
 import { T } from "../../lib/atlas/i18n.es.js";
 
 /* ==========================================================================
    ARMAZÓN COMÚN DE LOS DOS ATLAS
 
-   Los dos atlas son el mismo programa con distinta selección de estructuras
-   y distinta agrupación. Duplicar la interfaz habría significado arreglar
-   cada detalle de accesibilidad y de móvil dos veces, y arreglarlo mal la
-   segunda. Lo que cambia viene en `fuente` (ver lib/atlas/fuentes.js).
+   Los dos atlas son el mismo programa con distinta selección de estructuras y
+   distinta agrupación. Duplicar la interfaz habría significado arreglar cada
+   detalle de accesibilidad y de móvil dos veces, y arreglarlo mal la segunda.
+   Lo que cambia viene en `fuente` (ver lib/atlas/fuentes.js).
 
    ESCRITORIO Y MÓVIL NO SON EL MISMO DISEÑO ENCOGIDO
    --------------------------------------------------
    En escritorio hay dos columnas laterales plegables junto al lienzo. En
    móvil no hay columnas: el modelo ocupa la pantalla y los paneles son hojas
-   inferiores que se pueden minimizar sin cerrarse, porque el encargo pide
-   poder seguir girando el modelo mientras se lee la ficha.
+   inferiores que se pueden minimizar sin cerrarse, porque hay que poder
+   seguir girando el modelo mientras se lee la ficha.
+
+   TRES ESTADOS DE VISIBILIDAD, Y NINGUNO PISA A OTRO
+   --------------------------------------------------
+   · `gruposActivos` — qué sistemas o categorías están encendidos
+   · `ocultas`       — estructuras sueltas que la docente quitó de en medio
+   · `aislado`       — ver sólo la seleccionada, temporalmente
+
+   Aislar NO toca los otros dos: es una capa que se pone encima y se quita.
+   Por eso salir del aislamiento devuelve exactamente la vista anterior sin
+   guardar copia de nada. Y ocultar una pieza no reinicia los sistemas: son
+   preguntas distintas y mezclarlas obligaba a rehacer la vista entera por
+   quitar un hueso de delante.
    ========================================================================== */
 
 const LIMITE_RESULTADOS = 40;
-
-const sinTildes = (t) =>
-  t.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 
 /** #RRGGBB → [r, g, b] en 0..1, que es lo que espera el shader. */
 function aRgb(hex) {
@@ -47,8 +58,8 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
   const [fallo, setFallo] = useState(null);
   const [intento, setIntento] = useState(0);
 
-  // Se comprueba una sola vez: crear y tirar un contexto WebGL en cada
-  // render sería justo lo que agota los contextos del navegador.
+  // Se comprueba una sola vez: crear y tirar un contexto WebGL en cada render
+  // sería justo lo que agota los contextos del navegador.
   const [soportaWebgl] = useState(() => hayWebgl());
 
   useEffect(() => {
@@ -74,42 +85,42 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
   }, [soportaWebgl, intento]);
 
   /* -------------------------------------------------- estructuras del atlas */
-  const { partesDelAtlas, enfoque, conteos, colores, nombreDe } = useMemo(() => {
-    if (!datos) {
-      return { partesDelAtlas: [], enfoque: null, conteos: {}, colores: [], nombreDe: () => "" };
-    }
+  const modelo = useMemo(() => {
+    if (!datos) return null;
 
     const propias = datos.partes.filter((p) => fuente.incluye(p));
-    const set = new Set(propias.map((p) => p.indiceGlobal));
+    const enfoque = new Set(propias.map((p) => p.indiceGlobal));
 
-    const cuenta = {};
+    const conteos = {};
     for (const p of propias) {
       const g = fuente.grupoDe(p);
-      cuenta[g] = (cuenta[g] || 0) + 1;
+      conteos[g] = (conteos[g] || 0) + 1;
     }
 
     // Un color por estructura, para toda la tabla del manifiesto: el shader
     // indexa por índice global y no sabe de subconjuntos.
-    const paleta = datos.partes.map((p) => {
+    const colores = datos.partes.map((p) => {
       const grupo = fuente.grupos[fuente.grupoDe(p)];
       return aRgb(grupo?.color || "#B4C6C4");
     });
 
-    const nombre = (indice) => {
-      const p = datos.partes[indice];
-      if (!p) return "";
-      return datos.nombres[p.id] || p.name;
-    };
+    // El grafo FMA y el índice de búsqueda se arman una vez. Recorrer 3.432
+    // conceptos en cada clic, o normalizar 2.234 nombres en cada tecla, se
+    // nota en un móvil.
+    const grafo = crearIndice(datos.manifiesto);
+    const busqueda = crearIndiceDeBusqueda(propias, datos.partes, datos.nombres);
 
-    return { partesDelAtlas: propias, enfoque: set, conteos: cuenta, colores: paleta, nombreDe: nombre };
+    return { propias, enfoque, conteos, colores, grafo, busqueda };
   }, [datos, fuente]);
 
   /* ----------------------------------------------------------- estado de la UI */
   const [gruposActivos, setGruposActivos] = useState(() => new Set(fuente.visiblesAlInicio));
   const [ocultas, setOcultas] = useState(() => new Set());
   const [seleccion, setSeleccion] = useState(null);
+  const [senalado, setSenalado] = useState(null);
   const [aislado, setAislado] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [atajoActivo, setAtajoActivo] = useState(fuente.atajos ? "todas" : null);
 
   const [panelGrupos, setPanelGrupos] = useState(true);
   const [panelInfo, setPanelInfo] = useState(true);
@@ -142,59 +153,87 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
   /* --------------------------------------------------------- qué está visible */
   const visibles = useMemo(() => {
     const set = new Set();
-    if (!partesDelAtlas.length) return set;
+    if (!modelo) return set;
 
-    for (const p of partesDelAtlas) {
+    // Aislar es una capa encima, no una modificación: cuando se quita, los
+    // sistemas y las ocultas siguen exactamente como estaban.
+    if (aislado && seleccion != null) {
+      set.add(seleccion);
+      return set;
+    }
+
+    for (const p of modelo.propias) {
       const i = p.indiceGlobal;
-      if (aislado) {
-        // Aislar enseña sólo la elegida, sin importar su sistema: es la
-        // acción de «quítame todo lo demás de encima».
-        if (i === seleccion) set.add(i);
-        continue;
-      }
       if (!gruposActivos.has(fuente.grupoDe(p))) continue;
       if (ocultas.has(i)) continue;
       set.add(i);
     }
     return set;
-  }, [partesDelAtlas, gruposActivos, ocultas, aislado, seleccion, fuente]);
+  }, [modelo, gruposActivos, ocultas, aislado, seleccion, fuente]);
 
-  /* ------------------------------------------------------------- búsqueda */
+  /* ------------------------------------------------------------- búsqueda
+
+     Sobre el índice precalculado, que ya lleva el nombre en español, el
+     original en inglés y el identificador FMA en una sola cadena.           */
   const resultados = useMemo(() => {
+    if (!modelo) return [];
     const q = sinTildes(busqueda.trim());
     if (q.length < 2) return [];
+
     const salida = [];
-    for (const p of partesDelAtlas) {
-      if (sinTildes(nombreDe(p.indiceGlobal)).includes(q)) {
-        salida.push(p.indiceGlobal);
-        if (salida.length >= LIMITE_RESULTADOS) break;
-      }
+    for (const entrada of modelo.busqueda) {
+      if (!entrada.texto.includes(q)) continue;
+      salida.push({
+        indice: entrada.indice,
+        nombre: entrada.nombre,
+        fma: datos.partes[entrada.indice]?.conceptId || null,
+      });
+      if (salida.length >= LIMITE_RESULTADOS) break;
     }
     return salida;
-  }, [busqueda, partesDelAtlas, nombreDe]);
+  }, [busqueda, modelo, datos]);
+
+  /* ---------------------------------------------------------------- ficha */
+  const ficha = useMemo(() => {
+    if (!datos || !modelo || seleccion == null) return null;
+    return fichaDe(
+      seleccion,
+      { manifiesto: datos.manifiesto, partes: datos.partes, nombres: datos.nombres, indice: modelo.grafo },
+      fuente,
+      modelo.enfoque
+    );
+  }, [datos, modelo, seleccion, fuente]);
 
   /* ------------------------------------------------------------- acciones */
-  const elegir = useCallback((indice) => {
+  const elegir = useCallback((indice, { centrar = false } = {}) => {
     setSeleccion(indice);
-    if (indice != null) {
-      visor.current?.enfocar(indice);
-      // Al elegir desde la búsqueda, la estructura tiene que verse aunque su
-      // sistema estuviera apagado: si no, la docente busca algo, lo pulsa y
-      // no pasa nada visible.
-      setOcultas((previas) => {
-        if (!previas.has(indice)) return previas;
-        const copia = new Set(previas);
-        copia.delete(indice);
-        return copia;
-      });
-      const parte = datos?.partes[indice];
-      if (parte) {
-        const grupo = fuente.grupoDe(parte);
-        setGruposActivos((previos) => (previos.has(grupo) ? previos : new Set(previos).add(grupo)));
-      }
+    if (indice == null) { setAislado(false); return; }
+
+    if (centrar) visor.current?.enfocar(indice);
+
+    // Al llegar desde la búsqueda o desde una estructura relacionada, la
+    // pieza tiene que verse aunque su sistema estuviera apagado o ella misma
+    // oculta: si no, la docente la elige y no pasa nada visible.
+    setOcultas((previas) => {
+      if (!previas.has(indice)) return previas;
+      const copia = new Set(previas);
+      copia.delete(indice);
+      return copia;
+    });
+    const parte = datos?.partes[indice];
+    if (parte) {
+      const grupo = fuente.grupoDe(parte);
+      setGruposActivos((previos) => (previos.has(grupo) ? previos : new Set(previos).add(grupo)));
     }
-    if (movil) { setPanelInfo(true); setHojaMin(false); }
+
+    if (movil) { setPanelGrupos(false); setPanelInfo(true); setHojaMin(true); }
   }, [datos, fuente, movil]);
+
+  /** Desde la búsqueda o desde «relacionadas»: además de elegir, encuadra. */
+  const irA = useCallback((indice) => {
+    elegir(indice, { centrar: true });
+    setBusqueda("");
+  }, [elegir]);
 
   const alternarGrupo = useCallback((clave) => {
     setGruposActivos((previos) => {
@@ -202,6 +241,13 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
       if (copia.has(clave)) copia.delete(clave); else copia.add(clave);
       return copia;
     });
+    setAtajoActivo(null);
+    setAislado(false);
+  }, []);
+
+  const aplicarAtajo = useCallback((atajo) => {
+    setGruposActivos(new Set(atajo.grupos));
+    setAtajoActivo(atajo.id);
     setAislado(false);
   }, []);
 
@@ -212,6 +258,7 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
       if (copia.has(seleccion)) copia.delete(seleccion); else copia.add(seleccion);
       return copia;
     });
+    setAislado(false);
   }, [seleccion]);
 
   const restablecer = useCallback(() => {
@@ -219,6 +266,7 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
     setOcultas(new Set());
     setAislado(false);
     setGruposActivos(new Set(fuente.visiblesAlInicio));
+    setAtajoActivo(fuente.atajos ? "todas" : null);
     setSeleccion(null);
     setBusqueda("");
   }, [fuente]);
@@ -273,16 +321,17 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
       // pulsa Escape para «deshacer un paso».
       if (inmersivo) { setInmersivo(false); return; }
       if (document.fullscreenElement) { document.exitFullscreen?.(); return; }
+      if (aislado) { setAislado(false); return; }
       if (movil && (panelGrupos || panelInfo)) {
         setPanelGrupos(false); setPanelInfo(false);
         visor.current?.enfocarLienzo();
         return;
       }
-      if (seleccion != null) { setSeleccion(null); setAislado(false); }
+      if (seleccion != null) setSeleccion(null);
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [inmersivo, movil, panelGrupos, panelInfo, seleccion]);
+  }, [inmersivo, movil, panelGrupos, panelInfo, seleccion, aislado]);
 
   /* --------------------------------------------------------------- render */
   if (!soportaWebgl) return <AtlasSinWebgl onVolver={onVolver} />;
@@ -296,7 +345,7 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
     );
   }
 
-  if (!datos) {
+  if (!datos || !modelo) {
     return (
       <div className="atlas atlas--cargando">
         <AtlasCargando progreso={progreso} fase={fase} />
@@ -304,48 +353,79 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
     );
   }
 
-  const estructura = seleccion != null && datos.partes[seleccion]
-    ? {
-      nombre: nombreDe(seleccion),
-      id: datos.partes[seleccion].id,
-      conceptId: datos.partes[seleccion].conceptId,
-      grupo: fuente.grupos[fuente.grupoDe(datos.partes[seleccion])]?.nombre || "—",
-      color: fuente.grupos[fuente.grupoDe(datos.partes[seleccion])]?.color || "#B4C6C4",
-    }
-    : null;
+  const estaOculta = seleccion != null && ocultas.has(seleccion);
 
   const panelDeSistemas = (
     <AtlasSystemsPanel
       grupos={fuente.grupos}
-      conteos={conteos}
+      conteos={modelo.conteos}
       activos={gruposActivos}
+      atajos={fuente.atajos}
+      atajoActivo={atajoActivo}
       etiquetaGrupos={fuente.etiquetaGrupos}
       busqueda={busqueda}
       resultados={resultados}
-      nombreDe={nombreDe}
+      totalVisible={visibles.size}
+      ocultas={ocultas.size}
       minimizado={!movil && gruposMin}
       campoRef={campoBusqueda}
       onBuscar={setBusqueda}
       onAlternar={alternarGrupo}
-      onTodo={() => { setGruposActivos(new Set(Object.keys(fuente.grupos))); setAislado(false); }}
-      onNada={() => { setGruposActivos(new Set()); setAislado(false); }}
-      onElegir={elegir}
+      onAtajo={aplicarAtajo}
+      onTodo={() => { setGruposActivos(new Set(Object.keys(fuente.grupos))); setAtajoActivo("todas"); setAislado(false); }}
+      onNada={() => { setGruposActivos(new Set()); setAtajoActivo(null); setAislado(false); }}
+      onElegir={irA}
+      onRestaurarOcultas={() => setOcultas(new Set())}
       onMinimizar={() => setGruposMin((v) => !v)}
     />
   );
 
   const panelDeInfo = (
     <AtlasInfoPanel
-      estructura={estructura}
+      ficha={ficha}
       aislado={aislado}
-      oculta={seleccion != null && ocultas.has(seleccion)}
+      oculta={estaOculta}
       minimizado={!movil && infoMin}
       onOcultar={alternarOculta}
       onAislar={() => setAislado((v) => !v)}
+      onCentrar={() => seleccion != null && visor.current?.enfocar(seleccion)}
       onQuitar={() => { setSeleccion(null); setAislado(false); }}
+      onIrA={irA}
       onMinimizar={() => setInfoMin((v) => !v)}
     />
   );
+
+  /* Resumen de la hoja móvil: se ve también plegada, que es el estado en el
+     que se abre al tocar una estructura. */
+  const resumenMovil = ficha ? (
+    <>
+      <p className="atlas-resumen__nombre">{ficha.nombre}</p>
+      <p className="atlas-resumen__sistema">
+        <span className="atlas-ficha__color" style={{ background: ficha.color }} aria-hidden="true" />
+        {ficha.sistema}
+        {ficha.fdi != null && <span className="atlas-resumen__fdi">FDI {ficha.fdi}</span>}
+      </p>
+      <div className="atlas-resumen__acciones">
+        <button type="button" onClick={() => visor.current?.enfocar(seleccion)}>
+          <Crosshair size={18} aria-hidden="true" /> {T.centrar}
+        </button>
+        <button
+          type="button"
+          className={aislado ? "is-activo" : ""}
+          aria-pressed={aislado}
+          onClick={() => setAislado((v) => !v)}
+        >
+          <Focus size={18} aria-hidden="true" />
+          {aislado ? T.dejarDeAislar : T.aislar}
+        </button>
+        <button type="button" onClick={alternarOculta}>
+          {estaOculta
+            ? <><Eye size={18} aria-hidden="true" /> {T.mostrar}</>
+            : <><EyeOff size={18} aria-hidden="true" /> {T.ocultar}</>}
+        </button>
+      </div>
+    </>
+  ) : null;
 
   const clases = [
     "atlas",
@@ -372,14 +452,27 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
           <AtlasCanvas
             bloques={datos.bloques}
             partes={datos.partes}
-            colores={colores}
-            enfoque={enfoque}
+            colores={modelo.colores}
+            enfoque={modelo.enfoque}
             visibles={visibles}
             seleccion={seleccion}
+            senalado={senalado}
             onSeleccion={elegir}
+            onSenalar={setSenalado}
             onFallo={() => setFallo("carga")}
             visorRef={visor}
           />
+
+          {/* Aviso de aislamiento: sin él, alguien que aísla y luego gira el
+              modelo puede pensar que se rompió porque «desapareció todo». */}
+          {aislado && (
+            <div className="atlas__aviso" role="status">
+              <span>{T.aislamientoActivo}</span>
+              <button type="button" onClick={() => setAislado(false)}>
+                <X size={15} aria-hidden="true" /> {T.salirDelAislamiento}
+              </button>
+            </div>
+          )}
 
           <AtlasToolbar
             movil={movil}
@@ -426,6 +519,7 @@ export default function AtlasShell({ fuente, titulo, subtitulo, onVolver }) {
             abierta={panelInfo}
             titulo={T.informacion}
             minimizada={hojaMin}
+            resumen={resumenMovil}
             onMinimizar={() => setHojaMin((v) => !v)}
             onCerrar={() => { setPanelInfo(false); visor.current?.enfocarLienzo(); }}
           >

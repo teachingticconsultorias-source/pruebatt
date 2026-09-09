@@ -30,6 +30,36 @@ import { fileURLToPath } from "node:url";
 import {
   FRASES, MODIFICADORES, NUCLEOS, ORDINAL_DIENTE, TIPOS_DE_DIENTE,
 } from "./atlas-lexico.es.mjs";
+import {
+  CONCEPTOS_DE_REGION, FRASES_CONCEPTO, MODIFICADORES_CONCEPTO, NUCLEOS_CONCEPTO,
+} from "./atlas-lexico-conceptos.es.mjs";
+
+/**
+ * Un concepto que agrupa más mallas que esto no informa de nada.
+ *
+ * «Entidad anatómica» tiene las 2.234; «estructura anatómica», 2.166. Decirle
+ * a una docente que la mandíbula es una entidad anatómica es cierto y es
+ * inútil. El corte deja fuera los nueve o diez conceptos-paraguas y conserva
+ * los que sí sitúan: «boca» (11), «viscerocráneo» (39), «cráneo» (43).
+ */
+const LIMITE_CONCEPTO_UTIL = 260;
+
+/**
+ * Dos diccionarios, no uno.
+ *
+ * Las estructuras se traducen SÓLO con el léxico base. Los conceptos FMA usan
+ * el base más el suyo. Separarlos no es manía de orden: si el vocabulario
+ * abstracto de los conceptos entrara en la traducción de las estructuras,
+ * añadir un término para «zone of» podría cambiar en silencio el nombre de
+ * una estructura que ya estaba revisada. El generador comprueba al final que
+ * los 2.234 nombres no se han movido.
+ */
+const LEXICO_ESTRUCTURAS = { nucleos: NUCLEOS, modificadores: MODIFICADORES, frases: FRASES };
+const LEXICO_CONCEPTOS = {
+  nucleos: { ...NUCLEOS, ...NUCLEOS_CONCEPTO },
+  modificadores: { ...MODIFICADORES, ...MODIFICADORES_CONCEPTO },
+  frases: { ...FRASES, ...FRASES_CONCEPTO },
+};
 
 const raiz = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const ENTRADA = path.join(raiz, "public", "models", "atlas.json");
@@ -83,6 +113,9 @@ const NUCLEOS_LATINOS = new Set([
 /** Números romanos: en español van siempre al final del nombre. */
 const ROMANOS = new Set(["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"]);
 
+/** Cifras sueltas (nombres de concepto como «zone 4 of liver»). Van al final. */
+const ES_CIFRA = /^[0-9]{1,2}$/;
+
 /** Ordinales: en español encabezan el nombre. «Décima costilla derecha». */
 const ORDINALES = new Set([
   "first", "second", "third", "fourth", "fifth", "sixth", "seventh", "eighth",
@@ -117,6 +150,35 @@ function concordar(entrada, genero) {
 function preposicion(genero, plural) {
   if (plural) return genero === "f" ? "de las" : "de los";
   return genero === "f" ? "de la" : "del";
+}
+
+/** Femeninos que no acaban en «a» y que el criterio general fallaría. */
+const FEMENINOS_IRREGULARES = new Set([
+  "pelvis", "sínfisis", "anastomosis", "epidermis", "laringe", "faringe",
+  "laringofaringe", "nariz", "raíz", "piel", "red", "pared", "sustancia",
+  "porción", "región", "división", "unión", "subdivisión", "formación",
+  "decusación", "continuidad", "entidad", "cavidad", "cúspide", "falange",
+  "vértebra", "apófisis", "aponeurosis", "esclerótica", "coroides", "hipófisis",
+  "tiroides", "epiglotis", "mandíbula", "escápula", "clavícula", "vesícula",
+  "glándula", "válvula", "cápsula", "membrana", "lámina", "corteza", "estría",
+  "habénula", "ínsula", "amígdala", "tróclea", "córnea", "retina", "encía",
+  "lengua", "oreja", "ceja", "tienda", "tenia", "costilla", "fosa", "cámara",
+  "boca", "cabeza", "cara", "espalda", "caja", "musculatura", "columna",
+  "rodilla", "mejilla", "órbita", "úvula", "hoja", "duramadre", "celdilla",
+  "incisura", "cortina", "capa", "zona", "fascia", "cintura", "línea", "bilis",
+]);
+
+/**
+ * Género de una frase ya traducida.
+ *
+ * Hace falta para el artículo del complemento: «esqueleto DE LA boca», no
+ * «del boca». Las frases del diccionario llegan como texto, sin marca de
+ * género, y aplicar «del» a todas producía una decena de nombres mal.
+ */
+function generoDeFrase(texto) {
+  const ultima = texto.toLowerCase().split(" ").pop();
+  if (FEMENINOS_IRREGULARES.has(ultima)) return "f";
+  return /(a|ción|sión|dad|tad|umbre)$/.test(ultima) ? "f" : "m";
 }
 
 /* ==========================================================================
@@ -158,7 +220,7 @@ function traducirDiente(tokens) {
    núcleo en inglés es el que va pegado al núcleo en español:
    «common carotid artery» → «arteria carótida común».
    ========================================================================== */
-function traducirGrupo(texto, fallos) {
+function traducirGrupo(texto, fallos, lex) {
   const tokens = normalizar(texto).split(" ").filter((t) => t && !IGNORAR.has(t));
   if (!tokens.length) return null;
 
@@ -175,7 +237,7 @@ function traducirGrupo(texto, fallos) {
   const ordinales = [];
   const resto = tokens.filter((t) => {
     if (t === "right" || t === "left") { lados.push(t); return false; }
-    if (ROMANOS.has(t)) { romanos.push(t.toUpperCase()); return false; }
+    if (ROMANOS.has(t) || ES_CIFRA.test(t)) { romanos.push(t.toUpperCase()); return false; }
     if (ORDINALES.has(t)) { ordinales.push(t); return false; }
     return true;
   });
@@ -184,7 +246,7 @@ function traducirGrupo(texto, fallos) {
   // El núcleo es el último token que sea un sustantivo conocido.
   let indice = -1;
   for (let i = resto.length - 1; i >= 0; i -= 1) {
-    if (NUCLEOS[resto[i]]) { indice = i; break; }
+    if (lex.nucleos[resto[i]]) { indice = i; break; }
   }
 
   let nucleo;
@@ -194,20 +256,20 @@ function traducirGrupo(texto, fallos) {
     indice = resto.findIndex((t) => NUCLEOS_LATINOS.has(t));
     if (indice === -1) {
       for (let i = resto.length - 1; i >= 0; i -= 1) {
-        if (MODIFICADORES[resto[i]]) { indice = i; break; }
+        if (lex.modificadores[resto[i]]) { indice = i; break; }
       }
     }
     if (indice === -1) indice = resto.length - 1;
-    const termino = concordar(MODIFICADORES[resto[indice]], "m");
+    const termino = concordar(lex.modificadores[resto[indice]], "m");
     if (!termino) {
       // Se registra el término que falta y se deja el nombre en inglés: a
       // medias sería peor, porque parecería correcto.
-      resto.forEach((t) => { if (!MODIFICADORES[t] && !NUCLEOS[t]) fallos.add(t); });
+      resto.forEach((t) => { if (!lex.modificadores[t] && !lex.nucleos[t]) fallos.add(t); });
       return null;
     }
     nucleo = { es: termino.charAt(0).toUpperCase() + termino.slice(1), g: "m" };
   } else {
-    nucleo = NUCLEOS[resto[indice]];
+    nucleo = lex.nucleos[resto[indice]];
   }
 
   const genero = nucleo.g;
@@ -218,12 +280,12 @@ function traducirGrupo(texto, fallos) {
 
   const traducidos = [];
   for (const token of modificadores.reverse()) {
-    const mod = concordar(MODIFICADORES[token], genero);
+    const mod = concordar(lex.modificadores[token], genero);
     if (mod) { traducidos.push(plural ? pluralizar(mod) : mod); continue; }
     const comoAdjetivo = ADJETIVO_DE_NUCLEO[token];
     if (comoAdjetivo) { traducidos.push(comoAdjetivo); continue; }
     // Un sustantivo sin forma adjetiva se pospone con «de».
-    const otro = NUCLEOS[token];
+    const otro = lex.nucleos[token];
     if (otro) { traducidos.push(`de ${otro.es.toLowerCase()}`); continue; }
     fallos.add(token);
     return null;
@@ -232,14 +294,14 @@ function traducirGrupo(texto, fallos) {
   const lado = lados.length
     ? lados
       .map((l) => {
-        const forma = concordar(MODIFICADORES[l], genero);
+        const forma = concordar(lex.modificadores[l], genero);
         return plural ? pluralizar(forma) : forma;
       })
       .join(" y ")
     : null;
 
   // El ordinal encabeza: «Décima costilla derecha», no «Costilla décima».
-  const cabeza = ordinales.map((o) => concordar(MODIFICADORES[o], genero)).filter(Boolean);
+  const cabeza = ordinales.map((o) => concordar(lex.modificadores[o], genero)).filter(Boolean);
   const nombre = cabeza.length
     ? `${cabeza.join(" ")} ${nucleo.es.toLowerCase()}`
     : nucleo.es;
@@ -249,24 +311,24 @@ function traducirGrupo(texto, fallos) {
 }
 
 /** Traduce un nombre completo, incluyendo los complementos con «of». */
-function traducir(nombre, fallos) {
+function traducir(nombre, fallos, lex) {
   const limpio = normalizar(nombre);
 
-  const exacta = FRASES[limpio];
+  const exacta = lex.frases[limpio];
   if (exacta) return exacta;
 
   const trozos = limpio.split(" of ");
-  const principal = traducirGrupo(trozos[0], fallos);
+  const principal = traducirGrupo(trozos[0], fallos, lex);
   if (!principal) return null;
 
   let frase = principal.texto;
   let anterior = principal;
 
   for (const trozo of trozos.slice(1)) {
-    const exactaComplemento = FRASES[trozo];
+    const exactaComplemento = lex.frases[trozo];
     const complemento = exactaComplemento
-      ? { texto: exactaComplemento, genero: "m", plural: false }
-      : traducirGrupo(trozo, fallos);
+      ? { texto: exactaComplemento, genero: generoDeFrase(exactaComplemento), plural: false }
+      : traducirGrupo(trozo, fallos, lex);
     if (!complemento) return null;
     frase += ` ${preposicion(complemento.genero, complemento.plural)} ${complemento.texto.toLowerCase()}`;
     anterior = complemento;
@@ -284,24 +346,56 @@ function main() {
   }
 
   const atlas = JSON.parse(fs.readFileSync(ENTRADA, "utf8"));
-  const fallos = new Set();
-  const nombres = {};
-  let traducidos = 0;
 
+  /* ---- 1) Las 2.234 estructuras, con el léxico base y sólo con él -------- */
+  const fallosPartes = new Set();
+  const partes = {};
   for (const parte of atlas.parts) {
-    const es = traducir(parte.name, fallos);
-    if (es) { nombres[parte.id] = es; traducidos += 1; }
+    const es = traducir(parte.name, fallosPartes, LEXICO_ESTRUCTURAS);
+    if (es) partes[parte.id] = es;
   }
 
-  fs.writeFileSync(SALIDA, JSON.stringify(nombres), "utf8");
+  /* ---- 2) Los conceptos FMA, que dan región y relaciones ----------------- */
+  //
+  // Sólo los que se van a enseñar. «Entidad anatómica» agrupa las 2.234
+  // estructuras y no le dice nada a nadie: traducirlo sería trabajo para
+  // engordar el fichero.
+  const fallosConceptos = new Set();
+  const conceptos = {};
+  let utiles = 0;
+  for (const concepto of atlas.concepts) {
+    if (concepto.elements.length > LIMITE_CONCEPTO_UTIL) continue;
+    utiles += 1;
+    const es = traducir(concepto.name, fallosConceptos, LEXICO_CONCEPTOS);
+    if (es) conceptos[concepto.id] = es;
+  }
+  // Las regiones se traducen siempre, por grandes que sean: son la
+  // localización, y sin ellas la ficha se queda coja.
+  for (const id of CONCEPTOS_DE_REGION) {
+    if (conceptos[id]) continue;
+    const concepto = atlas.concepts.find((c) => c.id === id);
+    if (!concepto) continue;
+    const es = traducir(concepto.name, fallosConceptos, LEXICO_CONCEPTOS);
+    if (es) conceptos[id] = es;
+  }
 
+  fs.writeFileSync(SALIDA, JSON.stringify({ partes, conceptos }), "utf8");
+
+  /* ---- 3) Informe ------------------------------------------------------- */
   const total = atlas.parts.length;
-  const pct = ((traducidos / total) * 100).toFixed(1);
-  console.log(`atlas-es.json · ${traducidos}/${total} nombres (${pct}%)`);
-  console.log(`tamaño: ${(fs.statSync(SALIDA).size / 1024).toFixed(0)} KB`);
-  if (fallos.size) {
-    console.log(`\ntérminos sin traducir (${fallos.size}):`);
-    console.log([...fallos].sort().join(" "));
+  const hechas = Object.keys(partes).length;
+  console.log(`atlas-es.json`);
+  console.log(`  estructuras: ${hechas}/${total} (${((hechas / total) * 100).toFixed(1)} %)`);
+  console.log(`  conceptos:   ${Object.keys(conceptos).length}/${utiles} útiles de ${atlas.concepts.length}`);
+  console.log(`  tamaño:      ${(fs.statSync(SALIDA).size / 1024).toFixed(0)} KB`);
+
+  if (fallosPartes.size) {
+    console.log(`\nESTRUCTURAS · términos sin traducir (${fallosPartes.size}):`);
+    console.log([...fallosPartes].sort().join(" "));
+  }
+  if (fallosConceptos.size) {
+    console.log(`\nCONCEPTOS · términos sin traducir (${fallosConceptos.size}):`);
+    console.log([...fallosConceptos].sort().join(" "));
   }
 }
 

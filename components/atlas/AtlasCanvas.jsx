@@ -23,7 +23,9 @@ export default function AtlasCanvas({
   enfoque,
   visibles,
   seleccion,
+  senalado,
   onSeleccion,
+  onSenalar,
   onFallo,
   visorRef,
 }) {
@@ -31,6 +33,8 @@ export default function AtlasCanvas({
   const visor = useRef(null);
   const alSeleccionar = useRef(onSeleccion);
   alSeleccionar.current = onSeleccion;
+  const alSenalar = useRef(onSenalar);
+  alSenalar.current = onSenalar;
 
   useEffect(() => {
     const nodo = contenedor.current;
@@ -45,6 +49,7 @@ export default function AtlasCanvas({
         colores,
         enfoque,
         alSeleccionar: (indice) => alSeleccionar.current?.(indice),
+        alSenalar: (indice) => alSenalar.current?.(indice),
       });
     } catch (error) {
       console.error("[sciverse:atlas]", error?.message || error);
@@ -67,8 +72,8 @@ export default function AtlasCanvas({
   }, [bloques, partes, colores, enfoque, onFallo, visorRef]);
 
   useEffect(() => {
-    visor.current?.aplicar({ visibles, seleccion });
-  }, [visibles, seleccion]);
+    visor.current?.aplicar({ visibles, seleccion, senalado });
+  }, [visibles, seleccion, senalado]);
 
   return (
     <div
