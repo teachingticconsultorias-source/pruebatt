@@ -115,6 +115,21 @@ export const Errors = {
       details
     ),
 
+  /**
+   * El proveedor está saturado y los reintentos no bastaron.
+   *
+   * Mensaje distinto del genérico a propósito: aquí no hay nada que la
+   * docente pueda corregir, sólo esperar unos segundos, y decírselo evita
+   * que reintente cinco veces seguidas empeorando la saturación.
+   */
+  aiBusy: (details = null) =>
+    new AppError(
+      "AI_BUSY",
+      "Kantu está recibiendo muchas solicitudes en este momento. Inténtalo nuevamente en unos segundos.",
+      503,
+      details
+    ),
+
   /** El proveedor bloqueó la petición o la respuesta por sus filtros. */
   aiBlocked: (details = null) =>
     new AppError(

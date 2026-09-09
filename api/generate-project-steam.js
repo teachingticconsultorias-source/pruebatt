@@ -19,6 +19,7 @@ import { Errors, sendError } from "./_lib/errors.js";
 import { requireUser } from "./_lib/supabase.js";
 import { generateJson } from "./_lib/gemini.js";
 import { withCredit } from "./_lib/credits.js";
+import { cantidadPermitida, planEfectivo } from "./_lib/entitlements.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 
 const SUGGESTION_SCHEMA={type:"object",properties:{suggestion:{type:"string"}},required:["suggestion"]};
@@ -55,7 +56,17 @@ export default async function handler(req, res) {
     }
 
     const { mode = "generate", field, form = {} } = req.body || {};
-    const weeks = Math.min(4, Math.max(1, Number(form.duracionSemanas || 2)));
+
+    // La duración la limita el plan, no el navegador: Free llega a 2 semanas,
+    // Pro a 4. Se recorta en vez de rechazar — si la interfaz se quedó con un
+    // valor viejo, entregar un proyecto de 2 semanas es mejor servicio que un
+    // error a mitad del formulario.
+    const entitlements = await planEfectivo(auth);
+    const weeks = cantidadPermitida(form.duracionSemanas, {
+      minimo: 1,
+      limite: entitlements.capacidades.steam_max_weeks,
+      porDefecto: Math.min(2, entitlements.capacidades.steam_max_weeks),
+    }).valor;
 
     // ---------- Sugerencia de un campo: barata, no consume crédito ----------
     if (mode === "suggestion") {

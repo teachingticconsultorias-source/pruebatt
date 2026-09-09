@@ -54,6 +54,37 @@ const API_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 /** Tiempo máximo por llamada a Gemini. */
 const DEFAULT_TIMEOUT_MS = 45_000;
 
+/**
+ * Intentos totales, contando el primero.
+ *
+ * Tres y no más: cada reintento es tiempo que la docente pasa esperando con
+ * la pantalla bloqueada. A partir del tercero, decírselo y dejar que vuelva
+ * cuando quiera es mejor servicio que seguir insistiendo.
+ */
+const MAX_INTENTOS = 3;
+
+/** Sólo esto se repite: puede salir bien la próxima vez. */
+const ESTADOS_TRANSITORIOS = new Set([429, 500, 502, 503, 504]);
+
+function esTransitorio(status) {
+  return ESTADOS_TRANSITORIOS.has(status);
+}
+
+/**
+ * Espera creciente con dispersión.
+ *
+ * La dispersión no es cosmética: si cien docentes reciben un 429 en el mismo
+ * segundo y todas reintentan exactamente a los 500 ms, vuelven a chocar
+ * todas a la vez. El azar las separa.
+ */
+export function esperaDeReintento(intento, azar = Math.random) {
+  const base = intento === 1 ? 500 : 1500;
+  const rango = intento === 1 ? 700 : 1500;
+  return Math.round(base + azar() * rango);
+}
+
+const dormir = (ms) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
 let warnedAboutDefaultModel = false;
 
 /** Modelo configurado. Nunca lanza: siempre hay un modelo válido. */
@@ -164,41 +195,88 @@ export async function generateJson({
 
   const base = { requestId, tool, maxOutputTokens, thinkingLevel: thinkingLevel || null };
 
-  let response;
-  try {
-    response = await fetch(`${API_BASE}/${model}:generateContent`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(timeoutMs),
-    });
-  } catch (error) {
-    const timeout = error?.name === "TimeoutError" || error?.name === "AbortError";
-    registrar("error", { ...base, model, ok: false, durationMs: Date.now() - inicio,
-                         motivo: timeout ? "TIMEOUT" : "RED" });
-    if (timeout) throw Errors.aiTimeout();
-    throw Errors.aiUnavailable(error?.message);
-  }
+  // ---- Intentos con espera creciente -------------------------------------
+  //
+  // Sólo se repite lo que puede salir bien la próxima vez. Un 400 o un
+  // bloqueo de seguridad darían exactamente el mismo resultado tres veces:
+  // repetirlos sólo alarga la espera de la docente y gasta cuota.
+  let response = null;
+  let payload = null;
+  let intento = 0;
 
-  let payload;
-  try {
-    payload = await response.json();
-  } catch {
-    registrar("error", { ...base, model, ok: false, durationMs: Date.now() - inicio,
-                         motivo: "RESPUESTA_NO_JSON", status: response.status });
-    throw Errors.aiUnavailable("respuesta no parseable de Gemini");
+  while (intento < MAX_INTENTOS) {
+    intento += 1;
+    const inicioIntento = Date.now();
+    let transitorio = null;
+
+    try {
+      response = await fetch(`${API_BASE}/${model}:generateContent`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+    } catch (error) {
+      const timeout = error?.name === "TimeoutError" || error?.name === "AbortError";
+      // Un timeout no se reintenta: ya se esperaron 45 segundos y repetir
+      // dejaría a la docente mirando la pantalla el doble de tiempo.
+      if (timeout) {
+        registrar("error", { ...base, model, intento, ok: false,
+                             durationMs: Date.now() - inicio, motivo: "TIMEOUT" });
+        throw Errors.aiTimeout();
+      }
+      transitorio = { motivo: "RED", status: null, error };
+    }
+
+    if (!transitorio) {
+      try {
+        payload = await response.json();
+      } catch {
+        registrar("error", { ...base, model, intento, ok: false,
+                             durationMs: Date.now() - inicio,
+                             motivo: "RESPUESTA_NO_JSON", status: response.status });
+        throw Errors.aiUnavailable("respuesta no parseable de Gemini");
+      }
+
+      if (response.ok) break;
+
+      if (!esTransitorio(response.status)) {
+        registrar("error", { ...base, model, intento, ok: false,
+                             durationMs: Date.now() - inicio,
+                             motivo: "HTTP_" + response.status, reintentable: false });
+        throw Errors.aiUnavailable(
+          `HTTP ${response.status}: ${payload?.error?.message || "sin detalle"}`
+        );
+      }
+      transitorio = { motivo: "HTTP_" + response.status, status: response.status };
+    }
+
+    // A partir de aquí es transitorio: o se reintenta, o se agotaron.
+    const ultimo = intento >= MAX_INTENTOS;
+    const espera = ultimo ? 0 : esperaDeReintento(intento);
+
+    registrar(ultimo ? "error" : "warn", {
+      ...base, model, intento, ok: false,
+      status: transitorio.status ?? null,
+      durationMs: Date.now() - inicioIntento,
+      retryDelayMs: espera,
+      motivo: ultimo ? `${transitorio.motivo}_AGOTADO` : transitorio.motivo,
+      reintentable: true,
+    });
+
+    if (ultimo) {
+      if (transitorio.status === 429) throw Errors.aiBusy();
+      throw Errors.aiUnavailable(
+        transitorio.error?.message ||
+        `HTTP ${transitorio.status}: ${payload?.error?.message || "sin detalle"}`
+      );
+    }
+
+    await dormir(espera);
   }
 
   const durationMs = Date.now() - inicio;
-
-  if (!response.ok) {
-    // El mensaje de Gemini se queda en el log, no viaja al cliente.
-    registrar("error", { ...base, model, ok: false, durationMs,
-                         motivo: "HTTP_" + response.status });
-    throw Errors.aiUnavailable(
-      `HTTP ${response.status}: ${payload?.error?.message || "sin detalle"}`
-    );
-  }
+  base.intentos = intento;
 
   const candidate = payload?.candidates?.[0];
   const finishReason = candidate?.finishReason || null;

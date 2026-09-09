@@ -9,6 +9,7 @@ import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 import { sendGenerationError } from "./_lib/errors.js";
 import { validateSessionResource, qualityError } from "./_lib/quality.js";
 import { guardGenerationInput, wrapTeacherContext } from "./_lib/input-guard.js";
+import { cantidadPermitida, planEfectivo } from "./_lib/entitlements.js";
 
 const GEMINI_MODEL = getGeminiModel();
 
@@ -350,7 +351,32 @@ export default async function handler(req,res){
     // Se usan los valores ya normalizados por el guard, no los crudos.
     Object.assign(c, guard.values);
     c.volatile = guard.flags.volatile;
-    const p=prompt(type,c,req.body?.options||{});
+    // EL SERVIDOR DECIDE LAS CANTIDADES.
+    //
+    // `prompt()` recortaba a rangos fijos (3..8 criterios, 5..15 preguntas)
+    // sin mirar el plan. Ahora el tope sale del plan efectivo de la docente,
+    // resuelto con su propio token: lo que llegue en el cuerpo no manda.
+    const entitlements = await planEfectivo({ token, url: supabaseUrl, key: supabaseKey });
+    const opciones = { ...(req.body?.options || {}) };
+    const cap = entitlements.capacidades;
+
+    const topeCriterios =
+      type === "rubric" ? cap.rubric_max_criteria
+      : type === "checklist" ? cap.checklist_max_criteria
+      : cap.rating_scale_max_criteria;
+
+    if (["rubric", "checklist", "rating_scale"].includes(type)) {
+      opciones.numeroCriterios = cantidadPermitida(opciones.numeroCriterios, {
+        minimo: 3, limite: topeCriterios, porDefecto: Math.min(4, topeCriterios),
+      }).valor;
+    }
+    if (["reading", "questionnaire", "worksheet"].includes(type)) {
+      opciones.questionCount = cantidadPermitida(opciones.questionCount, {
+        minimo: 5, limite: cap.reading_max_questions, porDefecto: 8,
+      }).valor;
+    }
+
+    const p=prompt(type,c,opciones);
 
     async function intentar(reforzar){
       const texto = reforzar

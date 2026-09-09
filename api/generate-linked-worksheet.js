@@ -1,4 +1,5 @@
-import { getGeminiModel } from "./_lib/gemini.js";
+import { generateJson, getGeminiModel } from "./_lib/gemini.js";
+import { cantidadPermitida, planEfectivo } from "./_lib/entitlements.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 import { sendGenerationError } from "./_lib/errors.js";
 import { validateWorksheet, qualityError } from "./_lib/quality.js";
@@ -81,7 +82,18 @@ export default async function handler(req, res) {
     const form = req.body?.form || {};
     const session = req.body?.session || {};
     const options = req.body?.options || {};
-    const questionCount = Math.min(Math.max(Number(options.questionCount || 10), 5), 20);
+    // EL SERVIDOR DECIDE CUÁNTAS PREGUNTAS.
+    //
+    // Antes se recortaba a 5..20 sin mirar el plan: un Free podía pedir 20
+    // editando la petición. Ahora el tope sale del plan efectivo, resuelto
+    // con el token de la propia docente; lo que venga en el cuerpo se ignora.
+    const entitlements = await planEfectivo({ token, url: supabaseUrl, key: supabaseKey });
+    const cupo = cantidadPermitida(options.questionCount, {
+      minimo: 5,
+      limite: entitlements.capacidades.worksheet_max_questions,
+      porDefecto: 10,
+    });
+    const questionCount = cupo.valor;
     const allowed = ["abierta", "opcion_multiple", "lectura", "verdadero_falso"];
     const selected = arr(options.questionTypes).filter(x => allowed.includes(x));
     const questionTypes = selected.length ? selected : ["opcion_multiple"];
