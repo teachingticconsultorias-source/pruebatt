@@ -34,6 +34,7 @@
 import { randomUUID } from "node:crypto";
 
 import { callRpc } from "./supabase.js";
+import { Errors } from "./errors.js";
 
 /** Formato aceptado: algo estable, corto y sin datos personales dentro. */
 const CLAVE_VALIDA = /^[A-Za-z0-9._:-]{8,120}$/;
@@ -54,7 +55,39 @@ export function claveDeOperacion(req) {
 
   const texto = String(cruda ?? "").trim();
   if (CLAVE_VALIDA.test(texto)) return { clave: texto, delCliente: true };
+
+  // RESPALDO, NO PROTECCIÓN.
+  //
+  // Una clave generada aquí es distinta en cada petición, así que no
+  // identifica nada: dos clics producirían dos claves y dos cobros. Se
+  // conserva sólo para que una ruta sin crédito no se rompa, y se registra
+  // para que nunca se confunda con idempotencia efectiva.
+  console.warn("[sciverse:idempotencia]", JSON.stringify({
+    estado: "sin_clave_del_cliente",
+    detalle: "peticion sin Idempotency-Key; el respaldo NO protege de duplicados",
+  }));
   return { clave: `srv-${randomUUID()}`, delCliente: false };
+}
+
+/**
+ * Clave OBLIGATORIA para las generaciones que cobran.
+ *
+ * DECISIÓN: aquí no vale el respaldo. Sin clave del cliente no hay forma de
+ * saber que dos peticiones son el mismo intento, así que la protección
+ * simplemente no existiría — y existiendo a medias es peor, porque los logs
+ * dirían que sí. Antes que cobrar dos veces en silencio, se rechaza con un
+ * mensaje que la docente puede resolver recargando.
+ *
+ * El coste conocido es una pestaña abierta desde antes del despliegue: su
+ * primera generación fallará con este error. Es un fallo visible y
+ * reversible, frente a un cobro doble que nadie detectaría.
+ *
+ * @throws AppError 400 IDEMPOTENCY_KEY_REQUIRED
+ */
+export function claveObligatoria(req) {
+  const { clave, delCliente } = claveDeOperacion(req);
+  if (!delCliente) throw Errors.idempotencyKeyRequired();
+  return clave;
 }
 
 /**
@@ -72,8 +105,12 @@ export async function reservarOperacion({ token, url, key, clave, tool }) {
       token, url, key,
       body: { p_key: clave, p_tool: tool || "desconocida" },
     });
-    if (r?.status === "started") return { estado: "nueva" };
-    return { estado: "duplicada", detalle: r || null };
+    if (r?.status === "started") {
+      return { estado: "nueva", reintento: r?.reintento === true };
+    }
+    // `processing` y `completed` son duplicados distintos para quien espera:
+    // uno significa «aguanta» y el otro «ya está hecho».
+    return { estado: "duplicada", previo: r?.estado_previo || "processing" };
   } catch (error) {
     const mensaje = String(error?.details || error?.message || "");
     // La función aún no existe: se sigue sin protección, avisando.

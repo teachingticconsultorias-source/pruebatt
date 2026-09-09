@@ -103,9 +103,13 @@ export async function withCredit(auth, operation) {
     });
     if (reserva.estado === "duplicada") {
       console.warn("[sciverse:idempotencia]", JSON.stringify({
-        tool: auth.reason, estado: "duplicada",
+        tool: auth.reason, estado: "duplicada", previo: reserva.previo,
       }));
-      throw Errors.duplicateOperation();
+      // Se distinguen porque para quien espera significan cosas distintas:
+      // «aguanta» y «ya está hecho».
+      throw reserva.previo === "completed"
+        ? Errors.operationAlreadyCompleted()
+        : Errors.operationInProgress();
     }
   }
 

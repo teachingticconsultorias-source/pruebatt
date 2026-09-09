@@ -877,6 +877,8 @@ export default function SessionResourcesPanel({
   onCreditsChange,
   onUpgrade
 }) {
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("recurso");
   const [generated, setGenerated] = useState({});
   const [loadingType, setLoadingType] = useState("");
   const [error, setError] = useState("");
@@ -952,10 +954,7 @@ export default function SessionResourcesPanel({
 
       const response = await fetch("/api/generate-session-resource", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${authSession.access_token}`
-        },
+        headers: cabecerasDeGeneracion(authSession.access_token, claveOp.obtener()),
         body: JSON.stringify({
           type,
           session,
@@ -974,8 +973,11 @@ export default function SessionResourcesPanel({
         if (response.status === 429 && onUpgrade) {
           onUpgrade();
         }
-        throw new Error(data?.error || "No se pudo generar el recurso.");
+        throw new Error(mensajeDeRespuesta(data, "No se pudo generar el recurso."));
       }
+
+      // El intento termino: la proxima generacion sera otra operacion.
+      claveOp.renovar();
 
       setGenerated(current => ({
         ...current,

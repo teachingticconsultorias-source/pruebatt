@@ -142,6 +142,8 @@ async function downloadWord(type,r,form){
 }
 
 export default function SessionNextFlow({session,form={},profile={},onBackToSession,onFinish,onUpgrade}){
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("recurso");
   const [step,setStep]=useState("choice"); // choice | types | configure | result
   const [group,setGroup]=useState("");
   const [type,setType]=useState("");
@@ -175,12 +177,14 @@ export default function SessionNextFlow({session,form={},profile={},onBackToSess
     try{
       const {data:{session:auth}}=await supabase.auth.getSession();
       if(!auth?.access_token) throw new Error("Inicia sesión para continuar.");
-      const r=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${auth.access_token}`},body:JSON.stringify({
+      const r=await fetch("/api/generate-session-resource",{method:"POST",headers:cabecerasDeGeneracion(auth.access_token,claveOp.obtener()),body:JSON.stringify({
         type,session,form,profile,
         options:{numeroCriterios:criteria,scaleType,questionCount,readingLength}
       })});
       const d=await r.json();
-      if(!r.ok){if(r.status===429&&onUpgrade)onUpgrade();throw new Error(d?.error||"No se pudo generar");}
+      if(!r.ok){if(r.status===429&&onUpgrade)onUpgrade();throw new Error(mensajeDeRespuesta(d,"No se pudo generar"));}
+      // El intento termino: la proxima generacion sera otra operacion.
+      claveOp.renovar();
       setResource(d.resource);await save(d.resource);window.dispatchEvent(new CustomEvent("sciverse:credit-used",{detail:d._credits}));setStep("result");
     }catch(e){setError(e?.message||"No se pudo generar");}finally{setLoading(false);}
   }

@@ -10,6 +10,11 @@ import { sendGenerationError } from "./_lib/errors.js";
 import { validateSessionResource, qualityError } from "./_lib/quality.js";
 import { guardGenerationInput, wrapTeacherContext } from "./_lib/input-guard.js";
 import { cantidadPermitida, planEfectivo } from "./_lib/entitlements.js";
+import { cerrarOperacion, claveObligatoria, reservarOperacion } from "./_lib/idempotency.js";
+import { Errors } from "./_lib/errors.js";
+
+/** Etiqueta de la operación en los logs y en `ai_operations.tool`. */
+const TOOL_IDEMPOTENCIA = "recurso";
 
 const GEMINI_MODEL = getGeminiModel();
 
@@ -320,6 +325,7 @@ export default async function handler(req,res){
   if(!token || !supabaseUrl || !supabaseKey) return res.status(401).json({error:"Inicia sesión para continuar"});
 
   let consumptionId=null;
+  let claveOperacion=null;
   try{
     const auth=await fetch(`${supabaseUrl}/auth/v1/user`,{headers:{apikey:supabaseKey,Authorization:`Bearer ${token}`}});
     if(!auth.ok) return res.status(401).json({error:"Tu sesión venció. Vuelve a iniciar sesión."});
@@ -336,6 +342,32 @@ export default async function handler(req,res){
       }));
       return res.status(400).json({ error: guard.error, code: guard.code });
     }
+
+    // ---- IDEMPOTENCIA · antes de cobrar -----------------------------------
+    //
+    // El orden importa y es el único correcto: reservar, y sólo si la reserva
+    // es nuestra, cobrar y generar. Si esto fuera después del consumo, un
+    // duplicado ya habría cobrado antes de ser rechazado.
+    //
+    // Este endpoint no pasa por `withCredit` —tiene su propio consumo y su
+    // propio refund—, así que la reserva se hace aquí explícitamente.
+    claveOperacion = claveObligatoria(req);
+    const reserva = await reservarOperacion({
+      token, url: supabaseUrl, key: supabaseKey,
+      clave: claveOperacion, tool: TOOL_IDEMPOTENCIA,
+    });
+    if (reserva.estado === "duplicada") {
+      console.warn("[sciverse:idempotencia]", JSON.stringify({
+        tool: TOOL_IDEMPOTENCIA, estado: "duplicada", previo: reserva.previo,
+      }));
+      const duplicado = reserva.previo === "completed"
+        ? Errors.operationAlreadyCompleted()
+        : Errors.operationInProgress();
+      return res.status(duplicado.status).json({
+        error: duplicado.message, code: duplicado.code,
+      });
+    }
+    const reservada = reserva.estado === "nueva";
 
     const quota=await rpc("consume_ai_credit",token,supabaseUrl,supabaseKey);
     if(!quota?.ok) return res.status(429).json({
@@ -422,11 +454,21 @@ El intento anterior dejó secciones vacías o menos preguntas de las pedidas. Es
       resource=await intentar(false);
     }
 
+    if (reservada) {
+      await cerrarOperacion({ token, url: supabaseUrl, key: supabaseKey,
+                              clave: claveOperacion, estado: "completed" });
+    }
     return res.status(200).json({resource,type,_credits:quota,model:GEMINI_MODEL});
   }catch(e){
     if(consumptionId){
       await rpc("refund_ai_credit",token,supabaseUrl,supabaseKey,
                 {p_consumption:consumptionId}).catch(()=>{});
+    }
+    // Se marca fallida, no completada: así un reintento legítimo con la misma
+    // clave puede volver a empezar en vez de quedarse atascado.
+    if(claveOperacion){
+      await cerrarOperacion({ token, url: supabaseUrl, key: supabaseKey,
+                              clave: claveOperacion, estado: "failed" }).catch(()=>{});
     }
     return sendGenerationError(res, e, "el recurso", Boolean(consumptionId));
   }

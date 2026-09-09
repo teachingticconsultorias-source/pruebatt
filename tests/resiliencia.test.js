@@ -639,8 +639,11 @@ describe("idempotencia · una operación lógica, un cobro", () => {
     const auth = { ...AUTH, idempotencyKey: "op-abcdef123456" };
 
     await withCredit(auth, operacion);
+    // La primera cerro en `completed`, asi que la segunda no significa
+    // «espera un momento» sino «esto ya se genero». Son dos mensajes
+    // distintos para la docente y por eso son dos codigos distintos.
     await expect(withCredit(auth, operacion)).rejects.toMatchObject({
-      code: "DUPLICATE_OPERATION", status: 409,
+      code: "AI_OPERATION_ALREADY_COMPLETED", status: 409,
     });
 
     expect(c.consume).toBe(1);
@@ -660,7 +663,7 @@ describe("idempotencia · una operación lógica, un cobro", () => {
     const ko = resultados.filter((r) => r.status === "rejected");
     expect(ok).toHaveLength(1);
     expect(ko).toHaveLength(1);
-    expect(ko[0].reason.code).toBe("DUPLICATE_OPERATION");
+    expect(ko[0].reason.code).toBe("AI_OPERATION_IN_PROGRESS");
     expect(c.consume).toBe(1);
   });
 
@@ -886,7 +889,7 @@ describe("idempotencia · adquisición atómica", () => {
     const ko = r.filter((x) => x.status === "rejected");
     expect(ok).toHaveLength(1);
     expect(ko).toHaveLength(1);
-    expect(ko[0].reason.code).toBe("DUPLICATE_OPERATION");
+    expect(ko[0].reason.code).toBe("AI_OPERATION_IN_PROGRESS");
     expect(pg.contador.consume).toBe(1);
     expect(pg.contador.gemini).toBe(0);   // el perdedor no llamó a Gemini
   });
@@ -908,7 +911,7 @@ describe("idempotencia · adquisición atómica", () => {
     global.fetch = vi.fn(pg.comoUsuario("ana"));
 
     await expect(withCredit({ ...AUTH(), idempotencyKey: "op-completa-000001" }, operacion))
-      .rejects.toMatchObject({ code: "DUPLICATE_OPERATION" });
+      .rejects.toMatchObject({ code: "AI_OPERATION_ALREADY_COMPLETED" });
     expect(pg.contador.consume).toBe(0);
   });
 
@@ -917,7 +920,7 @@ describe("idempotencia · adquisición atómica", () => {
     global.fetch = vi.fn(pg.comoUsuario("ana"));
 
     await expect(withCredit({ ...AUTH(), idempotencyKey: "op-encurso-000001" }, operacion))
-      .rejects.toMatchObject({ code: "DUPLICATE_OPERATION" });
+      .rejects.toMatchObject({ code: "AI_OPERATION_IN_PROGRESS" });
     expect(pg.contador.consume).toBe(0);
   });
 

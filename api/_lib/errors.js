@@ -115,6 +115,35 @@ export const Errors = {
       details
     ),
 
+  /** Sin clave del cliente no hay idempotencia posible. Ver idempotency.js. */
+  idempotencyKeyRequired: () =>
+    new AppError(
+      "IDEMPOTENCY_KEY_REQUIRED",
+      "Tu sesión quedó desactualizada. Recarga la página y vuelve a intentarlo.",
+      400
+    ),
+
+  /** Ya hay una petición idéntica generando ahora mismo. */
+  operationInProgress: () =>
+    new AppError(
+      "AI_OPERATION_IN_PROGRESS",
+      "Esta generación ya se está procesando. Espera unos segundos.",
+      409
+    ),
+
+  /**
+   * Ya se generó con esta misma clave.
+   *
+   * NO se devuelve el resultado anterior: `ai_operations` guarda el estado,
+   * no la salida. Inventar una respuesta sería peor que decir la verdad.
+   */
+  operationAlreadyCompleted: () =>
+    new AppError(
+      "AI_OPERATION_ALREADY_COMPLETED",
+      "Esta generación ya fue procesada. Revisa el resultado o tu biblioteca.",
+      409
+    ),
+
   /**
    * La misma operación ya está en curso o terminó.
    *
@@ -233,7 +262,8 @@ export function sendGenerationError(res, error, pieza = "el material", devuelto 
 
   // Errores con código propio: su mensaje ya está pensado para la docente y
   // dice algo más útil que el genérico. Se respetan tal cual.
-  if (error?.code === "AI_BUSY" || error?.code === "DUPLICATE_OPERATION") {
+  if (["AI_BUSY", "DUPLICATE_OPERATION", "AI_OPERATION_IN_PROGRESS",
+       "AI_OPERATION_ALREADY_COMPLETED", "IDEMPOTENCY_KEY_REQUIRED"].includes(error?.code)) {
     return res.status(error.status).json({ error: error.message, code: error.code });
   }
 

@@ -20,7 +20,7 @@ import { requireUser } from "./_lib/supabase.js";
 import { generateJson } from "./_lib/gemini.js";
 import { withCredit } from "./_lib/credits.js";
 import { cantidadPermitida, planEfectivo } from "./_lib/entitlements.js";
-import { claveDeOperacion } from "./_lib/idempotency.js";
+import { claveObligatoria } from "./_lib/idempotency.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 
 const SUGGESTION_SCHEMA={type:"object",properties:{suggestion:{type:"string"}},required:["suggestion"]};
@@ -160,7 +160,7 @@ REGLAS:
     const { result, credits } = await withCredit(
       { token: auth.token, url: auth.url, key: auth.key,
         reason: "generate-project-steam",
-        idempotencyKey: claveDeOperacion(req).clave },
+        idempotencyKey: claveObligatoria(req) },
       () =>
         generateJson({
           prompt,

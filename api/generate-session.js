@@ -10,7 +10,7 @@ import { Errors, sendError } from "./_lib/errors.js";
 import { requireUser } from "./_lib/supabase.js";
 import { generateJson } from "./_lib/gemini.js";
 import { withCredit, chargesCreditForModule } from "./_lib/credits.js";
-import { claveDeOperacion } from "./_lib/idempotency.js";
+import { claveObligatoria } from "./_lib/idempotency.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 
 const SESSION_SCHEMA = {
@@ -353,7 +353,7 @@ El reto debe exigir colaboración real, asignar roles complementarios y terminar
           url: auth.url,
           key: auth.key,
           reason: `generate-session:${mode || "session"}`,
-          idempotencyKey: claveDeOperacion(req).clave,
+          idempotencyKey: claveObligatoria(req),
         },
         runGeneration
       );

@@ -23,6 +23,9 @@ import "./components/landing/landing.css";
 import { FREE_WEEKLY_AI_LIMIT, whatsappLink, CONTACT } from "./config/plans.js";
 import { usePlanCatalog } from "./components/usePlanCatalog.js";
 import { useMyPlan, nombreDePlan } from "./components/useMyPlan.js";
+import {
+  cabecerasDeGeneracion, esDuplicado, mensajeDeRespuesta, useClaveDeOperacion,
+} from "./lib/idempotencia.js";
 import "./library.css";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
@@ -1028,6 +1031,8 @@ const GENERATOR_CAPACITIES = {
 const PERU_REGIONS = ["Amazonas","Áncash","Apurímac","Arequipa","Ayacucho","Cajamarca","Callao","Cusco","Huancavelica","Huánuco","Ica","Junín","La Libertad","Lambayeque","Lima","Loreto","Madre de Dios","Moquegua","Pasco","Piura","Puno","San Martín","Tacna","Tumbes","Ucayali"];
 
 function SteamGenerator({ initialGrade = "primaria", documentType = "session", profile = {}, completeClass = false, onNext = null }) {
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("sesion");
   const documentNames = { session: "sesión de aprendizaje", project: "proyecto STEAM", rubric: "rúbrica de evaluación", checklist: "lista de cotejo" };
   const documentName = documentNames[documentType] || documentNames.session;
   const sectionLabels = documentType === "project" ? ["Inicio y reto", "Fases del proyecto", "Cierre y socialización", "Producto final"] : documentType === "rubric" ? ["Aplicación", "Uso de los descriptores", "Retroalimentación", "Evidencia evaluada"] : documentType === "checklist" ? ["Antes de observar", "Durante la observación", "Después de observar", "Evidencia verificada"] : ["Inicio", "Desarrollo", "Cierre", "Producto STEAM"];
@@ -1075,7 +1080,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
       const { data: sessionData } = await supabase.auth.getSession();
       const token=sessionData.session?.access_token; if(!token) throw new Error("Tu sesión venció. Vuelve a iniciar sesión.");
       const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({mode:"suggestion",field,form})});
-      const data=await response.json(); if(!response.ok) throw new Error(data.error||"No se pudo generar la sugerencia");
+      const data=await response.json(); if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar la sugerencia"));
       update(field,data.suggestion);
     } catch(e) { setError(e.message); } finally { setSuggesting(null); }
   }
@@ -1096,11 +1101,21 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
         setActiveModule(moduleName);
         const response = await fetch("/api/generate-session", {
           method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+          headers: cabecerasDeGeneracion(accessToken, claveOp.obtener()),
           body: JSON.stringify({ mode: "module", module: moduleName, form, previous: generated }),
         });
         const data = await response.json();
-        if (!response.ok) throw new Error(`${moduleLabels[moduleName]}: ${data.error || "no pudo completarse"}`);
+        if (!response.ok) {
+          throw new Error(`${moduleLabels[moduleName]}: ${mensajeDeRespuesta(data, "no pudo completarse")}`);
+        }
+        // Una sesión son cuatro llamadas pero UNA creación: sólo `alignment`
+        // cobra y, por tanto, sólo él reserva. En cuanto responde, su
+        // operación está cerrada y la clave deja de valer. Los otros tres
+        // módulos la llevan igual —el servidor no la usa— y el próximo clic
+        // en Generar, incluido el reintento tras fallar un módulo posterior,
+        // empieza con una clave nueva. Sin esto ese reintento chocaría con un
+        // 409 «ya fue procesada» sin tener resultado que enseñar.
+        if (moduleName === "alignment") claveOp.renovar();
         if (!data.result) throw new Error(`${moduleLabels[moduleName]} no llegó completo.`);
         generated[moduleName] = data.result;
         setCompletedModules((current) => [...current, moduleName]);
@@ -1293,6 +1308,8 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
 }
 
 function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentType = "checklist", initialContext = null, profile = {}, completeClass = false, onNext = null }) {
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("instrumento");
   const isRubric = instrumentType === "rubric";
   const instrumentName = isRubric ? "rúbrica" : "lista de cotejo";
   const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
@@ -1316,7 +1333,7 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
   async function suggestEvidence() {
     if (!form.tema.trim() || !form.region || !form.capacidades.length) return setError("Completa el tema, la región y las capacidades para que Kantu pueda sugerir la evidencia.");
     setSuggesting(true); setError(null);
-    try { const token = await getToken(); const response = await fetch("/api/generate-session", { method:"POST", headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`}, body:JSON.stringify({mode:"suggestion",field:"evidencia",form}) }); const data=await response.json(); if(!response.ok) throw new Error(data.error||"No se pudo sugerir la evidencia"); update("evidencia",data.suggestion); } catch(e) { setError(e.message); } finally { setSuggesting(false); }
+    try { const token = await getToken(); const response = await fetch("/api/generate-session", { method:"POST", headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`}, body:JSON.stringify({mode:"suggestion",field:"evidencia",form}) }); const data=await response.json(); if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo sugerir la evidencia")); update("evidencia",data.suggestion); } catch(e) { setError(e.message); } finally { setSuggesting(false); }
   }
   function continueFlow() {
     setError(null);
@@ -1328,9 +1345,11 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
     setLoading(true); setError(null); setInstrument(null);
     try {
       const token=await getToken();
-      const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${token}`},body:JSON.stringify({mode:"instrument",instrumentType,form})});
+      const response=await fetch("/api/generate-session",{method:"POST",headers:cabecerasDeGeneracion(token,claveOp.obtener()),body:JSON.stringify({mode:"instrument",instrumentType,form})});
       const data=await response.json();
       if(!response.ok) throw new Error(data.error||`No se pudo generar la ${instrumentName}`);
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();
       if(!data.instrument) throw new Error("El instrumento no llegó completo. Intenta nuevamente.");
       setInstrument(data.instrument); setEditing(false);
       try { await instrumentSave.save({tipo:instrumentType,titulo:data.instrument.titulo||form.tema,form,contenido:data.instrument}); }
@@ -2494,6 +2513,8 @@ function getTeacherFullName(profile={}) {
 }
 
 function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("steam");
   const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
   const [step,setStep]=useState(1);
   const [form,setForm]=useState({
@@ -2536,7 +2557,7 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
       const {data:{session}}=await supabase.auth.getSession();
       const response=await fetch("/api/generate-project-steam",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"suggestion",field,form})});
       const data=await response.json();
-      if(!response.ok) throw new Error(data.error||"No se pudo generar la sugerencia.");
+      if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar la sugerencia."));
       update(field,data.suggestion);
     }catch(e){setError(e.message);}finally{setSuggesting("");}
   }
@@ -2553,9 +2574,11 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
     setLoading(true);setError("");setResult(null);
     try{
       const {data:{session}}=await supabase.auth.getSession();
-      const response=await fetch("/api/generate-project-steam",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"generate",form,profile:{nombres:profile.nombres,apellidos:profile.apellidos,ie:profile.ie}})});
+      const response=await fetch("/api/generate-project-steam",{method:"POST",headers:cabecerasDeGeneracion(session?.access_token||"",claveOp.obtener()),body:JSON.stringify({mode:"generate",form,profile:{nombres:profile.nombres,apellidos:profile.apellidos,ie:profile.ie}})});
       const data=await response.json();
-      if(!response.ok) throw new Error(data.error||"No se pudo generar el proyecto STEAM.");
+      if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar el proyecto STEAM."));
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();
       setResult(data.project);
       try{
         await saveTeacherMaterial({
@@ -2689,6 +2712,8 @@ ${sessions}`;
 }
 
 function ResourceFromAI({ kind, initialGrade="primaria", profile={} }) {
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("recurso");
   const isReading=kind==="reading";
   const [form,setForm]=useState({nivel:initialGrade==="secundaria"?"Secundaria":"Primaria",grado:initialGrade==="secundaria"?"2.º":"4.º",area:isReading?"Comunicación":"Ciencia y Tecnología",tema:"",proposito:"",contexto:""});
   const [loading,setLoading]=useState(false);const [resource,setResource]=useState(null);const [error,setError]=useState("");
@@ -2701,8 +2726,10 @@ function ResourceFromAI({ kind, initialGrade="primaria", profile={} }) {
     try{
       const {data:{session}}=await supabase.auth.getSession();
       const type=isReading?"reading":"worksheet";
-      const response=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({type,form:{...form,competencia:"",capacidades:[],evidencia:"",region:""},options:{readingLength:"media"}})});
-      const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo generar el material.");
+      const response=await fetch("/api/generate-session-resource",{method:"POST",headers:cabecerasDeGeneracion(session?.access_token||"",claveOp.obtener()),body:JSON.stringify({type,form:{...form,competencia:"",capacidades:[],evidencia:"",region:""},options:{readingLength:"media"}})});
+      const data=await response.json();if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar el material."));
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();
       setResource(data.resource);
       await resourceSave.save({tipo:type,titulo:data.resource.titulo||form.tema,form:{...form,tema:form.tema},contenido:data.resource});
     }catch(e){setError(e.message);}finally{setLoading(false);}
@@ -2800,6 +2827,8 @@ ${cuerpo}${metacognicion}`;
 }
 
 function ValuationScaleGenerator({initialGrade="primaria",profile={}}){
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("escala");
   const initialLevel=initialGrade==="secundaria"?"Secundaria":"Primaria";
   const [form,setForm]=useState({nivel:initialLevel,grado:initialLevel==="Primaria"?"4.º":"2.º",area:"Ciencia y Tecnología",tema:"",competencia:CNEB.indaga,capacidades:GENERATOR_CAPACITIES[CNEB.indaga],evidencia:"",region:""});
   const [resource,setResource]=useState(null);const[loading,setLoading]=useState(false);const[error,setError]=useState("");
@@ -2812,8 +2841,10 @@ function ValuationScaleGenerator({initialGrade="primaria",profile={}}){
     setLoading(true);setError("");
     try{
       const {data:{session}}=await supabase.auth.getSession();
-      const response=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({type:"rating_scale",form,options:{numeroCriterios:2,scaleType:"frecuencia"}})});
-      const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo generar la escala.");setResource(data.resource);
+      const response=await fetch("/api/generate-session-resource",{method:"POST",headers:cabecerasDeGeneracion(session?.access_token||"",claveOp.obtener()),body:JSON.stringify({type:"rating_scale",form,options:{numeroCriterios:2,scaleType:"frecuencia"}})});
+      const data=await response.json();if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar la escala."));
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();setResource(data.resource);
       try{await saveTeacherMaterial({tipo:"rating_scale",titulo:data.resource.titulo||form.tema,form,contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.");}
     }catch(e){setError(e.message);}finally{setLoading(false);}
   }
@@ -2856,6 +2887,8 @@ function FlowChoiceCard({icon:Icon,title,description,onClick,accent="teal"}){
 }
 
 function LinkedWorksheetGenerator({sessionContext,profile={},onFinish}){
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("ficha");
   const [questionTypes,setQuestionTypes]=useState(["opcion_multiple"]);
   const [questionCount,setQuestionCount]=useState(10);
   const [loading,setLoading]=useState(false);
@@ -2871,9 +2904,11 @@ function LinkedWorksheetGenerator({sessionContext,profile={},onFinish}){
     setLoading(true);setError("");
     try{
       const {data:{session:authSession}}=await supabase.auth.getSession();
-      const response=await fetch("/api/generate-linked-worksheet",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${authSession?.access_token||""}`},body:JSON.stringify({session,form,options:{questionTypes,questionCount}})});
+      const response=await fetch("/api/generate-linked-worksheet",{method:"POST",headers:cabecerasDeGeneracion(authSession?.access_token||"",claveOp.obtener()),body:JSON.stringify({session,form,options:{questionTypes,questionCount}})});
       const data=await response.json();
-      if(!response.ok)throw new Error(data.error||"No se pudo generar la ficha de trabajo.");
+      if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar la ficha de trabajo."));
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();
       setResource(data.resource);
       try{await saveTeacherMaterial({tipo:"worksheet",titulo:data.resource.titulo||session.titulo||form.tema,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.");}
     }catch(e){setError(e.message);}finally{setLoading(false);}
@@ -2924,17 +2959,25 @@ function LinkedWorksheetGenerator({sessionContext,profile={},onFinish}){
 }
 
 function LinkedReadingGenerator({sessionContext,profile={},onFinish}){
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("lectura");
   const [loading,setLoading]=useState(false);const[error,setError]=useState("");const[resource,setResource]=useState(null);
   const form=sessionContext?.form||{};const session=sessionContext?.result||{};
-  async function generate(){setLoading(true);setError("");try{const {data:{session:authSession}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${authSession?.access_token||""}`},body:JSON.stringify({type:"reading",form,session,options:{readingLength:"media"}})});const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo generar la ficha de lectura.");setResource(data.resource);try{await saveTeacherMaterial({tipo:"reading",titulo:data.resource.titulo,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.");}}catch(e){setError(e.message)}finally{setLoading(false)}}
+  async function generate(){setLoading(true);setError("");try{const {data:{session:authSession}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session-resource",{method:"POST",headers:cabecerasDeGeneracion(authSession?.access_token||"",claveOp.obtener()),body:JSON.stringify({type:"reading",form,session,options:{readingLength:"media"}})});const data=await response.json();if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar la ficha de lectura."));
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();setResource(data.resource);try{await saveTeacherMaterial({tipo:"reading",titulo:data.resource.titulo,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.");}}catch(e){setError(e.message)}finally{setLoading(false)}}
   function text(){if(!resource)return"";const groups={literal:[],inferencial:[],critico:[]};(resource.preguntas||[]).forEach(q=>(groups[q.nivel]||groups.critico).push(q.pregunta));return `FICHA DE LECTURA\n\nNombre y apellidos: ______________________________________________\nInstitución educativa: ___________________________________________\nGrado y sección: ${form.grado||""}${form.seccion?` · ${form.seccion}`:""}\nÁrea / curso: ${form.area||"Comunicación"}\nFecha: ${form.fecha||""}\nDocente: ${getTeacherFullName(profile)}\n\n${resource.titulo}\n\n${resource.texto}\n\nNIVEL LITERAL\n${groups.literal.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL INFERENCIAL\n${groups.inferencial.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL CRÍTICO\n${groups.critico.map((q,i)=>`${i+1}. ${q}\n______________________________________________`).join("\n")}\n\nNIVEL REFLEXIVO\n1. ¿Cómo relacionas lo leído con una experiencia de tu vida?\n______________________________________________\n2. ¿Qué enseñanza podrías aplicar en tu entorno?\n______________________________________________`;}
   if(!resource)return <div className="flow-centered-card"><BookOpen size={38}/><h2>Ficha de lectura</h2><p>Kantu creará una lectura alineada a la sesión y preguntas de comprensión.</p>{error&&<p className="wizard-error">{error}</p>}<button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 className="animate-spin" size={16}/>:<Sparkles size={16}/>} {loading?"Generando lectura...":"Generar ficha de lectura"}</button></div>;
   return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadWord("ficha-de-lectura.docx",text(),resource.titulo)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onFinish?.({form,resource})}>Terminar <CheckCircle2 size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
 }
 
 function LinkedRatingScaleGenerator({sessionContext,profile={},onNext}){
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("escala");
   const form=sessionContext?.form||{};const session=sessionContext?.result||{};const[loading,setLoading]=useState(false);const[error,setError]=useState("");const[resource,setResource]=useState(null);
-  async function generate(){setLoading(true);setError("");try{const {data:{session:authSession}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session-resource",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${authSession?.access_token||""}`},body:JSON.stringify({type:"rating_scale",form,session,options:{numeroCriterios:4,scaleType:"frecuencia"}})});const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo generar la escala.");setResource(data.resource);try{await saveTeacherMaterial({tipo:"rating_scale",titulo:data.resource.titulo,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.")}}catch(e){setError(e.message)}finally{setLoading(false)}}
+  async function generate(){setLoading(true);setError("");try{const {data:{session:authSession}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session-resource",{method:"POST",headers:cabecerasDeGeneracion(authSession?.access_token||"",claveOp.obtener()),body:JSON.stringify({type:"rating_scale",form,session,options:{numeroCriterios:4,scaleType:"frecuencia"}})});const data=await response.json();if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo generar la escala."));
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();setResource(data.resource);try{await saveTeacherMaterial({tipo:"rating_scale",titulo:data.resource.titulo,form:{...form,tema:session.titulo||form.tema},contenido:data.resource});}catch(e){console.error(e);setError(describeSaveError(e)+" Tu contenido sigue en pantalla y puedes descargarlo.")}}catch(e){setError(e.message)}finally{setLoading(false)}}
   function text(){if(!resource)return"";return `ESCALA DE VALORACIÓN · REGISTRO DE AULA\n\nInstitución educativa / Docente: ${profile.ie||""} / ${getTeacherFullName(profile)}\nGrado y sección: ${form.grado||""}${form.seccion?` · ${form.seccion}`:""}\nÁrea: ${form.area||""}\nCompetencia: ${resource.competencia||form.competencia||""}\n\nEscala: SIEMPRE · A VECES · NO LO HACE · NO OBSERVADO\n\n${(resource.criterios||[]).map((c,i)=>`CRITERIO ${i+1}: ${c.criterio}`).join("\n")}\n\nN.º | APELLIDOS Y NOMBRES | SIEMPRE | A VECES | NO LO HACE | NO OBSERVADO\n${Array.from({length:25},(_,i)=>`${i+1}. | __________________________ | ___ | ___ | ___ | ___`).join("\n")}`;}
   if(!resource)return <div className="flow-centered-card"><ListChecks size={38}/><h2>Escala de valoración</h2><p>Se generará a partir de la competencia, evidencia y criterios de la sesión.</p>{error&&<p className="wizard-error">{error}</p>}<button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 className="animate-spin" size={16}/>:<Sparkles size={16}/>} Generar escala</button></div>;
   return <div><div className="flow-actionbar"><button onClick={()=>setResource(null)}><Pencil size={15}/> Editar</button><button onClick={()=>downloadWord("escala-de-valoracion.docx",text(),resource.titulo)}><Download size={15}/> Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form,instrument:resource})}>Siguiente <ArrowRight size={16}/></button></div><pre className="resource-document-preview">{text()}</pre></div>;
@@ -4113,13 +4156,17 @@ function RetoModal({reto,onClose,onCreateInstrument,onSave,isSaved}){
 }
 
 function ChallengeCreator({profile,preferredGrade,onCreated}){
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion("reto");
   const [form,setForm]=useState({nivel:preferredGrade,grado:preferredGrade==="primaria"?"5.º":"2.º",area:"Ciencia y Tecnología",tema:"",region:"",duracion:"45",estudiantes:"25",integrantes:"4",materiales:"papelotes, plumones y materiales reciclados",competencia:""});
   const [loading,setLoading]=useState(false); const [error,setError]=useState("");
   const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
   async function generate(){
     if(!form.tema.trim()) return setError("Escribe el tema o problema que deseas trabajar.");
     setLoading(true);setError("");
-    try{const {data:{session}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session",{method:"POST",headers:{"Content-Type":"application/json",Authorization:`Bearer ${session?.access_token||""}`},body:JSON.stringify({mode:"challenge",form})});const data=await response.json();if(!response.ok)throw new Error(data.error||"No se pudo crear el reto");const reto={...data.challenge,id:`kantu-${Date.now()}`,title:data.challenge.titulo,area:form.area,subject:"tecnologia",grades:[form.nivel],teamSize:data.challenge.equipo,icon:Wand2};try{await saveTeacherMaterial({tipo:"challenge",titulo:reto.title,form:{...form,grado:form.grado},contenido:reto});}catch(saveErr){console.error(saveErr);setError(describeSaveError(saveErr)+" El reto se creó, pero no quedó en tu biblioteca.");}onCreated(reto);}catch(e){setError(e.message);}finally{setLoading(false);}
+    try{const {data:{session}}=await supabase.auth.getSession();const response=await fetch("/api/generate-session",{method:"POST",headers:cabecerasDeGeneracion(session?.access_token||"",claveOp.obtener()),body:JSON.stringify({mode:"challenge",form})});const data=await response.json();if(!response.ok) throw new Error(mensajeDeRespuesta(data, "No se pudo crear el reto"));
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();const reto={...data.challenge,id:`kantu-${Date.now()}`,title:data.challenge.titulo,area:form.area,subject:"tecnologia",grades:[form.nivel],teamSize:data.challenge.equipo,icon:Wand2};try{await saveTeacherMaterial({tipo:"challenge",titulo:reto.title,form:{...form,grado:form.grado},contenido:reto});}catch(saveErr){console.error(saveErr);setError(describeSaveError(saveErr)+" El reto se creó, pero no quedó en tu biblioteca.");}onCreated(reto);}catch(e){setError(e.message);}finally{setLoading(false);}
   }
   return <div className="challenge-creator"><div className="challenge-creator-intro"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Construyamos un reto para tu grupo</h2><p>Completa el contexto del aula. Kantu organizará la misión, los roles, las reglas, la secuencia y los criterios observables.</p></div></div><div className="challenge-form">
     <label>Nivel<select value={form.nivel} onChange={e=>update("nivel",e.target.value)}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><label>Grado<input value={form.grado} onChange={e=>update("grado",e.target.value)}/></label><label>Área curricular<select value={form.area} onChange={e=>update("area",e.target.value)}>{["Ciencia y Tecnología","Matemática","Comunicación","Personal Social","Arte y Cultura","Educación para el Trabajo"].map(x=><option key={x}>{x}</option>)}</select></label>
