@@ -328,11 +328,27 @@
   border: 2px solid var(--border-default); background: var(--bg-surface); color: transparent;
   transition: all var(--dur-base) var(--ease-out);
 }
-.sv-genprog__step.is-done .sv-genprog__bullet { background: var(--success-500); border-color: var(--success-500); color: #fff; }
-.sv-genprog__step.is-active .sv-genprog__bullet { border-color: var(--teal-600); color: var(--teal-600); }
+.sv-genprog__step.is-completed .sv-genprog__bullet { background: var(--success-500); border-color: var(--success-500); color: #fff; }
+.sv-genprog__step.is-processing .sv-genprog__bullet { border-color: var(--teal-600); color: var(--teal-600); }
+/* Un modulo que no termino NO puede parecerse a uno que aun no ha empezado. */
+.sv-genprog__step.is-failed .sv-genprog__bullet { border-color: var(--warning-500); color: var(--warning-700); background: var(--warning-50); }
 .sv-genprog__label { color: var(--text-tertiary); }
-.sv-genprog__step.is-done .sv-genprog__label { color: var(--text-secondary); }
-.sv-genprog__step.is-active .sv-genprog__label { color: var(--text-primary); font-weight: var(--weight-semibold); }
+.sv-genprog__step.is-completed .sv-genprog__label { color: var(--text-secondary); }
+.sv-genprog__step.is-processing .sv-genprog__label { color: var(--text-primary); font-weight: var(--weight-semibold); }
+.sv-genprog__step.is-failed .sv-genprog__label { color: var(--warning-700); font-weight: var(--weight-semibold); }
+
+.sv-genprog__aviso {
+  margin: var(--space-5) 0 0; padding: var(--space-4);
+  border: 1px solid var(--warning-500); border-radius: var(--radius-md);
+  background: var(--warning-50);
+}
+.sv-genprog__aviso p {
+  margin: 0 0 var(--space-3); font-size: var(--text-sm);
+  line-height: var(--leading-normal); color: var(--warning-700);
+}
+.sv-genprog__aviso p:last-child { margin-bottom: 0; }
+.sv-genprog__eyebrow { font-weight: 700; text-transform: uppercase; }
+.session-generation-recovery { margin-top: var(--space-5); }
 
 .sv-genprog__track { height: 5px; border-radius: var(--radius-full); background: var(--neutral-100); overflow: hidden; }
 .sv-genprog__track i { display: block; height: 100%; border-radius: inherit; background: var(--teal-500); transition: width var(--dur-slow) var(--ease-out); }

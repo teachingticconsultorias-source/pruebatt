@@ -453,10 +453,12 @@ describe("ia · el arreglo no toca lo que ya funcionaba", () => {
     expect(SESION).toContain("? 5000");                // instrumento
   });
 
-  it("thinkingLevel aparece en exactamente dos sitios, las dos sugerencias", () => {
+  it("las sugerencias conservan minimal y los módulos usan su propia política", () => {
     expect((STEAM.match(/thinkingLevel: "minimal"/g) || []).length).toBe(1);
-    expect((SESION.match(/thinkingLevel: "minimal"/g) || []).length).toBe(1);
-    expect(SESION).toContain('suggestionMode ? { thinkingLevel: "minimal" }');
+    expect(SESION).toMatch(/const thinkingLevel = suggestionMode\s*\? "minimal"\s*: politica\s*\? politica.thinkingLevel\s*: null/);
+    // La configuración enviada a Gemini por cada módulo se ejecuta y verifica
+    // con fetch simulado en clase-completa.test.jsx.
+    expect(SESION).toContain("POLITICA_POR_MODULO[moduleName]");
   });
 
   it("no queda rastro del fallback de thinkingBudget", () => {

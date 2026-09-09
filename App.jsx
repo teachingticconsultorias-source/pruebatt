@@ -33,6 +33,11 @@ import { useMyPlan, nombreDePlan } from "./components/useMyPlan.js";
 import {
   cabecerasDeGeneracion, esDuplicado, mensajeDeRespuesta, useClaveDeOperacion,
 } from "./lib/idempotencia.js";
+import {
+  ETIQUETAS_MODULO, accionDeReintento,
+  componerSesion, generarModulos, mensajeDeModuloFallido, progresoDeModulos,
+  modulosListos, textoDeProgreso,
+} from "./lib/sesion/modulos.js";
 import "./library.css";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, Table, TableRow, TableCell, WidthType, BorderStyle, ShadingType, VerticalAlign, TableLayoutType, PageBreak, Header, Footer, PageNumber, NumberFormat, PageOrientation, VerticalMergeType } from "docx";
 import {
@@ -1061,9 +1066,12 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [activeModule, setActiveModule] = useState(null);
   const [completedModules, setCompletedModules] = useState([]);
+  const [failedModule, setFailedModule] = useState(null);
+  const sesionEnCurso = useRef(null);
+  const generandoSesion = useRef(false);
   const [downloading, setDownloading] = useState(false);
   const [evaluationFlow, setEvaluationFlow] = useState(null);
-  const moduleLabels = { alignment: "Alineación curricular", sequence: "Secuencia didáctica", assessment: "Evaluación formativa", annexes: "Anexos para la clase" };
+  const moduleLabels = ETIQUETAS_MODULO;
   const loadingMessages = activeModule ? [`Kantu está trabajando en: ${moduleLabels[activeModule]}`, activeModule === "alignment" ? "Está relacionando capacidades, desempeños y criterios" : activeModule === "sequence" ? "Está organizando los procesos pedagógicos y didácticos" : activeModule === "assessment" ? "Está verificando criterios y evidencias observables" : "Está preparando recursos listos para usar"] : [`Kantu está analizando la información curricular`, `Está organizando la ${documentName}`];
 
   useEffect(() => {
@@ -1094,71 +1102,56 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
   }
 
   async function handleGenerate() {
-    if (step !== 3) return;
+    if (step !== 3 || generandoSesion.current) return;
+    generandoSesion.current = true;
+    // El formulario y los resultados pertenecen al mismo intento, incluso si
+    // una petición falla. La ref también bloquea dos clics antes del render.
+    if (!sesionEnCurso.current) {
+      sesionEnCurso.current = { form: { ...form }, parciales: {} };
+      setCompletedModules([]);
+      setResult(null);
+      setEvaluationFlow(null);
+    }
+    const intento = sesionEnCurso.current;
+    const desde = failedModule;
     setLoading(true);
+    setFailedModule(null);
     setError(null);
-    setResult(null);
-    setEvaluationFlow(null);
-    setCompletedModules([]);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error("Tu sesión venció. Vuelve a iniciar sesión.");
-      const generated = {};
-      for (const moduleName of ["alignment", "sequence", "assessment", "annexes"]) {
-        setActiveModule(moduleName);
-        const response = await fetch("/api/generate-session", {
-          method: "POST",
-          headers: cabecerasDeGeneracion(accessToken, claveOp.obtener()),
-          body: JSON.stringify({ mode: "module", module: moduleName, form, previous: generated }),
-        });
-        const data = await response.json();
-        if (!response.ok) {
-          throw new Error(`${moduleLabels[moduleName]}: ${mensajeDeRespuesta(data, "no pudo completarse")}`);
-        }
-        // Una sesión son cuatro llamadas pero UNA creación: sólo `alignment`
-        // cobra y, por tanto, sólo él reserva. En cuanto responde, su
-        // operación está cerrada y la clave deja de valer. Los otros tres
-        // módulos la llevan igual —el servidor no la usa— y el próximo clic
-        // en Generar, incluido el reintento tras fallar un módulo posterior,
-        // empieza con una clave nueva. Sin esto ese reintento chocaría con un
-        // 409 «ya fue procesada» sin tener resultado que enseñar.
-        if (moduleName === "alignment") claveOp.renovar();
-        if (!data.result) throw new Error(`${moduleLabels[moduleName]} no llegó completo.`);
-        generated[moduleName] = data.result;
-        setCompletedModules((current) => [...current, moduleName]);
+      const ejecucion = await generarModulos({
+        parciales: intento.parciales,
+        desde,
+        alActivar: setActiveModule,
+        alCompletar: () => setCompletedModules(modulosListos(intento.parciales)),
+        pedir: async (moduleName, previous) => {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData.session?.access_token;
+          if (!accessToken) throw new Error("Sesión vencida");
+          const response = await fetch("/api/generate-session", {
+            method: "POST",
+            headers: cabecerasDeGeneracion(accessToken, claveOp.obtener()),
+            body: JSON.stringify({ mode: "module", module: moduleName, form: intento.form, previous }),
+          });
+          const data = await response.json();
+          if (!response.ok || !data.result) throw new Error("Módulo incompleto");
+          return data.result;
+        },
+      });
+      if (!ejecucion.ok) {
+        setFailedModule(ejecucion.fallido);
+        return;
       }
-      const alignment = generated.alignment;
-      const sequence = generated.sequence;
-      const assessment = generated.assessment;
-      const finalResult={
-        titulo: alignment.titulo,
-        areasSTEAM: form.steam ? [form.area, "Enfoque STEAM"] : [form.area],
-        competenciasCNEB: [form.competencia],
-        capacidadesCNEB: form.capacidades,
-        proposito: alignment.proposito,
-        desempenosPrecisados: alignment.desempenosPrecisados,
-        criteriosDetallados: assessment.criterios,
-        criteriosEvaluacion: assessment.criterios.map((item) => item.criterio),
-        evidencia: alignment.evidencia,
-        enfoquesTransversales: alignment.enfoquesTransversales,
-        preparacionDocente: sequence.preparacionDocente,
-        materiales: sequence.materiales,
-        inicio: sequence.inicio,
-        desarrollo: sequence.desarrollo,
-        cierre: sequence.cierre,
-        tiempos: { inicio: sequence.inicio.minutos, desarrollo: sequence.desarrollo.minutos, cierre: sequence.cierre.minutos },
-        orientacionesDUA: sequence.orientacionesDUA,
-        instrumentoSugerido: assessment.instrumentoSugerido,
-        reflexionesDocente: assessment.reflexionesDocente,
-        anexos: generated.annexes.anexos,
-        productoSTEAM: alignment.evidencia,
-      };
+      const finalResult = componerSesion({ parciales: intento.parciales, form: intento.form });
       setResult(finalResult);
-      await materialSave.save({tipo:documentType,titulo:finalResult.titulo||form.tema,form,contenido:finalResult});
-    } catch (e) {
-      setError(e.message || `No se pudo generar la ${documentName}. Intenta de nuevo en unos segundos.`);
+      // Sólo una creación nueva obtiene otra clave. Los módulos gratuitos
+      // no reservan operaciones y pueden usar la clave de alignment cerrado.
+      claveOp.renovar();
+      sesionEnCurso.current = null;
+      await materialSave.save({tipo:documentType,titulo:finalResult.titulo||intento.form.tema,form:intento.form,contenido:finalResult});
+    } catch {
+      setError(`No se pudo completar la ${documentName}. Lo que ya está listo se conservará.`);
     } finally {
+      generandoSesion.current = false;
       setLoading(false);
       setActiveModule(null);
     }
@@ -1186,7 +1179,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
         onCerrar={kantu.cerrar}
       />
       <div className="wizard-progress">
-        {[{n:1,t:"Datos básicos"},{n:2,t:"Propósito y contexto"},{n:3,t:"Revisión"}].map((item)=><React.Fragment key={item.n}><button className={step>=item.n?"is-active":""} onClick={()=>item.n<step&&setStep(item.n)}><i>{step>item.n?<CheckCircle2 size={15}/>:item.n}</i><span>{item.t}</span></button>{item.n<3&&<b className={step>item.n?"is-complete":""}/>}</React.Fragment>)}
+        {[{n:1,t:"Datos básicos"},{n:2,t:"Propósito y contexto"},{n:3,t:"Revisión"}].map((item)=><React.Fragment key={item.n}><button className={step>=item.n?"is-active":""} disabled={loading || Boolean(failedModule)} onClick={()=>item.n<step&&setStep(item.n)}><i>{step>item.n?<CheckCircle2 size={15}/>:item.n}</i><span>{item.t}</span></button>{item.n<3&&<b className={step>item.n?"is-complete":""}/>}</React.Fragment>)}
       </div>
       <div className="wizard-caption">Paso {step} de 3</div>
 
@@ -1223,19 +1216,18 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
       </div>}
 
       {error&&<p className="wizard-error">{error}</p>}
-      <div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":`Generar ${documentName} con IA`}</button>}</div>
+      <div className="wizard-actions">{step>1&&<button className="wizard-back" disabled={loading || Boolean(failedModule)} onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading || Boolean(failedModule)}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":`Generar ${documentName} con IA`}</button>}</div>
 
-      {loading && (
-        <div className="kantu-generation-overlay">
-          {/* Los pasos son REALES: activeModule y completedModules ya los
-              reporta el generador. No se inventan porcentajes ni tiempos. */}
+      {(loading || failedModule) && (
+        <div className={loading ? "kantu-generation-overlay" : "session-generation-recovery"}>
           <GenerationProgress
-            steps={["alignment", "sequence", "assessment", "annexes"]}
-            labels={moduleLabels}
-            active={activeModule}
-            completed={completedModules}
-            title={`Kantu está creando tu ${documentName}`}
-            subtitle="Suele tomar entre uno y dos minutos. Puedes quedarte en esta pantalla."
+            pasos={progresoDeModulos({ listos: completedModules, activo: activeModule, fallido: failedModule })}
+            resumen={textoDeProgreso(completedModules)}
+            eyebrow={completeClass ? "Paso 1 de 3 · Sesión" : "Sesión · 4 partes"}
+            title={failedModule ? "Tu sesión está pendiente de completar" : "Kantu está preparando tu sesión"}
+            subtitle={failedModule ? "Puedes continuar desde la parte que no terminó." : "Suele tomar entre uno y dos minutos. Puedes quedarte en esta pantalla."}
+            aviso={failedModule ? mensajeDeModuloFallido(failedModule) : null}
+            accion={failedModule ? <button type="button" className="wizard-next" onClick={handleGenerate} disabled={loading}>{accionDeReintento(failedModule)}</button> : null}
             tip="los criterios de evaluación deben empezar con un verbo observable para poder verificarse en la evidencia."
           />
         </div>

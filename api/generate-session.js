@@ -227,6 +227,36 @@ No crees un apartado independiente llamado procesos pedagógicos o procesos did�
   return `${context}\nAlineación: ${JSON.stringify(previous.alignment || {})}\nSecuencia: ${JSON.stringify(previous.sequence || {})}\nEvaluación: ${JSON.stringify(previous.assessment || {})}\nPropón exactamente tres anexos textuales utilizables en clase y coherentes con la evidencia: una ficha o texto base, una actividad para estudiantes y un recurso de apoyo. No afirmes que incluyes imágenes que no fueron generadas. El contenido debe estar listo para copiar a Word y adecuado al grado.`;
 }
 
+// El log de producción agotó 4500 tokens: 2901 de pensamiento + 1583 de
+// salida. Las salidas estimadas son 1069/2643/1040/1407 por módulo.
+// sequence necesita ~5544 contando el pensamiento observado: 6000 da margen
+// y low reduce la competencia por ese presupuesto sin recortar el esquema
+// pedagógico. No es una garantía para cualquier longitud; existe retry manual.
+// alignment y assessment mantienen medium para derivar desempeños y criterios,
+// con 5000 frente a ~3970/~3941 estimados. annexes conserva su techo de 6500.
+const POLITICA_POR_MODULO = {
+  alignment: {
+    // Inferencia de verdad: hay que derivar desempeños y criterios de las
+    // capacidades. Aquí el razonamiento es lo que sostiene la calidad.
+    thinkingLevel: "medium",
+    maxOutputTokens: 5000,
+  },
+  sequence: {
+    thinkingLevel: "low",
+    maxOutputTokens: 6000,
+  },
+  assessment: {
+    // Los criterios tienen que ser observables y verificables en la
+    // evidencia: mismo tipo de inferencia que la alineación.
+    thinkingLevel: "medium",
+    maxOutputTokens: 5000,
+  },
+  annexes: {
+    thinkingLevel: "medium",
+    maxOutputTokens: 6500,
+  },
+};
+
 const SYSTEM_INSTRUCTION =
   "Eres un especialista peruano en planificación curricular y CNEB. Respeta la competencia y capacidades seleccionadas. Formula criterios de evaluación como acciones observables derivadas de las capacidades, el propósito y el tema. Organiza inicio, desarrollo y cierre con procesos pedagógicos y los procesos didácticos pertinentes al área, sin convertirlos en una lista mecánica. Adapta el contexto a la región sin inventar datos locales. Entrega siempre JSON válido.";
 
@@ -388,17 +418,23 @@ El reto debe exigir colaboración real, asignar roles complementarios y terminar
             ? MODULE_SCHEMAS[moduleName]
             : SESSION_SCHEMA;
 
+    const politica = moduleMode ? POLITICA_POR_MODULO[moduleName] : null;
+
     const maxOutputTokens = suggestionMode
       ? 800
       : challengeMode
         ? 4500
         : instrumentMode
           ? 5000
-          : moduleMode
-            ? moduleName === "annexes"
-              ? 6500
-              : 4500
+          : politica
+            ? politica.maxOutputTokens
             : 8192;
+
+    const thinkingLevel = suggestionMode
+      ? "minimal"
+      : politica
+        ? politica.thinkingLevel
+        : null;
 
     const runGeneration = () =>
       generateJson({
@@ -406,10 +442,7 @@ El reto debe exigir colaboración real, asignar roles complementarios y terminar
         systemInstruction: SYSTEM_INSTRUCTION,
         responseSchema,
         maxOutputTokens,
-        // Sólo las sugerencias breves. Las generaciones grandes conservan el
-        // nivel por defecto del modelo: ahí el razonamiento es lo que sostiene
-        // la calidad pedagógica. Ver la explicación en `_lib/gemini.js`.
-        ...(suggestionMode ? { thinkingLevel: "minimal" } : {}),
+        thinkingLevel,
         tool: moduleMode ? `sesion-modulo:${moduleName}` : `sesion:${mode || "session"}`,
       });
 
