@@ -6,3 +6,12 @@ dist/
 
 # Capturas de QA visual (12 MB) — se regeneran con scripts/visual-qa.mjs
 docs/qa/
+
+# Plantillas Word oficiales entregadas como REFERENCIA local.
+# No se versionan: son material de origen, no codigo. La carpeta se
+# conserva en disco; solo se impide subirla por accidente.
+#
+# La barra inicial ANCLA el patron a la raiz. Sin ella, y como en Windows
+# git ignora mayusculas y minusculas, tambien se tragaria lib/docx/plantillas/,
+# que si es codigo.
+/PLANTILLAS/
