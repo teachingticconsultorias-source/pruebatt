@@ -84,6 +84,12 @@ tabla encaja aunque cambie el margen o la orientación.
   ofrecen dos o tres rutas didácticas para que el docente elija una. La
   generación ya elige según la competencia, así que el Word imprime la ruta
   que salió y no las tres.
+- **Anexos.** El bloque abre en hoja nueva, pero un anexo corto NO abre la
+  suya: continúa debajo del anterior. La plantilla salta pagina por anexo
+  porque los suyos son fichas completas; con un anexo de tres lineas ese salto
+  fijo dejaba tres cuartos de pagina en blanco. Solo la guia de trabajo
+  —la actividad para estudiantes— lleva la cabecera de datos del equipo y los
+  espacios de respuesta: una ficha informativa se lee, no se rellena.
 - **Rúbrica en clase completa.** La plantilla de sesión reserva su último anexo
   para una rúbrica analítica. Si el instrumento del paso 2 ES una rúbrica se
   coloca ahí y no se repite como parte independiente; con cotejo o escala la
@@ -98,10 +104,17 @@ node scripts/word-qa.mjs
 npx vitest run tests/word.test.js
 ```
 
-El primer comando genera los diez archivos `01-sesion.docx` a
-`10-sopa-letras.docx` en `docs/qa/word/`, carpeta ya ignorada por Git. Todos los
-datos son ficticios y reproducen la FORMA REAL que entrega la generación
+El primer comando genera once archivos en `docs/qa/word/`: `01-sesion.docx` a
+`10-sopa-letras.docx` mas `11-sesion-dpcc.docx`, el caso real de Secundaria 3.º
+con el area de nombre mas largo del catalogo (DPCC), una IE de 78 caracteres y
+un titulo de 111. La carpeta ya está ignorada por Git. Todos los datos son
+ficticios y reproducen la FORMA REAL que entrega la generación
 —`componerSesion()` y `PROJECT_SCHEMA`—, no una versión reducida.
+
+Para revisarlos con Microsoft Word instalado, la conversión a PDF sólo funciona
+con un proceso que cierre los modales en paralelo: Word rechaza las llamadas COM
+(`RPC_E_CALL_REJECTED`) mientras tiene un diálogo abierto. Ver
+`docs/qa/word/dismiss-word.py`.
 
 Las pruebas empaquetan DOCX reales y abren su OOXML para validar identidad
 (Calibri y la paleta), estructura (las 14 secciones de la sesión, las 9 del

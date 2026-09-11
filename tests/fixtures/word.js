@@ -110,6 +110,48 @@ export const project = { titulo: "Guardianes del agua", situacionSignificativa: 
     { semana: 1, titulo: "Medimos el caudal", competencia: "Resuelve problemas de cantidad", actividadCentral: "Medir y registrar el caudal de cada caño.", evidencia: "Bitácora", criterios: criterios.slice(2, 4), instrumento: "Escala de valoración" },
     { semana: 2, titulo: "Construimos el prototipo", competencia: form.competencia, actividadCentral: "Construir y probar el reductor de caudal.", evidencia: "Prototipo", criterios: criterios.slice(4), instrumento: "Rúbrica" }] };
 
+/* ==========================================================================
+   CASO REAL DPCC · Secundaria 3.o, Puno
+
+   El area de nombre mas largo del catalogo, una IE larga y un titulo de 130+
+   caracteres. Sirve para comprobar que la celda de area no se corta, que la
+   de la IE crece y que desempenos, criterios y enfoques siguen siendo tablas.
+   ========================================================================== */
+export const formDPCC = { docente: "Maria del Carmen Quispe Mamani",
+  institucion: "Institucion Educativa Emblematica Glorioso Colegio Nacional San Carlos de Puno",
+  nivel: "Secundaria", grado: "3.º", seccion: "B",
+  area: "Desarrollo Personal, Ciudadanía y Cívica (DPCC)", region: "Puno",
+  fecha: "2026-09-15", duracion: "90",
+  tema: "Reflexionamos éticamente sobre el impacto de la ciencia y la tecnología en nuestra identidad y comunidad puneña",
+  competencia: "Construye su identidad",
+  capacidades: ["Se valora a sí mismo", "Reflexiona y argumenta éticamente"],
+  proposito: "Argumentar una postura ética sobre el uso de la tecnología en la vida comunitaria.",
+  evidencia: "Ensayo argumentativo con una postura sostenida en al menos dos razones." };
+
+export const sessionDPCC = { ...session,
+  titulo: formDPCC.tema, proposito: formDPCC.proposito, evidencia: formDPCC.evidencia,
+  competenciasCNEB: [formDPCC.competencia], capacidadesCNEB: formDPCC.capacidades,
+  desempenosPrecisados: [
+    { capacidad: "Se valora a sí mismo", desempeno: "Explica cómo la tecnología influye en la construcción de su identidad personal y colectiva, reconociendo practicas de su comunidad." },
+    { capacidad: "Reflexiona y argumenta éticamente", desempeno: "Sustenta una postura ética sobre un dilema tecnológico usando principios y evidencias del contexto puneño." }],
+  criteriosDetallados: [
+    { capacidad: "Se valora a sí mismo", criterio: "Identifica al menos dos prácticas tecnológicas que modifican la vida de su comunidad.", evidenciaObservable: "El ensayo nombra las practicas y explica su efecto." },
+    { capacidad: "Reflexiona y argumenta éticamente", criterio: "Sostiene su postura con dos razones verificables y reconoce una objeción.", evidenciaObservable: "El ensayo presenta razones y responde a la objecion." }],
+  enfoquesTransversales: [
+    { enfoque: "Enfoque de derechos", valor: "Diálogo y concertación", actitudObservable: "Escucha posturas distintas antes de responder." },
+    { enfoque: "Enfoque intercultural", valor: "Respeto a la identidad cultural", actitudObservable: "Reconoce saberes de su comunidad en el debate." }],
+  desarrollo: { minutos: 60, metodologia: "Enfoque de desarrollo personal y ciudadanía activa, centrado en la deliberacion sobre asuntos publicos.",
+    procesos: [
+      { subtitulo: "Problematización", actividad: "Analizan un caso real de uso de tecnología en su comunidad.",
+        preguntasMediacion: ["¿Qué cambia para las personas?", "¿Quién gana y quién pierde?"],
+        acompanamiento: "Orientar sin cerrar la discusion.", evaluacionFormativa: "Observar si distinguen hecho de opinion." },
+      { subtitulo: "Análisis de información", actividad: "Contrastan dos fuentes sobre el mismo caso.",
+        preguntasMediacion: ["¿Qué dice cada fuente?", "¿En qué se contradicen?"],
+        acompanamiento: "Pedir la cita concreta.", evaluacionFormativa: "Revisar que citen la fuente." },
+      { subtitulo: "Acuerdo o toma de decisiones", actividad: "Redactan en equipo una postura comun.",
+        preguntasMediacion: ["¿Qué razon sostiene mejor la postura?"],
+        acompanamiento: "Devolver la pregunta al equipo.", evaluacionFormativa: "Verificar que la postura tenga dos razones." }] } };
+
 const grid = Array.from({ length: 20 }, (_, y) => Array.from({ length: 20 }, (_, x) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[(x + y) % 26]));
 for (const [i, c] of [..."AGUA"].entries()) grid[0][i] = c;
 export const wordsearch = { titulo: "El agua", palabras: ["AGUA"], gridData: { grid, gridSize: 20,
@@ -146,3 +188,5 @@ export const fixtures = [
   ["07-ficha-trabajo.docx", "worksheet", worksheet], ["08-ficha-lectura.docx", "reading", reading],
   ["09-reto-grupal.docx", "challenge", challenge], ["10-sopa-letras.docx", "wordsearch", wordsearch],
 ];
+/** El caso DPCC se revisa aparte porque lleva su propio formulario. */
+export const fixturasConFormulario = [["11-sesion-dpcc.docx", "session", sessionDPCC, formDPCC]];

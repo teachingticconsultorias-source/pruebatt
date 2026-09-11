@@ -4,8 +4,9 @@ import JSZip from "jszip";
 import { Packer } from "docx";
 import { buildDocument, buildCompleteClass } from "../lib/docx/exporters.js";
 import { documentFrom, section, textBlocks, filename } from "../lib/docx/core.js";
-import { challenge, complete, fixtures, form, formLargo, instrument, instrumentoLargo,
-  project, reading, session, sessionLarga, worksheet, wordsearch } from "./fixtures/word.js";
+import { challenge, complete, fixtures, form, formDPCC, formLargo, instrument,
+  instrumentoLargo, project, reading, session, sessionDPCC, sessionLarga,
+  worksheet, wordsearch } from "./fixtures/word.js";
 
 async function unpack(doc) {
   const zip = await JSZip.loadAsync(await Packer.toBuffer(doc));
@@ -234,11 +235,15 @@ describe("Word · identidad y estructura de las plantillas", () => {
     expect(xml).toContain("Recojo de datos y análisis de resultados");
   });
 
-  it("cada anexo empieza en página nueva", async () => {
+  it("el bloque de anexos abre en página nueva y no desperdicia hojas", async () => {
     const { xml } = await unpack(sesion());
     expect(xml).toContain("ANEXOS PARA LA CLASE");
-    // Uno antes del bloque de anexos y uno entre cada par.
-    expect((xml.match(/w:type="page"/g) || []).length).toBeGreaterThanOrEqual(3);
+    const saltos = (xml.match(/w:type="page"/g) || []).length;
+    // Al menos uno: los anexos NO continúan debajo de las reflexiones.
+    expect(saltos).toBeGreaterThanOrEqual(1);
+    // Y como mucho uno por anexo: un anexo de tres líneas no abre hoja propia,
+    // que es lo que dejaba tres cuartos de página en blanco.
+    expect(saltos).toBeLessThanOrEqual(session.anexos.length);
   });
 
   it("no genera anexos vacíos si el recurso no los trae", async () => {
@@ -362,5 +367,123 @@ describe("Word · resistencia al contenido largo", () => {
       expect(xml, nombre).not.toMatch(/undefined|\[object Object\]|\bnull\b|\*\*|##|`|\|/);
       expect(xml, nombre).not.toContain("_____");
     }
+  });
+});
+
+/* ============================================================================
+   FIDELIDAD A LA MAQUETA · lo que NO puede volver a ser texto corrido
+
+   El encargo de correccion señala el riesgo concreto: que alguien sustituya una
+   tabla por parrafos «Capacidad: … / Desempeño: …». Estas pruebas fallan si eso
+   ocurre, porque comprueban que el dato vive DENTRO de un <w:tbl>.
+   ========================================================================== */
+describe("Word · la sesión reproduce la maqueta, no la parafrasea", () => {
+  const construye = (resource = session, formulario = form) =>
+    buildDocument("session", { form: formulario, resource });
+
+  /** ¿Aparece este texto dentro de alguna tabla del documento? */
+  const enTabla = (xml, texto) => tables(xml).some(t => t.includes(texto));
+
+  it("las cinco estructuras de la primera mitad son tablas de verdad", async () => {
+    const { xml } = await unpack(construye());
+    // Datos generales
+    expect(enTabla(xml, "IE Demostración")).toBe(true);
+    expect(enTabla(xml, "Ciencia y Tecnología")).toBe(true);
+    // Propósitos
+    expect(enTabla(xml, session.proposito)).toBe(true);
+    expect(enTabla(xml, "Evidencia")).toBe(true);
+    // Desempeños
+    expect(enTabla(xml, session.desempenosPrecisados[0].desempeno)).toBe(true);
+    // Criterios
+    expect(enTabla(xml, session.criteriosDetallados[0].criterio)).toBe(true);
+    expect(enTabla(xml, "Evidencia observable")).toBe(true);
+    // Enfoques
+    expect(enTabla(xml, session.enfoquesTransversales[0].actitudObservable)).toBe(true);
+  });
+
+  it("NO existe la forma «Capacidad: … / Desempeño: …» como sustituto de tabla", async () => {
+    const { xml } = await unpack(construye());
+    for (const patron of ["Capacidad:", "Desempeño:", "Evidencia observable:",
+      "Actitud observable:", "Enfoque:", "Valor:"]) {
+      expect(xml, patron).not.toContain(patron);
+    }
+  });
+
+  it("cabeceras navy con texto blanco en las tres tablas con encabezado", async () => {
+    const { xml } = await unpack(construye());
+    const conCabecera = tables(xml).filter(t => rows(t)[0].includes('w:fill="0B2E4F"'));
+    expect(conCabecera).toHaveLength(3);   // desempeños, criterios, enfoques
+    for (const t of conCabecera) {
+      expect(rows(t)[0]).toContain('w:val="FFFFFF"');
+      expect(t).toContain("<w:tblHeader");
+    }
+  });
+
+  it("las etiquetas de datos generales y propósitos van sobre celeste", async () => {
+    const { xml } = await unpack(construye());
+    const etiqueta = tables(xml).filter(t => t.includes('w:fill="EAF4FB"'));
+    expect(etiqueta.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("el tema va en la banda celeste, no como texto negro suelto", async () => {
+    const { xml } = await unpack(construye());
+    const banda = xml.match(/<w:p>(?:(?!<\/w:p>)[\s\S])*Ciclo del agua(?:(?!<\/w:p>)[\s\S])*<\/w:p>/);
+    expect(banda).toBeTruthy();
+    expect(banda[0]).toContain('w:fill="EAF4FB"');
+    expect(banda[0]).toContain('w:val="1C74BC"');
+    expect(banda[0]).toContain('w:jc w:val="center"');
+  });
+
+  it("no queda ni rastro del teal del diseño anterior", async () => {
+    for (const [nombre, tipo, recurso] of fixtures) {
+      const doc = tipo === "complete" ? buildCompleteClass(recurso) : buildDocument(tipo, { form, resource: recurso });
+      const { all } = await unpack(doc);
+      expect(all, nombre).not.toMatch(/225C58|EDF2F1|A7B3B1|202B33|3EC6C0/);
+    }
+  });
+
+  it("la cabecera de datos del equipo va SOLO en la guía de trabajo", async () => {
+    const { xml } = await unpack(construye());
+    // Una ficha informativa se lee; no se rellena.
+    const anexo1 = xml.slice(xml.indexOf("ANEXO 1"), xml.indexOf("ANEXO 2"));
+    expect(anexo1).not.toContain("Nombres de los integrantes");
+    const anexo2 = xml.slice(xml.indexOf("ANEXO 2"), xml.indexOf("ANEXO 3"));
+    expect(anexo2).toContain("Nombres de los integrantes");
+    expect(anexo2).toContain("Grado y sección");
+    expect(anexo2).toContain("Fecha");
+    // Espacios para escribir: bordes de párrafo, nunca guiones bajos.
+    expect(anexo2).toContain("w:pBdr");
+    expect(xml).not.toContain("____");
+  });
+
+  it("los anexos no dejan páginas casi vacías", async () => {
+    // Un anexo corto NO abre hoja propia: continúa debajo del anterior.
+    const { xml } = await unpack(construye());
+    const saltos = (xml.match(/w:type="page"/g) || []).length;
+    expect(saltos).toBeLessThanOrEqual(session.anexos.length);
+    expect(xml).toContain("ANEXOS PARA LA CLASE");
+  });
+});
+
+describe("Word · caso real DPCC en Secundaria", () => {
+  it("el área más larga del catálogo entra entera y en su celda", async () => {
+    const { xml } = await unpack(buildDocument("session", { form: formDPCC, resource: sessionDPCC }));
+    expect(xml).toContain("Desarrollo Personal, Ciudadanía y Cívica (DPCC)");
+    expect(tables(xml)[0]).toContain("Desarrollo Personal, Ciudadanía y Cívica (DPCC)");
+    // La IE larga crece en su celda, no se recorta.
+    expect(tables(xml)[0]).toContain(formDPCC.institucion);
+    // El título de 111 caracteres va completo en la banda.
+    expect(xml).toContain(formDPCC.tema);
+  });
+
+  it("desempeños, criterios y enfoques siguen siendo tablas con DPCC", async () => {
+    const { xml } = await unpack(buildDocument("session", { form: formDPCC, resource: sessionDPCC }));
+    const enTabla = t => tables(xml).some(x => x.includes(t));
+    expect(enTabla(sessionDPCC.desempenosPrecisados[0].desempeno)).toBe(true);
+    expect(enTabla(sessionDPCC.criteriosDetallados[0].criterio)).toBe(true);
+    expect(enTabla(sessionDPCC.enfoquesTransversales[1].actitudObservable)).toBe(true);
+    // Los tres procesos de DPCC aparecen con su subtítulo.
+    for (const proceso of sessionDPCC.desarrollo.procesos) expect(xml).toContain(proceso.subtitulo);
+    expect(xml).not.toContain('w:hRule="exact"');
   });
 });
