@@ -306,36 +306,102 @@
 
 /* ==========================================================================
    PROGRESO DE GENERACIÓN CON IA
+
+   EL CENTRADO ESTABA MAL
+   ----------------------
+   El overlay traía `padding: 110px 28px 40px 400px`: 400 px a la izquierda
+   para esquivar la barra lateral, que mide 245. En 1024 px de ancho eso dejaba
+   la tarjeta pegada al borde derecho, y en 1440 visiblemente descentrada. Un
+   margen mágico nunca coincide con el elemento que intenta esquivar.
+
+   Ahora el overlay cubre la ventana entera —la barra lateral incluida, que es
+   lo correcto mientras se genera— y centra con rejilla. `100dvh` y no `100vh`
+   porque en móvil la barra de direcciones se cuenta dentro de `vh` y empuja la
+   tarjeta fuera de la pantalla.
    ========================================================================== */
-.sv-genprog {
-  max-width: 560px; margin: var(--space-8) auto; padding: var(--space-8);
-  border: 1px solid var(--border-subtle); border-radius: var(--radius-xl);
-  background: var(--bg-surface); box-shadow: var(--elev-2);
+.sv-genprog-overlay {
+  position: fixed; inset: 0; z-index: var(--z-modal, 200);
+  display: grid; place-items: center;
+  min-height: 100dvh;
+  padding: max(var(--space-5), env(safe-area-inset-top))
+           max(var(--space-5), env(safe-area-inset-right))
+           max(var(--space-5), env(safe-area-inset-bottom))
+           max(var(--space-5), env(safe-area-inset-left));
+  background: var(--bg-overlay, rgba(239, 247, 246, .82));
+  backdrop-filter: blur(7px);
+  overflow-y: auto; overscroll-behavior: contain;
 }
-.sv-genprog__head { display: grid; grid-template-columns: auto 1fr; gap: var(--space-4); align-items: center; margin-bottom: var(--space-6); }
+
+.sv-genprog {
+  width: 100%; max-width: 640px; margin: auto; padding: var(--space-7);
+  border: 1px solid var(--border-subtle); border-radius: var(--radius-xl);
+  background: var(--bg-surface); box-shadow: var(--elev-3);
+  animation: sv-scale-in var(--dur-base) var(--ease-out);
+}
+
+/* ---- cabecera: Kantu centrado, sin competir con el texto --------------- */
+.sv-genprog__head { text-align: center; margin-bottom: var(--space-6); }
 .sv-genprog__avatar {
-  display: grid; place-items: center; width: 58px; height: 58px; overflow: hidden;
+  display: grid; place-items: center; width: 76px; height: 76px;
+  margin: 0 auto var(--space-3); overflow: hidden;
   border-radius: var(--radius-full); background: var(--bg-brand-soft);
 }
-.sv-genprog__avatar img { width: 46px; height: auto; }
-.sv-genprog__head h3 { margin: 0 0 2px; font: var(--weight-bold) var(--text-h3)/var(--leading-snug) var(--font-display); color: var(--text-primary); }
-.sv-genprog__head p { margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-secondary); }
+.sv-genprog__avatar img { width: 62px; height: auto; animation: sv-genprog-respira 3.4s ease-in-out infinite; }
+.sv-genprog__eyebrow {
+  margin: 0 0 var(--space-2); font-size: var(--text-label);
+  font-weight: var(--weight-bold); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--teal-700);
+}
+.sv-genprog__head h3 { margin: 0 0 var(--space-2); font: var(--weight-bold) var(--text-h3)/var(--leading-snug) var(--font-display); color: var(--text-primary); }
+.sv-genprog__sub { margin: 0 auto; max-width: 46ch; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-secondary); }
 
-.sv-genprog__steps { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-.sv-genprog__step { display: grid; grid-template-columns: 22px 1fr; gap: var(--space-3); align-items: center; font-size: var(--text-body); }
+/* ---- una fila por módulo: icono | nombre | estado ----------------------
+   El estado va en su propia pista, alineado a la derecha, y NO debajo del
+   nombre. `minmax(0, 1fr)` deja que el nombre se parta en dos líneas sin
+   empujar al estado fuera de la tarjeta.                                  */
+.sv-genprog__steps { list-style: none; margin: 0 0 var(--space-5); padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.sv-genprog__step {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr) auto;
+  align-items: center; column-gap: var(--space-3);
+  padding: var(--space-3) var(--space-3); border-radius: var(--radius-md);
+  font-size: var(--text-body);
+  transition: background var(--dur-base) var(--ease-out);
+}
+.sv-genprog__step.is-processing { background: var(--bg-brand-soft); }
 .sv-genprog__bullet {
-  display: grid; place-items: center; width: 22px; height: 22px; border-radius: var(--radius-full);
+  display: grid; place-items: center; width: 24px; height: 24px; border-radius: var(--radius-full);
   border: 2px solid var(--border-default); background: var(--bg-surface); color: transparent;
   transition: all var(--dur-base) var(--ease-out);
 }
+.sv-genprog__label { color: var(--text-tertiary); min-width: 0; }
+.sv-genprog__state {
+  justify-self: end; white-space: nowrap;
+  font-size: var(--text-label); font-weight: var(--weight-semibold);
+  color: var(--text-tertiary);
+}
+
 .sv-genprog__step.is-completed .sv-genprog__bullet { background: var(--success-500); border-color: var(--success-500); color: #fff; }
-.sv-genprog__step.is-processing .sv-genprog__bullet { border-color: var(--teal-600); color: var(--teal-600); }
-/* Un modulo que no termino NO puede parecerse a uno que aun no ha empezado. */
-.sv-genprog__step.is-failed .sv-genprog__bullet { border-color: var(--warning-500); color: var(--warning-700); background: var(--warning-50); }
-.sv-genprog__label { color: var(--text-tertiary); }
 .sv-genprog__step.is-completed .sv-genprog__label { color: var(--text-secondary); }
+.sv-genprog__step.is-completed .sv-genprog__state { color: var(--success-700); }
+.sv-genprog__step.is-processing .sv-genprog__bullet { border-color: var(--teal-600); color: var(--teal-600); }
 .sv-genprog__step.is-processing .sv-genprog__label { color: var(--text-primary); font-weight: var(--weight-semibold); }
+.sv-genprog__step.is-processing .sv-genprog__state { color: var(--teal-700); }
+/* Un módulo que no terminó NO puede parecerse a uno que aún no ha empezado. */
+.sv-genprog__step.is-failed .sv-genprog__bullet { border-color: var(--warning-500); color: var(--warning-700); background: var(--warning-50); }
 .sv-genprog__step.is-failed .sv-genprog__label { color: var(--warning-700); font-weight: var(--weight-semibold); }
+.sv-genprog__step.is-failed .sv-genprog__state { color: var(--warning-700); }
+
+/* ---- barra por módulos reales ----------------------------------------- */
+.sv-genprog__bar { display: grid; gap: var(--space-2); }
+.sv-genprog__track { height: 6px; border-radius: var(--radius-full); background: var(--neutral-100); overflow: hidden; }
+.sv-genprog__track i { display: block; height: 100%; border-radius: inherit; background: var(--teal-500); transition: width var(--dur-slow) var(--ease-out); }
+.sv-genprog__count { margin: 0; font-size: var(--text-label); color: var(--text-tertiary); text-align: right; }
+
+.sv-genprog__espera {
+  margin: var(--space-4) 0 0; padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md); background: var(--bg-sunken);
+  font-size: var(--text-sm); color: var(--text-secondary); text-align: center;
+}
 
 .sv-genprog__aviso {
   margin: var(--space-5) 0 0; padding: var(--space-4);
@@ -347,12 +413,7 @@
   line-height: var(--leading-normal); color: var(--warning-700);
 }
 .sv-genprog__aviso p:last-child { margin-bottom: 0; }
-.sv-genprog__eyebrow { font-weight: 700; text-transform: uppercase; }
-.session-generation-recovery { margin-top: var(--space-5); }
 
-.sv-genprog__track { height: 5px; border-radius: var(--radius-full); background: var(--neutral-100); overflow: hidden; }
-.sv-genprog__track i { display: block; height: 100%; border-radius: inherit; background: var(--teal-500); transition: width var(--dur-slow) var(--ease-out); }
-.sv-genprog__count { margin: var(--space-2) 0 0; font-size: var(--text-label); color: var(--text-tertiary); text-align: right; }
 .sv-genprog__tip {
   margin: var(--space-5) 0 0; padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md); background: var(--bg-brand-soft);
@@ -360,8 +421,24 @@
 }
 .sv-genprog__tip strong { color: var(--teal-900); }
 
+/* Respiración muy leve, sólo en el avatar. Nada rebota ni parpadea. */
+@keyframes sv-genprog-respira { 50% { transform: scale(1.045); } }
+
 @media (max-width: 560px) {
-  .sv-genprog { padding: var(--space-5); margin: var(--space-4) 0; }
+  .sv-genprog { padding: var(--space-5); border-radius: var(--radius-lg); }
+  .sv-genprog__avatar { width: 60px; height: 60px; }
+  .sv-genprog__avatar img { width: 48px; }
+  .sv-genprog__step { padding: var(--space-2) var(--space-2); column-gap: var(--space-2); }
+  /* El nombre puede ocupar dos líneas; el estado se queda donde está. */
+  .sv-genprog__state { font-size: var(--text-label); }
+}
+
+/* Quien pidió menos movimiento no debería ver ni la respiración ni el giro. */
+@media (prefers-reduced-motion: reduce) {
+  .sv-genprog,
+  .sv-genprog__avatar img,
+  .sv-genprog__track i,
+  .sv-genprog .sv-spin { animation: none !important; transition: none !important; }
 }
 
 /* ==========================================================================

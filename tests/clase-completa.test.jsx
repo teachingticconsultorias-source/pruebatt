@@ -5,6 +5,7 @@ import fs from "node:fs";
 import handler from "../api/generate-session.js";
 import GenerationProgress from "../components/ui/GenerationProgress.jsx";
 import { cabecerasDeGeneracion } from "../lib/idempotencia.js";
+import { mensajeDeError, mensajeDeRespuesta as mensajeHumano } from "../lib/mensajes.js";
 import { generarModulos, modulosListos, componerSesion, progresoDeModulos,
   mensajeDeModuloFallido, accionDeReintento, MODULOS_SESION } from "../lib/sesion/modulos.js";
 
@@ -36,7 +37,8 @@ const inicio = app.indexOf("  async function handleGenerate() {");
 const callback = app.slice(inicio, app.indexOf("  async function handleDownloadSession()", inicio));
 function pantalla() {
   const state = { step: 3, form: structuredClone(form), failedModule: null, result: null,
-    completedModules: [], loading: false, activeModule: null, error: null };
+    completedModules: [], loading: false, activeModule: null, error: null,
+    causaDelFallo: null, enLinea: true };
   const sesionEnCurso = { current: null };
   const generandoSesion = { current: false };
   const claveOp = { obtener: vi.fn(() => "sesion-regresion-agua-001"), renovar: vi.fn() };
@@ -46,6 +48,9 @@ function pantalla() {
       generarModulos, modulosListos, componerSesion, cabecerasDeGeneracion,
       documentType: "session", documentName: "sesión de aprendizaje",
       materialSave: { save }, supabase: { auth: { getSession: async () => ({ data: { session: { access_token: "jwt-test" } } }) } },
+      // Endurecimiento UX: conexión, mensajes humanos y causa publicable.
+      enLinea: state.enLinea !== false, sinConexion: () => state.enLinea === false,
+      mensajeDeError, mensajeHumano, setCausaDelFallo: (v) => { state.causaDelFallo = v; },
       setEvaluationFlow: vi.fn() };
     for (const name of ["CompletedModules", "Result", "Loading", "FailedModule", "Error", "ActiveModule"]) {
       const key = name[0].toLowerCase() + name.slice(1);
@@ -231,7 +236,91 @@ describe("Clase completa · progreso visible", () => {
   it("App conecta los estados y el reintento al progreso persistente", () => {
     const bloque = app.slice(app.indexOf("{(loading || failedModule)"), app.indexOf("{result && completeClass"));
     expect(bloque).toContain("progresoDeModulos({ listos: completedModules, activo: activeModule, fallido: failedModule })");
-    expect(bloque).toContain("onClick={handleGenerate}");
+    // El reintento pasa por la guarda de doble clic, igual que el generar.
+    expect(bloque).toContain("onClick={()=>unaVez(handleGenerate)}");
     expect(bloque).toContain("mensajeDeModuloFallido(failedModule)");
+    // Y el reloj de espera sólo corre mientras hay operación viva.
+    expect(bloque).toContain("activo={loading}");
+  });
+});
+
+describe("UX · endurecimiento para uso real", () => {
+  it("sin conexión no se lanza la petición y se avisa en español", async () => {
+    const env = entorno(), ui = pantalla();
+    ui.state.enLinea = false;
+    await ui.render()();
+    // Ni una llamada: una petición sin red sólo sirve para esperar en vano.
+    expect(env.calls).toHaveLength(0);
+    expect(ui.state.error).toContain("conexión a internet");
+    expect(ui.state.loading).toBe(false);
+    // Y el formulario queda intacto para reintentar en cuanto vuelva la red.
+    expect(ui.state.form.tema).toBe(form.tema);
+  });
+
+  it("el motivo real del servidor llega a la pantalla, ya traducido", async () => {
+    const ui = pantalla();
+    // El endpoint responde 429: la docente debe leer «muchas solicitudes»,
+    // no «no pudimos terminar la secuencia».
+    vi.stubGlobal("fetch", vi.fn(async (url) => {
+      if (url === "/api/generate-session") {
+        return { ok: false, status: 429, json: async () => ({ error: "Demasiadas solicitudes", code: "AI_BUSY" }) };
+      }
+      throw new Error(`Red inesperada: ${url}`);
+    }));
+    await ui.render()();
+    expect(ui.state.failedModule).toBe("alignment");
+    expect(ui.state.causaDelFallo).toContain("muchas solicitudes");
+    expect(ui.state.causaDelFallo).not.toMatch(/429|AI_BUSY/);
+  });
+
+  it("un fallo conserva formulario y módulos ya terminados", async () => {
+    const env = entorno("assessment"), ui = pantalla();
+    await ui.render()();
+    expect(ui.state.failedModule).toBe("assessment");
+    // Lo generado sigue ahí: reintentar no lo repite.
+    expect(ui.state.completedModules).toEqual(["alignment", "sequence"]);
+    expect(ui.sesionEnCurso.current.parciales.alignment).toBeTruthy();
+    expect(ui.sesionEnCurso.current.form.tema).toBe(form.tema);
+    const antes = env.calls.length;
+    await ui.render()();
+    // El reintento arranca en assessment: no vuelve a pedir los dos primeros.
+    expect(env.calls.slice(antes).map(c => c.module)).toEqual(["assessment", "annexes"]);
+  });
+
+  it("todos los botones caros vivos pasan por la guarda de doble clic", () => {
+    // `disabled={loading}` es lo que se ve; la guarda es lo que garantiza que
+    // dos clics en el mismo tick no lancen dos generaciones.
+    const vivos = [
+      "SteamGenerator", "EvaluationInstrumentGenerator", "WordSearchGenerator",
+      "ProjectSteamGenerator", "ResourceFromAI", "ValuationScaleGenerator",
+      "LinkedWorksheetGenerator", "ChallengeCreator",
+    ];
+    for (const nombre of vivos) {
+      const inicio = app.indexOf(`function ${nombre}(`);
+      expect(inicio, nombre).toBeGreaterThan(-1);
+      const siguiente = app.indexOf("\nfunction ", inicio + 1);
+      const cuerpo = app.slice(inicio, siguiente === -1 ? app.length : siguiente);
+      expect(cuerpo, `${nombre} sin guarda`).toContain("const [unaVez] = useAccionUnica();");
+      expect(cuerpo, `${nombre} sin uso de la guarda`).toContain("unaVez(");
+    }
+  });
+
+  it("la descarga de Word no regenera nada con IA", () => {
+    const inicio = app.indexOf("  async function handleDownloadSession()");
+    const cuerpo = app.slice(inicio, app.indexOf("\n  return (", inicio));
+    // Sólo construye el archivo: ni fetch, ni módulos, ni claves de operación.
+    expect(cuerpo).not.toContain("fetch(");
+    expect(cuerpo).not.toContain("generarModulos");
+    expect(cuerpo).not.toContain("claveOp");
+    expect(cuerpo).toContain("mensajeDeError");
+  });
+
+  it("el guardado en Biblioteca no admite dos envíos a la vez", () => {
+    const inicio = app.indexOf("function useMaterialSave()");
+    const cuerpo = app.slice(inicio, app.indexOf("\nfunction ", inicio + 1));
+    expect(cuerpo).toContain("if (guardando.current) return false;");
+    expect(cuerpo).toContain("guardando.current = false;");
+    // Y sigue ofreciendo reintentar sólo el guardado, sin volver a generar.
+    expect(cuerpo).toContain("lastPayload.current");
   });
 });

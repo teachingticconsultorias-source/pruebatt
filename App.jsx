@@ -22,6 +22,9 @@ import "./components/library/library-v2.css";
 import "./components/create/create.css";
 import { TOOLS_BY_ID } from "./config/tools.js";
 import { areaAlCambiarNivel, areasDeNivel, normalizarArea } from "./config/curriculum.js";
+import { useAccionUnica } from "./lib/ui/useAccionUnica.js";
+import { useConexion } from "./lib/ui/useConexion.js";
+import { mensajeDeError, mensajeDeRespuesta as mensajeHumano, sinConexion } from "./lib/mensajes.js";
 import Button from "./components/ui/Button.jsx";
 import { Badge } from "./components/ui/Feedback.jsx";
 import { useUI } from "./components/ui/UIProvider.jsx";
@@ -195,8 +198,12 @@ function describeSaveError(error) {
 function useMaterialSave() {
   const [state, setState] = useState({ status: "idle", message: "" });
   const lastPayload = useRef(null);
+  // Dos clics en «Reintentar guardado» crearian dos filas del mismo material.
+  const guardando = useRef(false);
 
   const save = useCallback(async (payload) => {
+    if (guardando.current) return false;
+    guardando.current = true;
     lastPayload.current = payload;
     setState({ status: "saving", message: "" });
     try {
@@ -208,6 +215,8 @@ function useMaterialSave() {
       console.error("[sciverse] fallo al guardar material", error);
       setState({ status: "error", message: describeSaveError(error) });
       return false;
+    } finally {
+      guardando.current = false;
     }
   }, []);
 
@@ -930,10 +939,18 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
     obtenerToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
     avisar: toast,
   });
+  // Guarda sincrona de doble clic. `disabled={loading}` es lo que la docente
+  // ve; esto es lo que garantiza que dos clics seguidos no lancen dos
+  // generaciones antes de que React vuelva a pintar.
+  const [unaVez] = useAccionUnica();
+  const enLinea = useConexion();
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [activeModule, setActiveModule] = useState(null);
   const [completedModules, setCompletedModules] = useState([]);
   const [failedModule, setFailedModule] = useState(null);
+  // Motivo publicable del fallo, cuando el servidor dio uno mas util que el
+  // generico («no te quedan creditos» dice mucho mas que «no pudimos»).
+  const [causaDelFallo, setCausaDelFallo] = useState(null);
   const sesionEnCurso = useRef(null);
   const generandoSesion = useRef(false);
   const [downloading, setDownloading] = useState(false);
@@ -979,6 +996,12 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
 
   async function handleGenerate() {
     if (step !== 3 || generandoSesion.current) return;
+    // Una peticion sin red no llega a ninguna parte: mas vale decirlo antes
+    // que ensenar un fallo despues de noventa segundos de espera.
+    if (!enLinea || sinConexion()) {
+      setError(mensajeDeError("SIN_CONEXION"));
+      return;
+    }
     generandoSesion.current = true;
     // El formulario y los resultados pertenecen al mismo intento, incluso si
     // una petición falla. La ref también bloquea dos clics antes del render.
@@ -992,6 +1015,7 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
     const desde = failedModule;
     setLoading(true);
     setFailedModule(null);
+    setCausaDelFallo(null);
     setError(null);
     try {
       const ejecucion = await generarModulos({
@@ -1008,13 +1032,18 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
             headers: cabecerasDeGeneracion(accessToken, claveOp.obtener()),
             body: JSON.stringify({ mode: "module", module: moduleName, form: intento.form, previous }),
           });
-          const data = await response.json();
-          if (!response.ok || !data.result) throw new Error("Módulo incompleto");
+          const data = await response.json().catch(() => ({}));
+          // El motivo REAL del servidor —sin creditos, demasiadas peticiones,
+          // sesion vencida— tiene que llegar a la pantalla. Antes se perdia
+          // aqui y todo acababa como «no pudimos terminar esta parte».
+          if (!response.ok) throw new Error(mensajeHumano(data, "Módulo incompleto"));
+          if (!data.result) throw new Error("AI_INCOMPLETE");
           return data.result;
         },
       });
       if (!ejecucion.ok) {
         setFailedModule(ejecucion.fallido);
+        setCausaDelFallo(mensajeDeError(ejecucion.causa, null));
         return;
       }
       const finalResult = componerSesion({ parciales: intento.parciales, form: intento.form });
@@ -1024,8 +1053,8 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
       claveOp.renovar();
       sesionEnCurso.current = null;
       await materialSave.save({tipo:documentType,titulo:finalResult.titulo||intento.form.tema,form:intento.form,contenido:finalResult});
-    } catch {
-      setError(`No se pudo completar la ${documentName}. Lo que ya está listo se conservará.`);
+    } catch (fallo) {
+      setError(mensajeDeError(fallo, `No se pudo completar la ${documentName}. Lo que ya está listo se conservará.`));
     } finally {
       generandoSesion.current = false;
       setLoading(false);
@@ -1037,7 +1066,9 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
     if (!result || downloading) return;
     setDownloading(true); setError(null);
     try { await downloadSessionWord({form,result,documentName,documentType,profile:{nombre:`${profile.nombres||""} ${profile.apellidos||""}`.trim(),ie:profile.ie||""}}); }
-    catch (downloadError) { console.error(downloadError); setError("No se pudo preparar el archivo Word. Actualiza la página e inténtalo nuevamente."); }
+    // Si falla la descarga NO se regenera nada: el resultado sigue en memoria
+    // y basta con volver a pulsar. Solo se rehace el archivo.
+    catch (downloadError) { console.error(downloadError); setError(mensajeDeError(downloadError, "DESCARGA")); }
     finally { setDownloading(false); }
   }
 
@@ -1092,24 +1123,25 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
       </div>}
 
       {error&&<p className="wizard-error">{error}</p>}
-      <div className="wizard-actions">{step>1&&<button className="wizard-back" disabled={loading || Boolean(failedModule)} onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={handleGenerate} disabled={loading || Boolean(failedModule)}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":`Generar ${documentName} con IA`}</button>}</div>
+      <div className="wizard-actions">{step>1&&<button className="wizard-back" disabled={loading || Boolean(failedModule)} onClick={()=>{setError(null);setStep(s=>s-1)}}>Anterior</button>}{step<3?<button className="wizard-next" onClick={nextStep}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={()=>unaVez(handleGenerate)} disabled={loading || Boolean(failedModule)}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":`Generar ${documentName} con IA`}</button>}</div>
 
       {(loading || failedModule) && (
-        <div className={loading ? "kantu-generation-overlay" : "session-generation-recovery"}>
+        <div className={loading ? "sv-genprog-overlay" : "sv-genprog-inline"}>
           <GenerationProgress
             pasos={progresoDeModulos({ listos: completedModules, activo: activeModule, fallido: failedModule })}
             resumen={textoDeProgreso(completedModules)}
+            activo={loading}
             eyebrow={completeClass ? "Paso 1 de 3 · Sesión" : "Sesión · 4 partes"}
             title={failedModule ? "Tu sesión está pendiente de completar" : "Kantu está preparando tu sesión"}
-            subtitle={failedModule ? "Puedes continuar desde la parte que no terminó." : "Suele tomar entre uno y dos minutos. Puedes quedarte en esta pantalla."}
-            aviso={failedModule ? mensajeDeModuloFallido(failedModule) : null}
-            accion={failedModule ? <button type="button" className="wizard-next" onClick={handleGenerate} disabled={loading}>{accionDeReintento(failedModule)}</button> : null}
+            subtitle={failedModule ? "Puedes continuar desde la parte que no terminó. No se vuelve a cobrar." : "Esto puede tomar entre uno y dos minutos. Puedes permanecer en esta pantalla."}
+            aviso={failedModule ? (causaDelFallo || mensajeDeModuloFallido(failedModule)) : null}
+            accion={failedModule ? <button type="button" className="wizard-next" onClick={()=>unaVez(handleGenerate)} disabled={loading}>{accionDeReintento(failedModule)}</button> : null}
             tip="los criterios de evaluación deben empezar con un verbo observable para poder verificarse en la evidencia."
           />
         </div>
       )}
 
-      {result && completeClass && <div className="flow-actionbar session-flow-toolbar"><button onClick={()=>setResult(null)}><Pencil size={15}/> Editar</button><button onClick={handleDownloadSession} disabled={downloading}>{downloading?<Loader2 size={15} className="animate-spin"/>:<Download size={15}/>} Descargar Word</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form:{...form},result})}>Siguiente <ArrowRight size={16}/></button></div>}
+      {result && completeClass && <div className="flow-actionbar session-flow-toolbar"><button onClick={()=>setResult(null)}><Pencil size={15}/> Editar</button><button onClick={()=>unaVez(handleDownloadSession)} disabled={downloading}>{downloading?<Loader2 size={15} className="animate-spin"/>:<Download size={15}/>} {downloading?"Preparando Word…":"Descargar Word"}</button><button onClick={()=>window.print()}><Printer size={15}/> Descargar PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form:{...form},result})}>Siguiente <ArrowRight size={16}/></button></div>}
       {result && (
         <div className="mt-6 rounded-xl p-5" style={{ background: "rgba(15,61,58,0.03)", border: `1px solid ${C.line}` }}>
           <h4 className="text-lg font-semibold mb-2" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
@@ -1173,8 +1205,9 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
           </div>
 
           <button
-            onClick={handleDownloadSession}
+            onClick={()=>unaVez(handleDownloadSession)}
             disabled={downloading}
+            aria-busy={downloading || undefined}
             className="mt-4 inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold"
             style={{ background: "rgba(15,61,58,0.08)", color: C.text, border: `1px solid ${C.line}` }}
           >
@@ -1198,6 +1231,8 @@ function SteamGenerator({ initialGrade = "primaria", documentType = "session", p
 }
 
 function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentType = "checklist", initialContext = null, profile = {}, completeClass = false, onNext = null }) {
+  // Guarda sincrona de doble clic: ver lib/ui/useAccionUnica.js.
+  const [unaVez] = useAccionUnica();
   // Clave estable del intento: dos clics comparten la misma.
   const claveOp = useClaveDeOperacion("instrumento");
   const isRubric = instrumentType === "rubric";
@@ -1325,7 +1360,7 @@ function EvaluationInstrumentGenerator({ initialGrade = "primaria", instrumentTy
       </div></div>}
     {step===3&&!instrument&&<div className="wizard-card instrument-review"><div className="wizard-card__title"><span><ClipboardList size={18}/></span><div><h4>{initialContext?"Contexto recuperado de la sesión":"Revisa el contexto"}</h4><p>{initialContext?"Kantu utilizará la competencia, capacidades, criterios y evidencia ya generados.":"Puedes volver y editar cualquier dato antes de generar."}</p></div></div><div className="context-summary"><div><small>Contexto</small><strong>{form.area} · {form.grado} · {form.region}</strong><p>{form.tema}</p></div>{!initialContext&&<button onClick={()=>setStep(1)}>Editar contexto</button>}</div><div className="context-summary"><div><small>Evidencia</small><p>{form.evidencia}</p></div>{!initialContext&&<button onClick={()=>setStep(2)}>Editar evidencia</button>}</div></div>}
     {error&&<p className="wizard-error">{error}</p>}
-    {!instrument&&<div className="wizard-actions">{step>1&&!initialContext&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<3?<button className="wizard-next" onClick={continueFlow}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={generateInstrument} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está trabajando...":`Generar ${instrumentName}`}</button>}</div>}
+    {!instrument&&<div className="wizard-actions">{step>1&&!initialContext&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<3?<button className="wizard-next" onClick={continueFlow}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={()=>unaVez(generateInstrument)} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está trabajando...":`Generar ${instrumentName}`}</button>}</div>}
     {loading&&<div className="kantu-working"><div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu creando el instrumento"/></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Está construyendo criterios observables y alineados…</h4><p>Está revisando la competencia, las capacidades y la evidencia de aprendizaje.</p><div className="kantu-progress"><i/><i/><i/></div></div></div>}
     {instrument&&<div className="instrument-result"><div className="instrument-result__actions"><div><small>INSTRUMENTO GENERADO</small><h3>{instrument.titulo}</h3></div><div><button onClick={()=>setEditing(!editing)}><Pencil size={14}/>{editing?"Terminar edición":"Editar"}</button><button onClick={generateInstrument}><RotateCw size={14}/>Regenerar</button><button className="primary" onClick={downloadInstrument}><Download size={14}/>Word</button>{completeClass&&<><button onClick={()=>window.print()}><Printer size={14}/>PDF</button><button className="flow-next-btn" onClick={()=>onNext?.({form:{...form},instrument})}>Siguiente <ArrowRight size={15}/></button></>}</div></div><SaveStatus state={instrumentSave.state} onRetry={instrumentSave.retry} onDownload={downloadInstrument} /><div className="instrument-meta"><strong>Competencia evaluada</strong><p>{instrument.competencia}</p><strong>Capacidades</strong><ul>{instrument.capacidades.map((item,index)=><li key={index}>{item}</li>)}</ul><strong>Evidencia de aprendizaje</strong>{editing?<textarea value={instrument.evidencia} onChange={e=>setInstrument(current=>({...current,evidencia:e.target.value}))}/>:<p>{instrument.evidencia}</p>}</div><div className="instrument-table-wrap"><table className={isRubric?"rubric-table":"checklist-table"}><thead><tr><th>N.º</th><th>Criterio de evaluación</th>{isRubric?<><th>Inicio</th><th>En proceso</th><th>Logro esperado</th><th>Logro destacado</th></>:<><th>Sí</th><th>No</th><th>Observaciones</th></>}</tr></thead><tbody>{instrument.criterios.map((item,index)=><tr key={index}><td>{index+1}</td><td>{editing?<textarea value={item.criterio} onChange={e=>updateCriterion(index,"criterio",e.target.value)}/>:<><small>{item.capacidad}</small>{item.criterio}</>}</td>{isRubric?<>{["inicio","enProceso","logroEsperado","logroDestacado"].map(key=><td key={key}>{editing?<textarea value={item[key]} onChange={e=>updateCriterion(index,key,e.target.value)}/>:item[key]}</td>)}</>:<><td><i className="empty-check"/></td><td><i className="empty-check"/></td><td><span className="observation-line"/></td></>}</tr>)}</tbody></table></div></div>}
   </div>;
@@ -1669,6 +1704,8 @@ async function downloadWordSearch(resource) {
 }
 
 function WordSearchGenerator({ initialGrade = "primaria", profile = {}, onWordResource = null }) {
+  // Guarda sincrona de doble clic: ver lib/ui/useAccionUnica.js.
+  const [unaVez] = useAccionUnica();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ tema: "", palabras: "", grado: initialGrade, area: "", dificultad: "media" });
   const [preview, setPreview] = useState(null);
@@ -1934,7 +1971,7 @@ function WordSearchGenerator({ initialGrade = "primaria", profile = {}, onWordRe
                 <option value="secundaria">Secundaria</option>
               </select>
             </label>
-            <button className="primary" onClick={handleGenerate} disabled={loading || !form.tema || !form.palabras}>
+            <button className="primary" onClick={()=>unaVez(handleGenerate)} disabled={loading || !form.tema || !form.palabras}>
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
               {loading ? "Creando..." : "Generar previsualización"}
             </button>
@@ -2443,6 +2480,8 @@ function getTeacherFullName(profile={}) {
 }
 
 function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
+  // Guarda sincrona de doble clic: ver lib/ui/useAccionUnica.js.
+  const [unaVez] = useAccionUnica();
   // Clave estable del intento: dos clics comparten la misma.
   const claveOp = useClaveDeOperacion("steam");
   const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
@@ -2606,7 +2645,7 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
     </div>}
 
     {error&&<p className="wizard-error">{error}</p>}
-    {!result&&<div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<4?<button className="wizard-next" onClick={next}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar proyecto STEAM"}</button>}</div>}
+    {!result&&<div className="wizard-actions">{step>1&&<button className="wizard-back" onClick={()=>setStep(s=>s-1)}>Anterior</button>}{step<4?<button className="wizard-next" onClick={next}>Continuar <ArrowRight size={15}/></button>:<button className="wizard-next" onClick={()=>unaVez(generate)} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar proyecto STEAM"}</button>}</div>}
 
     {loading&&<div className="kantu-working"><div className="kantu-working__visual"><span className="kantu-orbit"><Sparkles size={15}/></span><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu creando el proyecto"/></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando el proyecto por semanas…</h4><p>Relaciono la situación significativa, las áreas STEAM, las competencias y el producto final.</p><div className="kantu-progress"><i/><i/><i/></div></div></div>}
 
@@ -2625,6 +2664,8 @@ function ProjectSteamGenerator({ initialGrade = "primaria", profile = {} }) {
 }
 
 function ResourceFromAI({ kind, initialGrade="primaria", profile={} }) {
+  // Guarda sincrona de doble clic: ver lib/ui/useAccionUnica.js.
+  const [unaVez] = useAccionUnica();
   // Clave estable del intento: dos clics comparten la misma.
   const claveOp = useClaveDeOperacion("recurso");
   const isReading=kind==="reading";
@@ -2758,12 +2799,14 @@ ${cuerpo}${metacognicion}`;
           {form.contexto.length} / {LIMITE_CONTEXTO} · complementa el tema y el área; no los reemplaza
         </small>
       </label>
-    </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar con Kantu"}</button></div></div>
+    </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={()=>unaVez(generate)} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?"Kantu está creando...":"Generar con Kantu"}</button></div></div>
     :<div className="instrument-result"><div className="instrument-result__actions"><div><small>{isReading?"FICHA DE LECTURA":"FICHA DE TRABAJO"}</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadResource(isReading?"reading":"worksheet",resource,form,profile)}><Download size={14}/> Word</button></div></div><SaveStatus state={resourceSave.state} onRetry={resourceSave.retry} onDownload={()=>downloadResource(isReading?"reading":"worksheet",resource,form,profile)} /><pre className="resource-document-preview">{resourceText()}</pre></div>}
   </div>;
 }
 
 function ValuationScaleGenerator({initialGrade="primaria",profile={}}){
+  // Guarda sincrona de doble clic: ver lib/ui/useAccionUnica.js.
+  const [unaVez] = useAccionUnica();
   // Clave estable del intento: dos clics comparten la misma.
   const claveOp = useClaveDeOperacion("escala");
   const initialLevel=initialGrade==="secundaria"?"Secundaria":"Primaria";
@@ -2835,7 +2878,7 @@ ${Array.from({length:25},(_,i)=>`${i+1}. | ______________________________ | ___ 
     <label className="wide">Tema *<input value={form.tema} onChange={e=>update("tema",e.target.value)}/></label>
     <label className="wide">Competencia<select value={form.competencia} onChange={e=>changeCompetence(e.target.value)}>{competenciasDeArea(form.area).map(c=><option key={c}>{c}</option>)}</select></label>
     <label className="wide ai-field"><span>Conducta o desempeño a observar *</span><button type="button" onClick={()=>kantu.pedir("evidencia",form)} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo?kantu.espera:"Sugerir con Kantu"}</button><textarea value={form.evidencia} onChange={e=>update("evidencia",e.target.value)} placeholder="Qué vas a observar en el aula y en qué se nota."/></label>
-  </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} Generar escala</button></div></div>:<div className="instrument-result"><div className="instrument-result__actions"><div><small>ESCALA DE VALORACIÓN</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadResource("rating_scale",resource,form,profile)}><Download size={14}/> Word</button></div></div><pre className="resource-document-preview">{text()}</pre></div>}</div>;
+  </div>{error&&<p className="wizard-error">{error}</p>}<div className="wizard-actions"><button className="wizard-next" onClick={()=>unaVez(generate)} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} Generar escala</button></div></div>:<div className="instrument-result"><div className="instrument-result__actions"><div><small>ESCALA DE VALORACIÓN</small><h3>{resource.titulo}</h3></div><div><button onClick={()=>setResource(null)}>← Crear otra</button><button className="primary" onClick={()=>downloadResource("rating_scale",resource,form,profile)}><Download size={14}/> Word</button></div></div><pre className="resource-document-preview">{text()}</pre></div>}</div>;
 }
 
 
@@ -2846,6 +2889,8 @@ function FlowChoiceCard({icon:Icon,title,description,onClick,accent="teal"}){
 }
 
 function LinkedWorksheetGenerator({sessionContext,profile={},onFinish}){
+  // Guarda sincrona de doble clic: ver lib/ui/useAccionUnica.js.
+  const [unaVez] = useAccionUnica();
   // Clave estable del intento: dos clics comparten la misma.
   const claveOp = useClaveDeOperacion("ficha");
   const [questionTypes,setQuestionTypes]=useState(["opcion_multiple"]);
@@ -2912,7 +2957,7 @@ function LinkedWorksheetGenerator({sessionContext,profile={},onFinish}){
       </div>
       <div className="question-count-control"><div><strong>Cantidad total de preguntas</strong><small>Mínimo 5, máximo 20</small></div><div><button onClick={()=>setQuestionCount(n=>Math.max(5,n-1))}>−</button><b>{questionCount} preguntas</b><button onClick={()=>setQuestionCount(n=>Math.min(20,n+1))}>+</button></div></div>
       {error&&<p className="wizard-error">{error}</p>}
-      <div className="worksheet-generate-row"><button className="wizard-next" onClick={generate} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?`Generando preguntas — 0 de ${questionCount}`:"Generar ficha"} <ArrowRight size={15}/></button></div>
+      <div className="worksheet-generate-row"><button className="wizard-next" onClick={()=>unaVez(generate)} disabled={loading}>{loading?<Loader2 size={16} className="animate-spin"/>:<Sparkles size={16}/>} {loading?`Generando preguntas — 0 de ${questionCount}`:"Generar ficha"} <ArrowRight size={15}/></button></div>
     </div>
   </div>;
 }
@@ -4136,6 +4181,8 @@ function RetoModal({reto,onClose,onCreateInstrument,onSave,isSaved}){
 }
 
 function ChallengeCreator({profile,preferredGrade,onCreated}){
+  // Guarda sincrona de doble clic: ver lib/ui/useAccionUnica.js.
+  const [unaVez] = useAccionUnica();
   // Clave estable del intento: dos clics comparten la misma.
   const claveOp = useClaveDeOperacion("reto");
   const [form,setForm]=useState({nivel:preferredGrade,grado:preferredGrade==="primaria"?"5.º":"2.º",area:"Ciencia y Tecnología",tema:"",region:"",duracion:"45",estudiantes:"25",integrantes:"4",materiales:"papelotes, plumones y materiales reciclados",competencia:""});
@@ -4174,8 +4221,8 @@ function ChallengeCreator({profile,preferredGrade,onCreated}){
     <div className="challenge-creator-intro"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Construyamos un reto para tu grupo</h2><p>Completa el contexto del aula. Kantu organizará la misión, los roles, las reglas, la secuencia y los criterios observables.</p></div></div><div className="challenge-form">
     <label>Nivel<select value={form.nivel} onChange={e=>update("nivel",e.target.value)}><option value="primaria">Primaria</option><option value="secundaria">Secundaria</option></select></label><label>Grado<input value={form.grado} onChange={e=>update("grado",e.target.value)}/></label><label>Área curricular<select value={form.area} onChange={e=>update("area",e.target.value)}>{["Ciencia y Tecnología","Matemática","Comunicación","Personal Social","Arte y Cultura","Educación para el Trabajo"].map(x=><option key={x}>{x}</option>)}</select></label>
     <label className="wide ai-field"><span>Tema, problema o aprendizaje que deseas trabajar *</span><button type="button" onClick={()=>kantu.pedir("dinamica",form)} disabled={Boolean(kantu.campoActivo)}>{kantu.campoActivo?<Loader2 size={13} className="animate-spin"/>:<Sparkles size={13}/>} {kantu.campoActivo?kantu.espera:"Sugerir dinámica"}</button><textarea value={form.tema} onChange={e=>update("tema",e.target.value)} placeholder="Ej.: Reducir el desperdicio de agua en nuestra escuela"/></label><label>Región o contexto<input value={form.region} onChange={e=>update("region",e.target.value)} placeholder="Ej.: Áncash, contexto rural"/></label><label>Duración (minutos)<input type="number" min="20" value={form.duracion} onChange={e=>update("duracion",e.target.value)}/></label><label>N.º de estudiantes<input type="number" min="4" value={form.estudiantes} onChange={e=>update("estudiantes",e.target.value)}/></label><label>Integrantes por equipo<input type="number" min="2" max="8" value={form.integrantes} onChange={e=>update("integrantes",e.target.value)}/></label><label className="wide">Materiales disponibles<textarea value={form.materiales} onChange={e=>update("materiales",e.target.value)}/></label><label className="wide">Competencia CNEB <small>Opcional: Kantu puede sugerirla</small><input value={form.competencia} onChange={e=>update("competencia",e.target.value)} placeholder="Déjalo vacío para recibir una sugerencia"/></label>
-    {error&&<p className="challenge-error">{error}</p>}<button className="challenge-generate" onClick={generate} disabled={loading}><Sparkles size={17}/>{loading?"Kantu está construyendo el reto…":"Crear reto con Kantu"}</button>
-  </div>{loading&&<div className="kantu-generation-overlay"><div className="kantu-working kantu-working--overlay"><div className="kantu-working__visual"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu trabajando"/><span className="kantu-orbit"><Sparkles size={17}/></span></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando la misión y los equipos…</h4><p>También estoy alineando el reto al CNEB y redactando criterios que puedas observar durante la actividad.</p><div className="kantu-progress"><i/><i/><i/></div></div></div></div>}</div>;
+    {error&&<p className="challenge-error">{error}</p>}<button className="challenge-generate" onClick={()=>unaVez(generate)} disabled={loading}><Sparkles size={17}/>{loading?"Kantu está construyendo el reto…":"Crear reto con Kantu"}</button>
+  </div>{loading&&<div className="sv-genprog-overlay"><div className="kantu-working kantu-working--overlay"><div className="kantu-working__visual"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu trabajando"/><span className="kantu-orbit"><Sparkles size={17}/></span></div><div className="kantu-working__copy"><small>KANTU ESTÁ TRABAJANDO</small><h4>Estoy organizando la misión y los equipos…</h4><p>También estoy alineando el reto al CNEB y redactando criterios que puedas observar durante la actividad.</p><div className="kantu-progress"><i/><i/><i/></div></div></div></div>}</div>;
 }
 
 function LibraryEmpty({onCreate,onChallenges,onActivities}){return <div className="library-empty-state library-empty-kantu"><img loading="lazy" src="/mascot/kantu-material.webp" alt="Kantu"/><div><small>KANTU TE ACOMPAÑA</small><h2>Tu biblioteca está lista para empezar</h2><p>Crea una sesión, un reto grupal o un instrumento. Todo lo que prepares con Kantu se guardará automáticamente aquí.</p><div><button onClick={onCreate}>Crear sesión</button><button onClick={onChallenges}>Crear reto grupal</button><button onClick={onActivities}>Explorar actividades</button></div></div></div>}
