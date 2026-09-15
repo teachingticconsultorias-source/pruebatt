@@ -4,7 +4,7 @@ import JSZip from "jszip";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 
 import {
-  MARCA_NITIA, MODOS, POSICIONES, TIPOS_CON_PLANTILLA, admitePlantilla, coloresDe,
+  MARCA_SCIVERSE, MODOS, POSICIONES, TIPOS_CON_PLANTILLA, admitePlantilla, coloresDe,
   explicarModo, marcaSinPlantilla, modoEfectivo, normalizarHex, normalizarMarca,
   normalizarPosicion, tieneMarcaSimple,
 } from "../lib/export/marca.js";
@@ -15,7 +15,7 @@ import {
   rellenarPlantilla, validarPlantilla,
 } from "../lib/export/plantilla.js";
 import { buildDocument, configurarMarca } from "../lib/docx/exporters.js";
-import { COLOR, COLOR_NITIA, TINTA_SOBRE_RUBRICA, aplicarMarca, restablecerMarca } from "../lib/docx/tema.js";
+import { COLOR, COLOR_SCIVERSE, TINTA_SOBRE_RUBRICA, aplicarMarca, restablecerMarca } from "../lib/docx/tema.js";
 import { THEME } from "../lib/docx/core.js";
 import { sessionBloques, sessionChildren } from "../lib/docx/plantillas/sesion.js";
 import { form, instrument, session } from "./fixtures/word.js";
@@ -46,7 +46,7 @@ describe("Marca · el modelo", () => {
   it("normaliza el color a seis dígitos sin almohadilla", () => {
     expect(normalizarHex("#7a1f2b")).toBe("7A1F2B");
     expect(normalizarHex("7A1F2B")).toBe("7A1F2B");
-    // Un color inválido no se «arregla»: se ignora y manda el de Nitia, que
+    // Un color inválido no se «arregla»: se ignora y manda el de SciVerse, que
     // al menos se sabe que contrasta.
     for (const malo of ["rojo", "#GGG", "#12345", "", null, undefined, "#1234567"]) {
       expect(normalizarHex(malo), String(malo)).toBeNull();
@@ -59,10 +59,10 @@ describe("Marca · el modelo", () => {
     expect(normalizarPosicion("arriba")).toBe("izquierda");
   });
 
-  it("una docente sin fila exporta en formato de Nitia", () => {
+  it("una docente sin fila exporta en formato de SciVerse", () => {
     const marca = normalizarMarca(null);
-    expect(marca).toEqual(MARCA_NITIA);
-    expect(modoEfectivo(marca)).toBe("nitia");
+    expect(marca).toEqual(MARCA_SCIVERSE);
+    expect(modoEfectivo(marca)).toBe("estandar");
     expect(coloresDe(marca)).toBeNull();
   });
 
@@ -79,10 +79,28 @@ describe("Marca · el modelo", () => {
     expect(tieneMarcaSimple(marca)).toBe(true);
   });
 
-  it("MODOS es la lista cerrada que acepta el CHECK de la 012", () => {
-    expect(MODOS).toEqual(["nitia", "colegio", "plantilla"]);
-    const migracion = fs.readFileSync("supabase/migrations/012_export_branding.sql", "utf8");
-    for (const modo of MODOS) expect(migracion).toContain(`'${modo}'`);
+  it("MODOS es la lista cerrada que acepta el CHECK vigente, el de la 014", () => {
+    expect(MODOS).toEqual(["estandar", "colegio", "plantilla"]);
+    // La 012 creó la tabla con `nitia`; la 014 renombra ese valor. Se mira la
+    // vigente, no la primera: una migración aplicada es historia y no se
+    // reescribe, así que la 012 conserva el nombre con el que se ejecutó.
+    const vigente = fs.readFileSync("supabase/migrations/014_rename_modo_estandar.sql", "utf8");
+    const desde = vigente.indexOf("add constraint export_branding_modo_check");
+    const check = vigente.slice(desde, vigente.indexOf(";", desde));
+    for (const modo of MODOS) expect(check, modo).toContain(`'${modo}'`);
+    expect(check).not.toContain("'nitia'");
+  });
+
+  it("y la 014 renombra las filas antes de volver a poner el CHECK", () => {
+    const m = fs.readFileSync("supabase/migrations/014_rename_modo_estandar.sql", "utf8");
+    const quita = m.indexOf("drop constraint if exists export_branding_modo_check");
+    const renombra = m.indexOf("set modo = 'estandar' where modo = 'nitia'");
+    const pone = m.indexOf("add constraint export_branding_modo_check");
+    expect(quita).toBeGreaterThan(-1);
+    expect(renombra).toBeGreaterThan(quita);
+    expect(pone).toBeGreaterThan(renombra);
+    // El default se quita antes que el CHECK: Postgres lo valida al recrearlo.
+    expect(m.indexOf("alter column modo drop default")).toBeLessThan(quita);
   });
 });
 
@@ -105,15 +123,15 @@ describe("Marca · los respaldos, que es lo que evita quedarse sin documento", (
     expect(explicarModo(sinFichero, { puedePlantilla: true })).toContain("No encontramos tu plantilla");
   });
 
-  it("sin plantilla y sin nada del colegio: cae hasta Nitia", () => {
+  it("sin plantilla y sin nada del colegio: cae hasta SciVerse", () => {
     const vacia = normalizarMarca({ modo: "plantilla" });
-    expect(modoEfectivo(vacia, { puedePlantilla: true })).toBe("nitia");
+    expect(modoEfectivo(vacia, { puedePlantilla: true })).toBe("estandar");
     const colegioVacio = normalizarMarca({ modo: "colegio" });
-    expect(modoEfectivo(colegioVacio)).toBe("nitia");
+    expect(modoEfectivo(colegioVacio)).toBe("estandar");
   });
 
   it("cada explicación dice por qué, sin jerga", () => {
-    for (const marca of [MARCA_NITIA, conPlantilla, normalizarMarca({ modo: "colegio", logo_path: "x" })]) {
+    for (const marca of [MARCA_SCIVERSE, conPlantilla, normalizarMarca({ modo: "colegio", logo_path: "x" })]) {
       for (const puede of [true, false]) {
         const texto = explicarModo(marca, { puedePlantilla: puede });
         expect(texto.length).toBeGreaterThan(20);
@@ -124,35 +142,35 @@ describe("Marca · los respaldos, que es lo que evita quedarse sin documento", (
 });
 
 describe("Marca · el formato del colegio en el documento", () => {
-  it("aplica los colores del colegio y NO deja los de Nitia", async () => {
+  it("aplica los colores del colegio y NO deja los de SciVerse", async () => {
     const marca = normalizarMarca({ modo: "colegio", color_primario: "7A1F2B", color_acento: "C0392B" });
     const xml = await unpack(buildDocument("session", { form, resource: session, marca }));
     expect(xml).toContain("7A1F2B");
     expect(xml).toContain("C0392B");
-    expect(xml).not.toContain(COLOR_NITIA.navy);
+    expect(xml).not.toContain(COLOR_SCIVERSE.navy);
   });
 
-  it("y los deshace: el siguiente documento vuelve a Nitia", async () => {
+  it("y los deshace: el siguiente documento vuelve a SciVerse", async () => {
     const xml = await unpack(buildDocument("session", { form, resource: session }));
-    expect(xml).toContain(COLOR_NITIA.navy);
+    expect(xml).toContain(COLOR_SCIVERSE.navy);
     expect(xml).not.toContain("7A1F2B");
     // La paleta activa del módulo tampoco queda contaminada.
-    expect(COLOR.navy).toBe(COLOR_NITIA.navy);
+    expect(COLOR.navy).toBe(COLOR_SCIVERSE.navy);
   });
 
   it("los colores que no son de marca no se tocan nunca", () => {
     aplicarMarca({ primario: "7A1F2B", acento: "C0392B" });
-    expect(COLOR.fondo).toBe(COLOR_NITIA.fondo);
-    expect(COLOR.seguridad).toBe(COLOR_NITIA.seguridad);
-    expect(COLOR.rubrica.ad).toBe(COLOR_NITIA.rubrica.ad);
+    expect(COLOR.fondo).toBe(COLOR_SCIVERSE.fondo);
+    expect(COLOR.seguridad).toBe(COLOR_SCIVERSE.seguridad);
+    expect(COLOR.rubrica.ad).toBe(COLOR_SCIVERSE.rubrica.ad);
     restablecerMarca();
-    expect(COLOR.navy).toBe(COLOR_NITIA.navy);
+    expect(COLOR.navy).toBe(COLOR_SCIVERSE.navy);
   });
 
-  it("el modo nitia NO tiñe, aunque haya colores guardados", async () => {
-    const marca = normalizarMarca({ modo: "nitia", color_primario: "7A1F2B" });
+  it("el modo estandar NO tiñe, aunque haya colores guardados", async () => {
+    const marca = normalizarMarca({ modo: "estandar", color_primario: "7A1F2B" });
     const xml = await unpack(buildDocument("session", { form, resource: session, marca }));
-    expect(xml).toContain(COLOR_NITIA.navy);
+    expect(xml).toContain(COLOR_SCIVERSE.navy);
     expect(xml).not.toContain("7A1F2B");
   });
 
@@ -166,10 +184,10 @@ describe("Marca · el formato del colegio en el documento", () => {
     expect(xml).toContain("7A1F2B");
   });
 
-  it("pero sin colores ni logo, cae limpio a Nitia", async () => {
+  it("pero sin colores ni logo, cae limpio a SciVerse", async () => {
     const marca = normalizarMarca({ modo: "plantilla" });
     const xml = await unpack(buildDocument("session", { form, resource: session, marca }));
-    expect(xml).toContain(COLOR_NITIA.navy);
+    expect(xml).toContain(COLOR_SCIVERSE.navy);
   });
 });
 
@@ -258,12 +276,12 @@ describe("Plantilla propia · el relleno", () => {
 });
 
 describe("Export · el resolvedor de marca", () => {
-  it("sin registrar, todo sale en formato de Nitia", async () => {
+  it("sin registrar, todo sale en formato de SciVerse", async () => {
     // Es lo que deben hacer las pruebas de OOXML y lo que debe pasar si la
     // marca no carga: nunca dejar a la docente sin documento.
     configurarMarca(null);
     const xml = await unpack(buildDocument("session", { form, resource: session }));
-    expect(xml).toContain(COLOR_NITIA.navy);
+    expect(xml).toContain(COLOR_SCIVERSE.navy);
   });
 
   it("el exportador NO importa Supabase", () => {
@@ -505,7 +523,7 @@ describe("Plantilla propia · la validación de subida", () => {
    su propio título y su propia tabla de datos.
 
    Así que el modo se acota y el resto de tipos cae a `colegio`. Lo que se fija
-   aquí es que la caída ocurra —y que sea a COLEGIO, no a Nitia—: perder la
+   aquí es que la caída ocurra —y que sea a COLEGIO, no a SciVerse—: perder la
    plantilla no puede costarle además al colegio su logo y sus colores.
    ========================================================================== */
 describe("Plantilla propia · el alcance por tipo de documento", () => {
@@ -555,16 +573,16 @@ describe("Plantilla propia · el alcance por tipo de documento", () => {
   });
 
   it("y lo que SÍ va a la plantilla se construye sin identidad ninguna", () => {
-    // Dentro del .docx del colegio no entra ni el navy de Nitia ni el granate
+    // Dentro del .docx del colegio no entra ni el navy de SciVerse ni el granate
     // del propio colegio: el diseño ya lo trae el documento anfitrión.
     expect(coloresDe(conPlantilla, { ...vigente, tipo: "session" })).toEqual({ neutra: true });
     expect(coloresDe(conPlantilla, vigente)).toEqual({ neutra: true });
   });
 
-  it("sin nada del colegio que aplicar, cae hasta Nitia y no a medias", () => {
+  it("sin nada del colegio que aplicar, cae hasta SciVerse y no a medias", () => {
     const soloPlantilla = normalizarMarca({ modo: "plantilla", plantilla_path: "u1/p.docx" });
     expect(modoEfectivo(soloPlantilla, vigente)).toBe("plantilla");
-    expect(modoEfectivo(soloPlantilla, { ...vigente, tipo: "rubric" })).toBe("nitia");
+    expect(modoEfectivo(soloPlantilla, { ...vigente, tipo: "rubric" })).toBe("estandar");
   });
 
   it("el exportador cierra la puerta ANTES de intentar rellenar", () => {
@@ -592,7 +610,7 @@ describe("Plantilla propia · el alcance por tipo de documento", () => {
 
   it("si la plantilla falla A MITAD, el repuesto conserva la marca del colegio", () => {
     // El fichero estaba y el plan estaba: `almacen.js` ya no puede degradarlo.
-    // Sin esto el documento de repuesto salía con los colores de Nitia y el
+    // Sin esto el documento de repuesto salía con los colores de SciVerse y el
     // colegio perdía su identidad justo cuando algo le había fallado.
     const respaldo = marcaSinPlantilla(conPlantilla);
     expect(respaldo.modo).toBe("colegio");
@@ -603,7 +621,7 @@ describe("Plantilla propia · el alcance por tipo de documento", () => {
     expect(respaldo.plantillaPath).toBe(conPlantilla.plantillaPath);
 
     // Y no degrada lo que no hay que degradar.
-    expect(marcaSinPlantilla(MARCA_NITIA)).toBe(MARCA_NITIA);
+    expect(marcaSinPlantilla(MARCA_SCIVERSE)).toBe(MARCA_SCIVERSE);
     expect(marcaSinPlantilla(null)).toBeNull();
   });
 
@@ -619,7 +637,7 @@ describe("Plantilla propia · el alcance por tipo de documento", () => {
     const xml = await (await JSZip.loadAsync(await Packer.toBuffer(doc)))
       .file("word/document.xml").async("string");
     expect(xml).toContain("7A1F2B");
-    expect(xml).not.toContain(COLOR_NITIA.navy);
+    expect(xml).not.toContain(COLOR_SCIVERSE.navy);
   });
 });
 
@@ -654,7 +672,7 @@ describe("Plantilla propia · la pantalla lo dice antes de que se note", () => {
     const fuente = pantalla();
     expect(fuente).toContain("en negro y sin colores propios");
     expect(fuente).toMatch(/tablas de borde simple y sin\s+fondos de color/);
-    expect(fuente).toContain("No lleva los colores de Nitia ni los que hayas elegido");
+    expect(fuente).toContain("No lleva los colores de SciVerse ni los que hayas elegido");
   });
 
   it("el estilo del alcance existe: si no, el párrafo se lee como descripción", () => {
@@ -673,15 +691,16 @@ describe("Plantilla propia · la pantalla lo dice antes de que se note", () => {
    su plantilla, y deducirlos daría un segundo azul parecido pero distinto—.
 
    Se mide sobre un anfitrión SIN un solo color, para que todo hexadecimal que
-   aparezca en la salida lo hayamos puesto nosotros. La plantilla base de
-   SciVerse no sirve para esto: su propio esqueleto está maquetado en Nitia.
+   aparezca en la salida lo hayamos puesto nosotros. La plantilla base
+   descargable no sirve para esto: su propio esqueleto ya lleva nuestros
+   colores.
    ========================================================================== */
 describe("Plantilla propia · el contenido insertado va neutro", () => {
   const marca = normalizarMarca({ modo: "plantilla", plantilla_path: "u1/p.docx",
     logo_path: "u1/logo.png", color_primario: "7A1F2B", color_acento: "C9A227" });
 
-  /** Todos los hexadecimales de la paleta de Nitia, aplanados. */
-  const HEX_NITIA = [...new Set(Object.values(COLOR_NITIA)
+  /** Todos los hexadecimales de la paleta de SciVerse, aplanados. */
+  const HEX_SCIVERSE = [...new Set(Object.values(COLOR_SCIVERSE)
     .flatMap((v) => (typeof v === "object" && v ? Object.values(v) : [v]))
     .filter((v) => typeof v === "string" && /^[0-9A-F]{6}$/.test(v)))];
 
@@ -708,9 +727,9 @@ describe("Plantilla propia · el contenido insertado va neutro", () => {
     return (await JSZip.loadAsync(salida)).file("word/document.xml").async("string");
   }
 
-  it("la paleta neutra no deja NI UN hexadecimal de Nitia", async () => {
+  it("la paleta neutra no deja NI UN hexadecimal de SciVerse", async () => {
     const xml = await rellenarCon(coloresDe(marca, { puedePlantilla: true, tipo: "complete" }));
-    for (const hex of HEX_NITIA) {
+    for (const hex of HEX_SCIVERSE) {
       expect(new RegExp(hex, "i").test(xml), `queda ${hex}`).toBe(false);
     }
   });
@@ -735,15 +754,15 @@ describe("Plantilla propia · el contenido insertado va neutro", () => {
     expect(xml).not.toContain("<w:shd ");
   });
 
-  it("y los bordes son los automáticos de Word, no los azules de Nitia", async () => {
+  it("y los bordes son los automáticos de Word, no los azules de SciVerse", async () => {
     const xml = await rellenarCon({ neutra: true });
     expect((xml.match(/w:color="auto"/g) || []).length).toBeGreaterThan(0);
   });
 
-  it("pero la maqueta de siempre NO se vuelve gris: Nitia sigue siendo Nitia", async () => {
+  it("pero la maqueta de siempre NO se vuelve gris: el formato propio se conserva", async () => {
     const xml = await rellenarCon(null);
-    expect(xml).toContain(COLOR_NITIA.navy);
-    expect(xml).toContain(COLOR_NITIA.azul);
+    expect(xml).toContain(COLOR_SCIVERSE.navy);
+    expect(xml).toContain(COLOR_SCIVERSE.azul);
     expect(xml).toContain("<w:shd ");
     // Y el modo colegio sigue pintando los suyos.
     const delColegio = await rellenarCon({ primario: "7A1F2B", acento: "C9A227" });
@@ -753,7 +772,7 @@ describe("Plantilla propia · el contenido insertado va neutro", () => {
 
   it("la ruta de plantilla aplica la paleta ELLA MISMA, no la hereda", () => {
     // `rellenarConPlantilla` no pasa por `buildDocument`. Sin su propio
-    // `aplicarMarca` los bloques salían con el navy de Nitia y se incrustaban
+    // `aplicarMarca` los bloques salían con el navy de SciVerse y se incrustaban
     // tal cual en el membrete del colegio: el bug que esto cierra.
     const exportador = fs.readFileSync("lib/docx/exporters.js", "utf8");
     const relleno = exportador.slice(exportador.indexOf("async function rellenarConPlantilla"),
@@ -766,7 +785,7 @@ describe("Plantilla propia · el contenido insertado va neutro", () => {
 
   it("los alias en inglés de THEME leen la paleta viva, no una foto", () => {
     // Eran un objeto literal evaluado al importar, así que `THEME.border`
-    // seguía siendo el azul de Nitia aunque el documento fuera de un colegio.
+    // seguía siendo el azul de SciVerse aunque el documento fuera de un colegio.
     aplicarMarca({ neutra: true });
     try {
       expect(THEME.border).toBe("auto");
@@ -775,8 +794,8 @@ describe("Plantilla propia · el contenido insertado va neutro", () => {
     } finally {
       restablecerMarca();
     }
-    expect(THEME.border).toBe(COLOR_NITIA.borde);
-    expect(THEME.ink).toBe(COLOR_NITIA.texto);
+    expect(THEME.border).toBe(COLOR_SCIVERSE.borde);
+    expect(THEME.ink).toBe(COLOR_SCIVERSE.texto);
   });
 
   it("y la tinta de la rúbrica no se queda en blanco sobre nada", () => {
@@ -789,7 +808,7 @@ describe("Plantilla propia · el contenido insertado va neutro", () => {
     } finally {
       restablecerMarca();
     }
-    expect(TINTA_SOBRE_RUBRICA.ad).toBe(COLOR_NITIA.blanco);
-    expect(TINTA_SOBRE_RUBRICA.c).toBe(COLOR_NITIA.texto);
+    expect(TINTA_SOBRE_RUBRICA.ad).toBe(COLOR_SCIVERSE.blanco);
+    expect(TINTA_SOBRE_RUBRICA.c).toBe(COLOR_SCIVERSE.texto);
   });
 });

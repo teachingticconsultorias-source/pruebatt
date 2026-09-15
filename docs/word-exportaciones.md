@@ -137,7 +137,7 @@ Tres modos por docente, de menos a más específico. Se eligen en
 
 | Modo | Qué hace | Plan |
 | --- | --- | --- |
-| `nitia` | La maqueta de siempre. Valor por defecto y respaldo de todo | Todos |
+| `estandar` | La maqueta de siempre. Valor por defecto y respaldo de todo | Todos |
 | `colegio` | La misma maqueta con el logo y los colores de la institución | Todos |
 | `plantilla` | El `.docx` del propio colegio, relleno por marcadores | Pro |
 
@@ -157,7 +157,7 @@ fichero puede borrarse desde el panel de Storage. `modoEfectivo()` resuelve la
 caída en un solo sitio, y siempre hacia abajo:
 
 ```
-plantilla  →  sin plan o sin fichero  →  colegio  →  sin logo ni colores  →  nitia
+plantilla  →  sin plan o sin fichero  →  colegio  →  sin logo ni colores  →  estandar
 ```
 
 Una docente nunca se queda sin poder exportar. Si eligió plantilla y la pierde,
@@ -250,7 +250,7 @@ inválida».
 ### El contenido lo declara la maqueta; aquí no se deduce nada
 
 `sessionBloques()` en `lib/docx/plantillas/sesion.js` devuelve los ocho cubos ya
-construidos, y `sessionChildren()` **se compone de ellos**: la maqueta de Nitia y
+construidos, y `sessionChildren()` **se compone de ellos**: la maqueta de SciVerse y
 el modo plantilla comparten exactamente los mismos párrafos y tablas, así que no
 pueden divergir.
 
@@ -290,7 +290,7 @@ no la misma con secciones ausentes.
 Por eso el modo está **acotado**: `TIPOS_CON_PLANTILLA` en `lib/export/marca.js`
 lo limita a `session` y `complete`, y `admitePlantilla(tipo)` es la puerta. Con
 cualquier otro tipo, `modoEfectivo(marca, { tipo })` baja a `colegio`: la maqueta
-de Nitia con el logo y los colores del centro. El colegio conserva su identidad
+de SciVerse con el logo y los colores del centro. El colegio conserva su identidad
 en TODAS sus descargas y nadie recibe un documento con secciones huecas.
 
 Un contrato por tipo obligaría a cada docente a mantener y subir varias
@@ -310,14 +310,14 @@ completo).
 Acotar el modo no bastaba. Lo que `patchDocument` insertaba —tablas, encabezados
 de sección, barras de momento— seguía saliendo con el **navy y el azul de
 SciVerse**, porque `coloresDe` devolvía `null` en modo plantilla y `null`
-significa «la paleta de Nitia». El resultado: cabeceras azul marino y barras de
+significa «la paleta de SciVerse». El resultado: cabeceras azul marino y barras de
 momento de otro producto incrustadas en el membrete de la institución. Es
 exactamente lo que el docente quiso evitar al subir su documento.
 
 Ahora `coloresDe` devuelve `{ neutra: true }` y `tema.js` tiene una tercera
 paleta:
 
-| rol | Nitia | colegio | **neutra** |
+| rol | SciVerse | colegio | **neutra** |
 | --- | --- | --- | --- |
 | texto, titulares | `1A1A1A` / `0B2E4F` | ídem / primario | `000000` |
 | acento, reglas | `1C74BC` | acento | `000000` |
@@ -338,7 +338,7 @@ Medido sobre un anfitrión sin un solo color, para que todo hexadecimal de la
 salida sea nuestro:
 
 ```
-A · paleta de Nitia     0B2E4F, 1C74BC, EAF4FB, 1A1A1A, FFFFFF, BBDBF0, 6BB3E0
+A · paleta de SciVerse     0B2E4F, 1C74BC, EAF4FB, 1A1A1A, FFFFFF, BBDBF0, 6BB3E0
 B · colores del colegio 7A1F2B, C9A227 + los no sobreescritos
 C · modo plantilla      NINGUNO   ·   0 nodos <w:shd>   ·   54 bordes «auto»
 ```
@@ -357,14 +357,14 @@ Tres cosas hubo que separar para que esto fuera posible:
   Un blanco explícito dentro de una plantilla con fondo tintado abre agujeros
   blancos en el diseño del colegio.
 - **`THEME` y `TINTA_SOBRE_RUBRICA` eran objetos literales**, es decir FOTOS de
-  la paleta de Nitia tomadas al importar el módulo. `THEME.border` seguía siendo
-  el azul de Nitia aunque el documento fuera de un colegio con su marca, y el
+  la paleta de SciVerse tomadas al importar el módulo. `THEME.border` seguía siendo
+  el azul de SciVerse aunque el documento fuera de un colegio con su marca, y el
   blanco de «Logro destacado» habría sido texto invisible sin relleno. Los dos
   leen ahora la paleta viva.
 
 La ruta de plantilla aplica la paleta **ella misma**: no pasa por
 `buildDocument`, así que sin su propio `aplicarMarca` los bloques se construían
-en Nitia por mucho que el modo dijera otra cosa.
+en SciVerse por mucho que el modo dijera otra cosa.
 
 Dos huecos más que se cerraron por el camino:
 
@@ -374,7 +374,7 @@ Dos huecos más que se cerraron por el camino:
   revierte con el mismo `finally` que `buildDocument`.
 - **Una plantilla que falla a mitad se llevaba también los colores.** Si el
   fichero está y el plan está, `almacen.js` ya no puede degradar nada; si aun
-  así `patchDocument` no puede con él, el repuesto salía en formato de Nitia.
+  así `patchDocument` no puede con él, el repuesto salía en formato de SciVerse.
   `marcaSinPlantilla()` baja el modo a `colegio` en el `catch`: perder la
   plantilla no cuesta además el logo.
 
@@ -385,7 +385,7 @@ en node sin sesión. Y enhebrar la marca por los doce puntos de descarga
 significaría que el que se olvidara exportaría sin ella.
 
 En su lugar, `main.jsx` registra el resolvedor una vez
-(`configurarMarca(marcaVigente)`). Sin registrar, todo sale en formato de Nitia,
+(`configurarMarca(marcaVigente)`). Sin registrar, todo sale en formato de SciVerse,
 que es exactamente lo que deben hacer las pruebas.
 
 Los colores se aplican con una **paleta activa** en `tema.js`: `COLOR` es una

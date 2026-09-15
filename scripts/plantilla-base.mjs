@@ -44,7 +44,7 @@ import { Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   PageBreak } from "docx";
 
 import { MARCADORES, MARCADORES_MINIMOS } from "../lib/export/plantilla.js";
-import { COLOR_NITIA, FUENTE, TAMANO } from "../lib/docx/tema.js";
+import { COLOR_SCIVERSE, FUENTE, TAMANO } from "../lib/docx/tema.js";
 
 const ANCHO = 10106;   // A4 menos los márgenes de 900
 
@@ -55,14 +55,14 @@ const texto = (contenido, opciones = {}) => new Paragraph({
 });
 const seccion = (contenido) => new Paragraph({
   spacing: { before: 260, after: 120 },
-  border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: COLOR_NITIA.azul } },
-  children: [run(contenido, { size: TAMANO.seccion, bold: true, color: COLOR_NITIA.navy })],
+  border: { bottom: { style: BorderStyle.SINGLE, size: 10, color: COLOR_SCIVERSE.azul } },
+  children: [run(contenido, { size: TAMANO.seccion, bold: true, color: COLOR_SCIVERSE.navy })],
 });
 
 /** Un marcador de bloque: SOLO en su párrafo. Nada más en esta línea. */
 const bloque = (clave) => new Paragraph({
   spacing: { before: 60, after: 200 },
-  children: [run(`{{${clave}}}`, { color: COLOR_NITIA.azul, bold: true })],
+  children: [run(`{{${clave}}}`, { color: COLOR_SCIVERSE.azul, bold: true })],
 });
 
 const celda = (hijos, { ancho, fill }) => new TableCell({
@@ -74,9 +74,9 @@ const celda = (hijos, { ancho, fill }) => new TableCell({
 
 /** Etiqueta | {{marcador}} — el de línea sí puede vivir en una celda con rótulo. */
 const filaDeDato = (etiqueta, clave) => new TableRow({ children: [
-  celda([texto(etiqueta, { spacing: { after: 0 }, run: { bold: true, color: COLOR_NITIA.navy, size: TAMANO.nota } })],
-    { ancho: 2800, fill: COLOR_NITIA.fondo }),
-  celda([texto(`{{${clave}}}`, { spacing: { after: 0 }, run: { color: COLOR_NITIA.azul } })],
+  celda([texto(etiqueta, { spacing: { after: 0 }, run: { bold: true, color: COLOR_SCIVERSE.navy, size: TAMANO.nota } })],
+    { ancho: 2800, fill: COLOR_SCIVERSE.fondo }),
+  celda([texto(`{{${clave}}}`, { spacing: { after: 0 }, run: { color: COLOR_SCIVERSE.azul } })],
     { ancho: ANCHO - 2800 }),
 ] });
 
@@ -84,7 +84,7 @@ const tablaDeDatos = (lineas) => new Table({
   width: { size: ANCHO, type: WidthType.DXA },
   layout: TableLayoutType.FIXED, columnWidths: [2800, ANCHO - 2800],
   borders: Object.fromEntries(["top", "bottom", "left", "right", "insideHorizontal", "insideVertical"]
-    .map((k) => [k, { style: BorderStyle.SINGLE, size: 4, color: COLOR_NITIA.borde }])),
+    .map((k) => [k, { style: BorderStyle.SINGLE, size: 4, color: COLOR_SCIVERSE.borde }])),
   rows: lineas.map((m) => filaDeDato(m.etiqueta, m.clave)),
 });
 
@@ -102,7 +102,7 @@ const instrucciones = [
   }),
   new Paragraph({
     alignment: AlignmentType.CENTER, spacing: { after: 240 },
-    children: [run("Es sólo la ayuda. Lo que se usa empieza en la página siguiente.", { italics: true, color: COLOR_NITIA.auxiliar })],
+    children: [run("Es sólo la ayuda. Lo que se usa empieza en la página siguiente.", { italics: true, color: COLOR_SCIVERSE.auxiliar })],
   }),
 
   seccion("CÓMO ADAPTAR ESTA PLANTILLA"),
@@ -110,16 +110,16 @@ const instrucciones = [
   texto("Lo único que no debes tocar son las marcas entre llaves dobles. Ahí es donde SciVerse coloca lo que genera."),
 
   seccion("LAS DOS REGLAS QUE IMPORTAN"),
-  texto("1. Una marca de BLOQUE va sola en su párrafo.", { run: { bold: true, color: COLOR_NITIA.navy } }),
+  texto("1. Una marca de BLOQUE va sola en su párrafo.", { run: { bold: true, color: COLOR_SCIVERSE.navy } }),
   texto("Las marcas de bloque traen tablas y varios párrafos, así que ocupan toda la línea donde están. Si escribes texto a su lado, ese texto se perderá al rellenar el documento. Déjalas solas, en su propia línea o en su propia celda."),
-  texto("2. Escribe las marcas a mano.", { run: { bold: true, color: COLOR_NITIA.navy, } }),
+  texto("2. Escribe las marcas a mano.", { run: { bold: true, color: COLOR_SCIVERSE.navy, } }),
   texto("Si las copias con formato, Word puede partirlas en trozos y dejan de reconocerse. Al subir la plantilla te avisaremos si eso ha pasado."),
 
   seccion("QUÉ TRAE CADA MARCA"),
   texto("De línea — se sustituyen por un texto corto y pueden ir dentro de una frase o de una celda:", { run: { bold: true } }),
-  ...lineas.map((m) => texto(`     ${m.clave}  ·  ${m.etiqueta}`, { spacing: { after: 40 }, run: { size: TAMANO.nota, color: COLOR_NITIA.auxiliar } })),
+  ...lineas.map((m) => texto(`     ${m.clave}  ·  ${m.etiqueta}`, { spacing: { after: 40 }, run: { size: TAMANO.nota, color: COLOR_SCIVERSE.auxiliar } })),
   texto("De bloque — traen tablas y párrafos completos, y van solas en su línea:", { spacing: { before: 140 }, run: { bold: true } }),
-  ...bloques.map((m) => texto(`     ${m.clave}  ·  ${m.etiqueta}`, { spacing: { after: 40 }, run: { size: TAMANO.nota, color: COLOR_NITIA.auxiliar } })),
+  ...bloques.map((m) => texto(`     ${m.clave}  ·  ${m.etiqueta}`, { spacing: { after: 40 }, run: { size: TAMANO.nota, color: COLOR_SCIVERSE.auxiliar } })),
 
   seccion("LO MÍNIMO PARA QUE FUNCIONE"),
   // Sin llaves: escribir «{{secuencia}}» aquí convertiría este párrafo de ayuda
@@ -136,7 +136,7 @@ const instrucciones = [
 const esqueleto = [
   new Paragraph({
     alignment: AlignmentType.CENTER, spacing: { after: 200 },
-    children: [run("{{titulo}}", { size: TAMANO.titulo, bold: true, color: COLOR_NITIA.navy })],
+    children: [run("{{titulo}}", { size: TAMANO.titulo, bold: true, color: COLOR_SCIVERSE.navy })],
   }),
 
   seccion("DATOS GENERALES"),
@@ -162,17 +162,17 @@ const esqueleto = [
   bloque("dua"),
   bloque("anexos"),
 
-  // `datos_generales` trae la tabla completa de la maqueta de Nitia. Se ofrece
+  // `datos_generales` trae la tabla completa de la maqueta de SciVerse. Se ofrece
   // como alternativa a la tabla de arriba: quien prefiera la suya, borra esta
   // línea; quien prefiera la nuestra, borra la tabla y deja esto.
-  seccion("TABLA DE DATOS DE NITIA (alternativa a la de arriba)"),
+  seccion("TABLA DE DATOS DE SCIVERSE (alternativa a la de arriba)"),
   bloque("datos_generales"),
 ];
 
 const documento = new Document({
   creator: "Teaching TIC",
   title: "Plantilla base de exportación · SciVerse",
-  styles: { default: { document: { run: { font: FUENTE, size: TAMANO.cuerpo, color: COLOR_NITIA.texto } } } },
+  styles: { default: { document: { run: { font: FUENTE, size: TAMANO.cuerpo, color: COLOR_SCIVERSE.texto } } } },
   sections: [{
     properties: { page: { margin: { top: 900, right: 900, bottom: 900, left: 900 } } },
     children: [...instrucciones, ...esqueleto],

@@ -421,14 +421,18 @@ describe("bloqueo del tipo de material", () => {
 
   it("y no se ha ejecutado ninguna migración desde aquí", () => {
     // Sólo se añaden ficheros versionados; aplicarlos es tarea del equipo
-    // desde el editor SQL. La última es la 013, que declara la lista completa
-    // y por eso no depende del orden en que se corran.
+    // desde el editor SQL.
     const migraciones = fs.readdirSync(path.join(raiz, "supabase", "migrations"))
       .filter((f) => f.endsWith(".sql")).sort();
     const ultima = migraciones[migraciones.length - 1];
-    expect(ultima).toBe("013_lab_guide_material.sql");
-    const trece = leer(`supabase/migrations/${ultima}`);
+    expect(ultima).toBe("014_rename_modo_estandar.sql");
+    // La 013 declara la lista COMPLETA de tipos, por eso no depende del orden.
+    const trece = leer("supabase/migrations/013_lab_guide_material.sql");
     expect(trece).toContain("'wordsearch'");
     expect(trece).toContain("'lab_guide'");
+    // La 014 renombra el modo por defecto. Va ANTES del deploy: el código
+    // nuevo escribe `estandar` y el CHECK viejo lo rechazaría con 23514.
+    const catorce = leer(`supabase/migrations/${ultima}`);
+    expect(catorce).toContain("ESTA MIGRACIÓN VA ANTES DEL DEPLOY");
   });
 });

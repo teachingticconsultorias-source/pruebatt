@@ -1,4 +1,12 @@
 -- ============================================================================
+-- NOTA (014) · EL MODO `nitia` SE LLAMA AHORA `estandar`
+--
+-- Esta migración ya se ejecutó en producción y NO se reescribe: es el registro
+-- de lo que se aplicó. El valor `nitia` que aparece aquí abajo lo renombra la
+-- migración 014, que es la vigente. Un entorno limpio que corra 012→014 acaba
+-- exactamente igual que producción.
+-- ============================================================================
+-- ============================================================================
 -- 012 · PERSONALIZAR EXPORT · marca del colegio y plantilla propia
 --
 -- QUÉ HABILITA

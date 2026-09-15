@@ -22,7 +22,7 @@ import { MARCADORES } from "../../lib/export/plantilla.js";
    ========================================================================== */
 
 const TARJETAS = [
-  { modo: "nitia", icono: FileText, titulo: "Formato de Nitia",
+  { modo: "estandar", icono: FileText, titulo: "Formato de SciVerse",
     desc: "El diseño que ya conoces: limpio, alineado al CNEB y listo para imprimir." },
   { modo: "colegio", icono: Palette, titulo: "Formato de mi colegio",
     desc: "El mismo diseño con el logo y los colores de tu institución." },
@@ -69,7 +69,7 @@ export default function ExportSection() {
   return (
     <section className="export-branding">
       <p className="export-branding__intro">
-        Elige cómo quieres que se vean los documentos que descargas. El formato de Nitia y el
+        Elige cómo quieres que se vean los documentos que descargas. El formato de SciVerse y el
         de tu colegio se aplican a todas tus exportaciones: sesiones, instrumentos, fichas y
         materiales. La plantilla propia sólo a la sesión y a la clase completa.
       </p>
@@ -97,7 +97,7 @@ export default function ExportSection() {
 
               {bloqueada ? (
                 <p className="export-card__lock">
-                  Disponible con el plan Pro. Tu plan actual puede usar el formato de Nitia y el de tu colegio.
+                  Disponible con el plan Pro. Tu plan actual puede usar el formato de SciVerse y el de tu colegio.
                 </p>
               ) : (
                 <Button
@@ -232,16 +232,16 @@ export default function ExportSection() {
       <p className="export-branding__nota">
         Tu plantilla recibe la sesión y la clase completa, que son los documentos cuyo contenido
         encaja en sus marcas. Un proyecto STEAM o una rúbrica tienen otra estructura: se descargan
-        con el logo y los colores de tu colegio sobre el formato de Nitia.
+        con el logo y los colores de tu colegio sobre el formato de SciVerse.
       </p>
       <p className="export-branding__nota">
         Dentro de tu plantilla, el contenido va en texto negro con tablas de borde simple y sin
-        fondos de color. No lleva los colores de Nitia ni los que hayas elegido más arriba: toda la
+        fondos de color. No lleva los colores de SciVerse ni los que hayas elegido más arriba: toda la
         identidad visual la pone tu documento, que para eso es tuyo.
       </p>
       <p className="export-branding__nota">
         Y si tu plantilla deja de estar disponible, tus documentos se seguirán descargando con el
-        formato de tu colegio o el de Nitia. Nunca te quedas sin poder exportar.
+        formato de tu colegio o el de SciVerse. Nunca te quedas sin poder exportar.
       </p>
     </section>
   );
