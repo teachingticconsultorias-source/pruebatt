@@ -278,10 +278,35 @@ orientaciones DUA, y en cambio tiene integración STEAM, ruta por semanas y
 sesiones, que en este contrato no tienen dónde caer. Son estructuras distintas,
 no la misma con secciones ausentes.
 
-**Pendiente de decisión** (ver `docs/pendientes.md`): acotar el modo `plantilla`
-a sesión y clase completa, y que el resto de tipos caiga a modo `colegio` —misma
-maqueta de Nitia con el logo y los colores del centro—. Un contrato por tipo
-obligaría a cada docente a mantener varias plantillas.
+Por eso el modo está **acotado**: `TIPOS_CON_PLANTILLA` en `lib/export/marca.js`
+lo limita a `session` y `complete`, y `admitePlantilla(tipo)` es la puerta. Con
+cualquier otro tipo, `modoEfectivo(marca, { tipo })` baja a `colegio`: la maqueta
+de Nitia con el logo y los colores del centro. El colegio conserva su identidad
+en TODAS sus descargas y nadie recibe un documento con secciones huecas.
+
+Un contrato por tipo obligaría a cada docente a mantener y subir varias
+plantillas. Se reconsiderará si un colegio pide su formato propio de proyecto
+STEAM; hoy nadie lo ha pedido.
+
+El tipo llega hasta `coloresDe()`, y esa es la parte que arregla un fallo real:
+antes `coloresDe` devolvía null en cuanto el modo era `plantilla`, así que un
+STEAM de un colegio con plantilla salía **sin marca ninguna** —ni plantilla, ni
+logo, ni colores—, peor que si no hubiera configurado nada. Compárense
+`docs/qa/word/15-steam-plantilla.pdf` (encabezados vacíos) y
+`docs/qa/word/16-steam-colegio.pdf` (granate y dorado del colegio, documento
+completo).
+
+Dos huecos más que se cerraron por el camino:
+
+- **La clase completa no recogía la marca.** `buildCompleteClass` ignoraba
+  `marca` por completo —no la desestructuraba siquiera—, así que se armaba sin
+  logo y sin colores aunque el colegio los tuviera puestos. Ahora aplica y
+  revierte con el mismo `finally` que `buildDocument`.
+- **Una plantilla que falla a mitad se llevaba también los colores.** Si el
+  fichero está y el plan está, `almacen.js` ya no puede degradar nada; si aun
+  así `patchDocument` no puede con él, el repuesto salía en formato de Nitia.
+  `marcaSinPlantilla()` baja el modo a `colegio` en el `catch`: perder la
+  plantilla no cuesta además el logo.
 
 ### Cómo llega la marca al exportador
 
@@ -321,6 +346,14 @@ El primer comando genera doce archivos en `docs/qa/word/`: de `01-sesion.docx` a
 - `11-sesion-dpcc.docx` — Secundaria 3.º con el área de nombre más largo del
   catálogo (DPCC), una IE de 78 caracteres y un título de 111.
 - `12-laboratorio.docx` — la guía de laboratorio con sus dos partes.
+- `13-clase-completa-plantilla.docx` — la clase completa dentro de la plantilla
+  base, con las diecisiete marcas resueltas.
+- `15-steam-plantilla.docx` — el mismo relleno sobre un STEAM, que es lo que
+  motivó acotar el modo: cuatro encabezados del colegio se quedan vacíos.
+- `16-steam-colegio.docx` — ese mismo STEAM como se descarga hoy: modo
+  `colegio`, con el granate y el dorado del centro.
+- `17-clase-completa-colegio.docx` — la clase completa recogiendo la marca, que
+  antes ignoraba.
 
 La carpeta ya está ignorada por Git. Todos los datos son ficticios y reproducen
 la FORMA REAL que entrega la generación —`componerSesion()`, `PROJECT_SCHEMA` y

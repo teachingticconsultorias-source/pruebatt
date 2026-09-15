@@ -4,8 +4,9 @@ import JSZip from "jszip";
 import { Document, Packer, Paragraph, TextRun } from "docx";
 
 import {
-  MARCA_NITIA, MODOS, POSICIONES, coloresDe, explicarModo, modoEfectivo,
-  normalizarHex, normalizarMarca, normalizarPosicion, tieneMarcaSimple,
+  MARCA_NITIA, MODOS, POSICIONES, TIPOS_CON_PLANTILLA, admitePlantilla, coloresDe,
+  explicarModo, marcaSinPlantilla, modoEfectivo, normalizarHex, normalizarMarca,
+  normalizarPosicion, tieneMarcaSimple,
 } from "../lib/export/marca.js";
 import {
   MARCADORES, MARCADORES_MINIMOS, MAX_PLANTILLA_BYTES, comprobarPatcheables,
@@ -491,5 +492,159 @@ describe("Plantilla propia · la validación de subida", () => {
       expect(donde, comprobacion).toBeGreaterThan(-1);
       expect(donde, `${comprobacion} después de subir`).toBeLessThan(indiceSubida);
     }
+  });
+});
+
+/* ============================================================================
+   HASTA DÓNDE LLEGA LA PLANTILLA DEL COLEGIO
+
+   El contrato de marcadores tiene forma de sesión. Medido sobre estos mismos
+   ejemplares: sesión y clase completa llenan los ocho bloques; un proyecto
+   STEAM llena uno y deja siete encabezados del colegio vacíos, y debajo repite
+   su propio título y su propia tabla de datos.
+
+   Así que el modo se acota y el resto de tipos cae a `colegio`. Lo que se fija
+   aquí es que la caída ocurra —y que sea a COLEGIO, no a Nitia—: perder la
+   plantilla no puede costarle además al colegio su logo y sus colores.
+   ========================================================================== */
+describe("Plantilla propia · el alcance por tipo de documento", () => {
+  const conPlantilla = normalizarMarca({ modo: "plantilla", plantilla_path: "u1/p.docx",
+    logo_path: "u1/logo.png", color_primario: "7A1F2B", color_acento: "C9A227" });
+  const vigente = { puedePlantilla: true };
+
+  it("sesión y clase completa sí; el resto no", () => {
+    expect(TIPOS_CON_PLANTILLA).toEqual(["session", "complete"]);
+    for (const tipo of ["session", "complete"]) {
+      expect(admitePlantilla(tipo), tipo).toBe(true);
+    }
+    for (const tipo of ["project", "project_steam", "rubric", "checklist", "rating_scale",
+      "observation_guide", "worksheet", "reading", "challenge", "wordsearch", "lab_guide"]) {
+      expect(admitePlantilla(tipo), tipo).toBe(false);
+    }
+  });
+
+  it("el guion y el guion bajo son el mismo tipo", () => {
+    // `downloadResource` recibe «project-steam» de unos sitios y
+    // «project_steam» de otros; `buildSections` ya normaliza igual.
+    expect(admitePlantilla("project-steam")).toBe(admitePlantilla("project_steam"));
+    expect(admitePlantilla("lab-guide")).toBe(false);
+  });
+
+  it("sin tipo NO se acota: la pantalla de ajustes habla del modo en general", () => {
+    expect(admitePlantilla(null)).toBe(true);
+    expect(admitePlantilla("")).toBe(true);
+    expect(modoEfectivo(conPlantilla, vigente)).toBe("plantilla");
+    expect(explicarModo(conPlantilla, vigente)).toContain("plantilla .docx de tu colegio");
+  });
+
+  it("con un tipo que el contrato no cubre, el modo baja a COLEGIO", () => {
+    expect(modoEfectivo(conPlantilla, { ...vigente, tipo: "session" })).toBe("plantilla");
+    expect(modoEfectivo(conPlantilla, { ...vigente, tipo: "complete" })).toBe("plantilla");
+    for (const tipo of ["project_steam", "rubric", "lab_guide", "wordsearch"]) {
+      expect(modoEfectivo(conPlantilla, { ...vigente, tipo }), tipo).toBe("colegio");
+    }
+  });
+
+  it("y ese documento SÍ recibe el logo y los colores del colegio", () => {
+    // El fallo que esto ataja: `coloresDe` devolvía null en modo plantilla, así
+    // que un STEAM de un colegio con plantilla salía sin marca NINGUNA — ni
+    // plantilla, ni logo, ni colores. Peor que no haber configurado nada.
+    expect(coloresDe(conPlantilla, vigente)).toBeNull();
+    expect(coloresDe(conPlantilla, { ...vigente, tipo: "project_steam" }))
+      .toEqual({ primario: "7A1F2B", acento: "C9A227" });
+  });
+
+  it("sin nada del colegio que aplicar, cae hasta Nitia y no a medias", () => {
+    const soloPlantilla = normalizarMarca({ modo: "plantilla", plantilla_path: "u1/p.docx" });
+    expect(modoEfectivo(soloPlantilla, vigente)).toBe("plantilla");
+    expect(modoEfectivo(soloPlantilla, { ...vigente, tipo: "rubric" })).toBe("nitia");
+  });
+
+  it("el exportador cierra la puerta ANTES de intentar rellenar", () => {
+    const exportador = fs.readFileSync("lib/docx/exporters.js", "utf8");
+    const descarga = exportador.slice(exportador.indexOf("export async function downloadResource"),
+      exportador.indexOf("export async function downloadCompleteClass"));
+    // La condición del tipo va primero: ni se leen los bytes de la plantilla.
+    expect(descarga).toMatch(/if \(admitePlantilla\(type\) &&/);
+    // Y la clase completa mantiene la suya, que sí está cubierta.
+    const completa = exportador.slice(exportador.indexOf("export async function downloadCompleteClass"));
+    expect(completa).toContain("rellenarConPlantilla");
+  });
+
+  it("los colores del colegio llegan al documento de verdad, no sólo al cálculo", () => {
+    const exportador = fs.readFileSync("lib/docx/exporters.js", "utf8");
+    // `buildDocument` tiene que decirle a `coloresDe` QUÉ está construyendo.
+    expect(exportador).toContain("puedePlantilla: options.puedePlantilla, tipo: type");
+    // Y la clase completa, que no pasa por `buildDocument`, se pinta sola.
+    const completa = exportador.slice(exportador.indexOf("export function buildCompleteClass"));
+    expect(completa).toContain('tipo: "complete"');
+    expect(completa).toContain("fijarMarcaDeDocumento(marca)");
+    // Con su `finally`: un documento a medias no deja colores pegados.
+    expect(completa.slice(0, completa.indexOf("\n}"))).toContain("restablecerMarca()");
+  });
+
+  it("si la plantilla falla A MITAD, el repuesto conserva la marca del colegio", () => {
+    // El fichero estaba y el plan estaba: `almacen.js` ya no puede degradarlo.
+    // Sin esto el documento de repuesto salía con los colores de Nitia y el
+    // colegio perdía su identidad justo cuando algo le había fallado.
+    const respaldo = marcaSinPlantilla(conPlantilla);
+    expect(respaldo.modo).toBe("colegio");
+    expect(coloresDe(respaldo, { ...vigente, tipo: "session" }))
+      .toEqual({ primario: "7A1F2B", acento: "C9A227" });
+    // El resto de la marca no se toca: sigue siendo la misma fila.
+    expect(respaldo.logoPath).toBe(conPlantilla.logoPath);
+    expect(respaldo.plantillaPath).toBe(conPlantilla.plantillaPath);
+
+    // Y no degrada lo que no hay que degradar.
+    expect(marcaSinPlantilla(MARCA_NITIA)).toBe(MARCA_NITIA);
+    expect(marcaSinPlantilla(null)).toBeNull();
+  });
+
+  it("los dos puntos de descarga usan ese respaldo en su catch", () => {
+    const exportador = fs.readFileSync("lib/docx/exporters.js", "utf8");
+    expect((exportador.match(/marca = marcaSinPlantilla\(marca\);/g) || []).length).toBe(2);
+  });
+
+  it("un STEAM con plantilla configurada sale con los colores del colegio", async () => {
+    const doc = buildDocument("project_steam", {
+      form, resource: { titulo: "Guardianes del agua", reto: "¿Cómo cuidamos el agua?" },
+      profile: {}, marca: conPlantilla, puedePlantilla: true });
+    const xml = await (await JSZip.loadAsync(await Packer.toBuffer(doc)))
+      .file("word/document.xml").async("string");
+    expect(xml).toContain("7A1F2B");
+    expect(xml).not.toContain(COLOR_NITIA.navy);
+  });
+});
+
+describe("Plantilla propia · la pantalla lo dice antes de que se note", () => {
+  const pantalla = () => fs.readFileSync("components/account/ExportSection.jsx", "utf8");
+
+  it("la tarjeta declara su alcance, y no en letra pequeña al final", () => {
+    const fuente = pantalla();
+    const tarjeta = fuente.slice(fuente.indexOf('titulo: "Mi plantilla .docx"'));
+    const alcance = tarjeta.slice(0, tarjeta.indexOf("];"));
+    expect(alcance).toContain("Sesión de aprendizaje");
+    expect(alcance).toContain("Clase completa");
+    // Se pinta dentro de la cabecera, junto a la descripción.
+    expect(fuente).toContain("export-card__alcance");
+  });
+
+  it("la intro ya no promete que se aplica a todo", () => {
+    const fuente = pantalla();
+    const intro = fuente.slice(fuente.indexOf("export-branding__intro"));
+    expect(intro.slice(0, 500)).toContain("sólo a la sesión y a la clase completa");
+  });
+
+  it("y el pie explica qué pasa con los demás documentos", () => {
+    const fuente = pantalla();
+    const pie = fuente.slice(fuente.lastIndexOf("export-branding__nota", fuente.indexOf("Nunca te quedas")));
+    expect(fuente).toContain("proyecto STEAM o una rúbrica");
+    // Sin perder lo que ya decía sobre quedarse sin plantilla.
+    expect(pie).toContain("Nunca te quedas sin poder exportar");
+  });
+
+  it("el estilo del alcance existe: si no, el párrafo se lee como descripción", () => {
+    const css = fs.readFileSync("components/account/account.css", "utf8");
+    expect(css).toContain(".export-card__alcance");
   });
 });

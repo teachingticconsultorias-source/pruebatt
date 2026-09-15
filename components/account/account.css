@@ -266,6 +266,15 @@
 .export-card.is-locked .export-card__icon { background: var(--neutral-100); color: var(--text-tertiary); }
 .export-card h4 { margin: 0 0 2px; font: var(--weight-bold) var(--text-body-lg)/var(--leading-snug) var(--font-display); color: var(--text-primary); }
 .export-card > header p { margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-secondary); }
+/* El alcance del modo plantilla. No es letra pequeña: quien elige esa tarjeta
+   espera que se aplique a todo, y sólo se aplica a dos documentos. */
+.export-card__alcance {
+  margin: var(--space-2) 0 0; padding-left: var(--space-2);
+  border-left: 2px solid var(--border-subtle);
+  font-size: var(--text-label); line-height: var(--leading-normal);
+  color: var(--text-tertiary);
+}
+
 .export-card__badge {
   grid-column: 1 / -1; justify-self: start;
   display: inline-flex; align-items: center; gap: var(--space-1);

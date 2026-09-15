@@ -27,7 +27,10 @@ const TARJETAS = [
   { modo: "colegio", icono: Palette, titulo: "Formato de mi colegio",
     desc: "El mismo diseño con el logo y los colores de tu institución." },
   { modo: "plantilla", icono: Upload, titulo: "Mi plantilla .docx",
-    desc: "Tu propio documento de Word. SciVerse coloca el contenido dentro." },
+    desc: "Tu propio documento de Word. SciVerse coloca el contenido dentro.",
+    // Es lo primero que hay que saber de esta tarjeta, no una letra pequeña:
+    // quien la elige espera que se aplique a todo, y no es así.
+    alcance: "Se aplica a Sesión de aprendizaje y Clase completa. El resto de documentos se descargan con el formato de tu colegio." },
 ];
 
 const NOMBRE_POSICION = { izquierda: "Izquierda", centro: "Centro", derecha: "Derecha" };
@@ -66,15 +69,16 @@ export default function ExportSection() {
   return (
     <section className="export-branding">
       <p className="export-branding__intro">
-        Elige cómo quieres que se vean los documentos que descargas. El cambio se aplica a
-        todas tus exportaciones: sesiones, instrumentos, fichas y materiales.
+        Elige cómo quieres que se vean los documentos que descargas. El formato de Nitia y el
+        de tu colegio se aplican a todas tus exportaciones: sesiones, instrumentos, fichas y
+        materiales. La plantilla propia sólo a la sesión y a la clase completa.
       </p>
       <p className="export-branding__estado" role="status">{efectivo}</p>
 
       {error && <p className="wizard-error" role="alert">{error}</p>}
 
       <div className="export-branding__cards">
-        {TARJETAS.map(({ modo, icono: Icono, titulo, desc }) => {
+        {TARJETAS.map(({ modo, icono: Icono, titulo, desc, alcance }) => {
           const bloqueada = modo === "plantilla" && !puedePlantilla;
           const activa = marca.modo === modo;
           return (
@@ -86,6 +90,7 @@ export default function ExportSection() {
                 <div>
                   <h4>{titulo}</h4>
                   <p>{desc}</p>
+                  {alcance && <p className="export-card__alcance">{alcance}</p>}
                 </div>
                 {activa && <span className="export-card__badge"><Check size={13} aria-hidden="true" /> En uso</span>}
               </header>
@@ -225,7 +230,12 @@ export default function ExportSection() {
       </div>
 
       <p className="export-branding__nota">
-        Si tu plantilla deja de estar disponible, tus documentos se seguirán descargando con el
+        Tu plantilla recibe la sesión y la clase completa, que son los documentos cuyo contenido
+        encaja en sus marcas. Un proyecto STEAM o una rúbrica tienen otra estructura: se descargan
+        con el logo y los colores de tu colegio sobre el formato de Nitia.
+      </p>
+      <p className="export-branding__nota">
+        Y si tu plantilla deja de estar disponible, tus documentos se seguirán descargando con el
         formato de tu colegio o el de Nitia. Nunca te quedas sin poder exportar.
       </p>
     </section>
