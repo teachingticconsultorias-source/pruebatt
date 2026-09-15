@@ -15,3 +15,5 @@ docs/qa/
 # git ignora mayusculas y minusculas, tambien se tragaria lib/docx/plantillas/,
 # que si es codigo.
 /PLANTILLAS/
+
+.vercel
