@@ -12,6 +12,7 @@ import { generateJson } from "./_lib/gemini.js";
 import { withCredit, chargesCreditForModule } from "./_lib/credits.js";
 import { claveObligatoria } from "./_lib/idempotency.js";
 import { bloqueDeContexto, tieneTema } from "./_lib/contexto-sugerencia.js";
+import { revisarFormulario } from "../lib/ui/validaciones.js";
 import { clientKey, enforceRateLimit, RateLimits } from "./_lib/rate-limit.js";
 // Catálogo curricular único, compartido con el navegador. Es un módulo de
 // datos puro: no arrastra React ni dependencias al bundle de la función.
@@ -332,6 +333,26 @@ export default async function handler(req, res) {
     }
     if (instrumentMode && !["rubric", "checklist"].includes(instrumentType)) {
       throw Errors.badRequest("Tipo de instrumento no válido.");
+    }
+
+    // EL FORMULARIO SE COMPROBABA SÓLO EN EL NAVEGADOR.
+    //
+    // Va aquí, antes de `withCredit`: un cuerpo incompleto no debe gastar una
+    // generación de la semana. El mensaje es el MISMO objeto que ve la docente
+    // en la pantalla, no una copia parecida. Ver lib/ui/validaciones.js.
+    //
+    // El modo `module` SÍ entra, y es el que importa: la sesión real se genera
+    // pieza a pieza por ahí —`mode: "generate"` no lo usa ninguna pantalla—,
+    // así que excluirlo dejaba las sesiones sin comprobar, que era justo el
+    // agujero que esto cierra.
+    //
+    // No rompe la recuperación de un módulo suelto: el reintento manda el
+    // mismo `intento.form`, que ya estaba completo.
+    //
+    // Las sugerencias no pasan: son baratas y no cobran.
+    if (!suggestionMode) {
+      const faltaAlgo = revisarFormulario(instrumentMode ? "instrumento" : "sesion", form);
+      if (faltaAlgo) throw Errors.badRequest(faltaAlgo);
     }
 
     // 3) Limitación de ráfagas (ver limitaciones en _lib/rate-limit.js).

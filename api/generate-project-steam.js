@@ -19,6 +19,7 @@ import { Errors, sendError } from "./_lib/errors.js";
 import { requireUser } from "./_lib/supabase.js";
 import { generateJson } from "./_lib/gemini.js";
 import { withCredit } from "./_lib/credits.js";
+import { revisarFormulario } from "../lib/ui/validaciones.js";
 import { cantidadPermitida, planEfectivo } from "./_lib/entitlements.js";
 import { claveObligatoria } from "./_lib/idempotency.js";
 import { bloqueDeContexto } from "./_lib/contexto-sugerencia.js";
@@ -58,6 +59,18 @@ export default async function handler(req, res) {
     }
 
     const { mode = "generate", field, form = {} } = req.body || {};
+
+    // El formulario se comprobaba sólo en el navegador. Va antes de
+    // `withCredit` —y antes incluso de consultar el plan— para que un cuerpo
+    // incompleto no gaste una generación de la semana. Las sugerencias de
+    // campo no pasan por aquí: son baratas y no cobran.
+    //
+    // `duracionSemanas` queda fuera del contrato a propósito: el servidor ya
+    // la recorta según el plan en vez de rechazarla.
+    if (mode !== "suggestion") {
+      const faltaAlgo = revisarFormulario("steam", form);
+      if (faltaAlgo) return res.status(400).json({ error: faltaAlgo, code: "BAD_REQUEST" });
+    }
 
     // La duración la limita el plan, no el navegador: Free llega a 2 semanas,
     // Pro a 4. Se recorta en vez de rechazar — si la interfaz se quedó con un

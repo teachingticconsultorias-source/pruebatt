@@ -412,11 +412,13 @@ describe("Laboratorio · el propósito tiene que ser una oración", () => {
     expect(revisarProposito(labGuide.proposito)).toBeNull();
   });
 
-  it("el formulario lo usa en los dos sitios por donde se puede pasar", () => {
+  it("el formulario lo comprueba en los dos sitios por donde se puede pasar", () => {
     const componente = fs.readFileSync("components/LabGuideGenerator.jsx", "utf8");
     // El paso 2, y otra vez antes de generar: al paso 3 se llega también
     // pulsando el indicador de pasos, que no ejecuta `siguiente()`.
-    expect((componente.match(/revisarProposito\(form\.proposito\)/g) || []).length).toBe(2);
+    expect((componente.match(/revisarFormulario\("laboratorio", form\)/g) || []).length).toBe(2);
+    // Y por el contrato compartido, no por una copia con otros números.
+    expect(componente).toContain('from "../lib/ui/validaciones.js"');
   });
 });
 

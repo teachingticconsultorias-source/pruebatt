@@ -16,7 +16,7 @@ import { Errors } from "./_lib/errors.js";
 // es puro —cero imports— y `api/` ya cruza a otras carpetas del repo
 // (generate-session.js importa ../config/curriculum.js), así que el trazado de
 // ficheros de Vercel lo sigue igual.
-import { revisarProposito } from "../lib/ui/validaciones.js";
+import { revisarFormulario } from "../lib/ui/validaciones.js";
 
 /** Etiqueta de la operación en los logs y en `ai_operations.tool`. */
 const TOOL_IDEMPOTENCIA = "recurso";
@@ -552,10 +552,13 @@ export default async function handler(req,res){
   // Sólo `lab_guide`, que es el único tipo cuyo formulario pide el propósito a
   // la docente. En el resto llega heredado de la sesión y exigirle forma
   // cambiaría el comportamiento de herramientas que hoy funcionan.
-  if (type === "lab_guide") {
-    const problema = revisarProposito(req.body?.form?.proposito);
-    if (problema) return res.status(400).json({ error: problema, code: "BAD_REQUEST" });
-  }
+  const HERRAMIENTA_DE = {
+    lab_guide: "laboratorio", rating_scale: "escala",
+    observation_guide: "observacion", questionnaire: "cuestionario",
+    worksheet: "recurso", reading: "recurso",
+  };
+  const faltaAlgo = revisarFormulario(HERRAMIENTA_DE[type], req.body?.form);
+  if (faltaAlgo) return res.status(400).json({ error: faltaAlgo, code: "BAD_REQUEST" });
   if(!apiKey) return res.status(500).json({error:"Falta GEMINI_API_KEY"});
   if(!token || !supabaseUrl || !supabaseKey) return res.status(401).json({error:"Inicia sesión para continuar"});
 

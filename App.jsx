@@ -26,7 +26,7 @@ import { areaAlCambiarNivel, areasDeNivel, normalizarArea } from "./config/curri
 import { olvidarMarca } from "./lib/export/almacen.js";
 import { useAccionUnica } from "./lib/ui/useAccionUnica.js";
 import { useConexion } from "./lib/ui/useConexion.js";
-import { revisarCampoLibre } from "./lib/ui/validaciones.js";
+import { revisarCampoLibre, revisarFormulario } from "./lib/ui/validaciones.js";
 import { mensajeDeError, mensajeDeRespuesta as mensajeHumano, sinConexion } from "./lib/mensajes.js";
 import Button from "./components/ui/Button.jsx";
 import { Badge } from "./components/ui/Feedback.jsx";
@@ -2689,7 +2689,9 @@ function ResourceFromAI({ kind, initialGrade="primaria", profile={} }) {
   const grades=form.nivel==="Primaria"?["1.º","2.º","3.º","4.º","5.º","6.º"]:["1.º","2.º","3.º","4.º","5.º"];
   const update=(key,value)=>setForm(prev=>({...prev,[key]:value}));
   async function generate(){
-    if(!form.tema.trim())return setError("Escribe el tema del material.");
+    // El mismo contrato que comprueba el servidor: si divergieran, el
+    // formulario dejaría pasar algo que el endpoint rechaza. Ver validaciones.js.
+    const faltaAlgo=revisarFormulario("recurso",form); if(faltaAlgo) return setError(faltaAlgo);
     setLoading(true);setError("");setResource(null);
     try{
       const {data:{session}}=await supabase.auth.getSession();
@@ -2829,7 +2831,7 @@ function ValuationScaleGenerator({initialGrade="primaria",profile={}}){
   function changeArea(area){const competencia=competenciasDeArea(area)[0];setForm(prev=>({...prev,area,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
   function changeCompetence(competencia){setForm(prev=>({...prev,competencia,capacidades:GENERATOR_CAPACITIES[competencia]||[]}));}
   async function generate(){
-    if(!form.tema.trim()||!form.region||!form.evidencia.trim())return setError("Completa tema, región y evidencia.");
+    const faltaAlgo=revisarFormulario("escala",form); if(faltaAlgo) return setError(faltaAlgo);
     setLoading(true);setError("");
     try{
       const {data:{session}}=await supabase.auth.getSession();
@@ -2993,11 +2995,9 @@ function SessionResourceGenerator({ tipo, initialGrade = "primaria", profile = {
   }
 
   async function generate() {
-    if (!form.tema.trim()) return setError("Escribe el tema.");
-    if (meta.exigeRegion && !form.region) return setError("Elige la región.");
-    // El campo libre es el que decide el contenido: una palabra suelta no
-    // basta, y la generación cuesta un crédito de la semana.
-    const problema = revisarCampoLibre(form[meta.campo], meta.rotulo);
+    // El mismo contrato que comprueba el servidor, incluida la exigencia de
+    // que el campo libre sea una oración: la generación cuesta un crédito.
+    const problema = revisarFormulario(meta.herramienta, form);
     if (problema) return setError(problema);
     if (!enLinea || sinConexion()) return setError(mensajeDeError("SIN_CONEXION"));
 

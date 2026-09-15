@@ -5,7 +5,7 @@ import SuggestionModal from "./ui/SuggestionModal.jsx";
 import { useUI } from "./ui/UIProvider.jsx";
 import { DESTINO_POR_CAMPO, INTRO_POR_CAMPO } from "../lib/kantu/contexto.js";
 import { useSugerenciaKantu } from "../lib/kantu/useSugerencia.js";
-import { revisarProposito } from "../lib/ui/validaciones.js";
+import { revisarFormulario } from "../lib/ui/validaciones.js";
 
 import { supabase } from "../supabaseClient.js";
 import { cabecerasDeGeneracion, useClaveDeOperacion } from "../lib/idempotencia.js";
@@ -158,20 +158,19 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
       return setError("Completa nivel, grado, área y duración.");
     }
     if (step === 2) {
-      if (!form.tema.trim()) return setError("Escribe el tema de la práctica.");
-      // Un propósito de una palabra pasaba el `!trim()` de siempre, gastaba una
-      // generación de la semana y devolvía una guía genérica. Ver
-      // lib/ui/validaciones.js.
-      const problema = revisarProposito(form.proposito);
+      // El mismo contrato que comprueba el servidor: tema, y un propósito con
+      // forma de oración. Una palabra suelta pasaba el `!trim()` de siempre,
+      // gastaba una generación de la semana y devolvía una guía genérica.
+      const problema = revisarFormulario("laboratorio", form);
       if (problema) return setError(problema);
     }
     setStep((s) => Math.min(3, s + 1));
   }
 
   async function generar() {
-    if (!form.tema.trim()) return setError("Escribe el tema de la práctica.");
-    // También aquí: al paso 3 se puede llegar desde el indicador de pasos.
-    const problema = revisarProposito(form.proposito);
+    // El mismo contrato que comprueba el servidor. También aquí, y no sólo en
+    // el paso 2: al paso 3 se llega además pulsando el indicador de pasos.
+    const problema = revisarFormulario("laboratorio", form);
     if (problema) return setError(problema);
     if (!enLinea || sinConexion()) return setError(mensajeDeError("SIN_CONEXION"));
     setLoading(true); setError(""); setResource(null);
