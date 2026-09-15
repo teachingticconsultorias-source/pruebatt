@@ -120,9 +120,18 @@ las aplica a mano desde el editor SQL de Supabase. Eso hizo imposible saber
 —desde el repositorio— si la 011 estaba puesta; hubo que consultar el CHECK en
 producción.
 
-Las migraciones **009, 010, 011 y 013 no tienen inspector**. La 012 sí
-(`supabase/inspect/012_verify_export_branding.sql`). Escribir los que faltan, o
-adoptar una tabla de control, evitaría repetir esa situación.
+**Y los inspectores tienen su PROPIA numeración**, que no es la de la
+migración: `009_verify_admin_actions.sql` verifica la migración **006**, no la
+009. Sólo la 012 y la 015 coinciden por casualidad. Es una trampa real —engañó
+a una revisión de este mismo fichero— y se arregla renombrándolos a
+`verify_0NN_<lo que verifican>`.
+
+Migraciones **sin inspector: 004, 009, 010, 011, 013 y 014** (seis, no cuatro
+como decía este punto). La 011 está supersedida por la 013, así que en la
+práctica faltan cinco.
+
+Escribir los que faltan, o adoptar una tabla de control, evitaría repetir esa
+situación.
 
 ### 13 · Cobertura de plantillas por nivel
 
@@ -133,7 +142,28 @@ adoptar una tabla de control, evitaría repetir esa situación.
   en ese nivel. El material sugiere un catálogo de Primaria más amplio que el
   actual (6 áreas).
 
-### 14 · Borrador local del formulario y aviso al salir
+### 14 · `comprobarPatcheables` defiende un caso que no ocurre
+
+El sondeo que se ejecuta al subir una plantilla existe por si Word parte un
+marcador en varios `<w:r>` y deja de reconocerse. Se midió en la auditoría con
+cuatro formas de partirlo —dos runs planos, con formatos distintos, con las
+llaves sueltas, en tres trozos con color y cursiva— y `docx@9.7.1` **las
+resuelve todas**: el contenido entra y no queda literal.
+
+El sondeo se queda porque sí caza contenido corrupto y marcas en partes del
+documento que `patchDocument` no recorre. Lo que se corrigió fue el MENSAJE, que
+prometía una protección que no hacía falta. Queda anotado para que nadie confíe
+en él por el motivo equivocado.
+
+### 15 · `docs/qa/` vive fuera de git
+
+Los artefactos de QA —hoy más de treinta `.docx` y `.pdf` revisados a ojo— están
+en una carpeta ignorada. Es deliberado: pesan y se regeneran con
+`scripts/word-qa.mjs`. Pero quien clone el repositorio no los encuentra, y
+varios informes los citan por su ruta. O se documenta que hay que regenerarlos,
+o se sube una muestra pequeña.
+
+### 16 · Borrador local del formulario y aviso al salir
 
 Evaluados en el bloque de endurecimiento de UX y no implementados: el estado ya
 sobrevive al fallo dentro de la pantalla, y ambos tocan el ciclo de vida del
