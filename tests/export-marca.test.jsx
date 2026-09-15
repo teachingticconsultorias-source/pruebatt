@@ -11,7 +11,7 @@ import {
 import {
   MARCADORES, MARCADORES_MINIMOS, MAX_PLANTILLA_BYTES, comprobarPatcheables,
   construirPatches, detectarMarcadores, explicarMarcadorCompartido,
-  marcadoresConTextoAlLado, marcadoresFaltantes, plantillaUtilizable,
+  marcadoresConTextoAlLado, marcadoresFaltantes, pareceDocx, plantillaUtilizable,
   rellenarPlantilla, validarPlantilla,
 } from "../lib/export/plantilla.js";
 import { buildDocument, configurarMarca } from "../lib/docx/exporters.js";
@@ -452,6 +452,31 @@ describe("Plantilla propia · la plantilla base sale limpia", () => {
   });
 });
 
+describe("Plantilla propia · lo guardado se revalida al LEERLO", () => {
+  it("reconoce un .docx de verdad por sus cuatro primeros bytes", () => {
+    const base = fs.readFileSync("public/plantillas/plantilla-base-sciverse.docx");
+    expect(pareceDocx(base)).toBe(true);
+  });
+
+  it("y rechaza lo que no lo es, venga como venga", () => {
+    // `plantilla_path` es texto en una fila que el propio docente escribe: lo
+    // que apunte no tiene por qué ser un documento de Word.
+    expect(pareceDocx(Buffer.from("no soy un docx"))).toBe(false);
+    expect(pareceDocx(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).toBe(false);  // un PNG
+    expect(pareceDocx(Buffer.from([0x50, 0x4b]))).toBe(false);              // truncado
+    expect(pareceDocx(null)).toBe(false);
+    expect(pareceDocx(new Uint8Array(0))).toBe(false);
+  });
+
+  it("y el almacén cae a colegio en vez de intentar parchearlo", () => {
+    const almacen = fs.readFileSync("lib/export/almacen.js", "utf8");
+    expect(almacen).toContain("pareceDocx(bytes) ? bytes : null");
+    // La caída es la misma que cuando el fichero se borró: un solo camino.
+    const bloque = almacen.slice(almacen.indexOf('if (efectivo === "plantilla")'));
+    expect(bloque.slice(0, 900)).toContain("plantillaPath: null");
+  });
+});
+
 describe("Plantilla propia · la validación de subida", () => {
   it("rechaza un marcador de bloque que comparte párrafo", async () => {
     const mala = new Document({ sections: [{ children: [
@@ -553,7 +578,10 @@ describe("Plantilla propia · el alcance por tipo de documento", () => {
     expect(admitePlantilla(null)).toBe(true);
     expect(admitePlantilla("")).toBe(true);
     expect(modoEfectivo(conPlantilla, vigente)).toBe("plantilla");
-    expect(explicarModo(conPlantilla, vigente)).toContain("plantilla .docx de tu colegio");
+    // Y la frase dice el alcance: sin él contradecía a la propia tarjeta.
+    const frase = explicarModo(conPlantilla, vigente);
+    expect(frase).toContain("tu plantilla .docx");
+    expect(frase).toContain("el resto de documentos");
   });
 
   it("con un tipo que el contrato no cubre, el modo baja a COLEGIO", () => {

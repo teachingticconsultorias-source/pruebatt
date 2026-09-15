@@ -12,6 +12,11 @@ import { guardGenerationInput, wrapTeacherContext } from "./_lib/input-guard.js"
 import { cantidadPermitida, planEfectivo } from "./_lib/entitlements.js";
 import { cerrarOperacion, claveObligatoria, reservarOperacion } from "./_lib/idempotency.js";
 import { Errors } from "./_lib/errors.js";
+// El MISMO listón que el formulario, no una copia con otros números. El módulo
+// es puro —cero imports— y `api/` ya cruza a otras carpetas del repo
+// (generate-session.js importa ../config/curriculum.js), así que el trazado de
+// ficheros de Vercel lo sigue igual.
+import { revisarProposito } from "../lib/ui/validaciones.js";
 
 /** Etiqueta de la operación en los logs y en `ai_operations.tool`. */
 const TOOL_IDEMPOTENCIA = "recurso";
@@ -533,6 +538,24 @@ export default async function handler(req,res){
   const type=req.body?.type;
 
   if(!SCHEMAS[type]) return res.status(400).json({error:"Tipo de recurso no válido"});
+
+  // EL PROPÓSITO SE VALIDA AQUÍ, NO SÓLO EN EL FORMULARIO.
+  //
+  // `revisarProposito` vivía sólo en LabGuideGenerator, así que una pestaña
+  // vieja o una llamada directa colaba «DEMOSTRAR», gastaba un crédito de la
+  // semana y devolvía una guía genérica. Medido en la auditoría: HTTP 200 y
+  // consume_ai_credit ×1.
+  //
+  // Va ANTES de `claveObligatoria` y de la reserva: un cuerpo que no vale no
+  // debe ni quemar una clave de idempotencia, ni mucho menos un crédito.
+  //
+  // Sólo `lab_guide`, que es el único tipo cuyo formulario pide el propósito a
+  // la docente. En el resto llega heredado de la sesión y exigirle forma
+  // cambiaría el comportamiento de herramientas que hoy funcionan.
+  if (type === "lab_guide") {
+    const problema = revisarProposito(req.body?.form?.proposito);
+    if (problema) return res.status(400).json({ error: problema, code: "BAD_REQUEST" });
+  }
   if(!apiKey) return res.status(500).json({error:"Falta GEMINI_API_KEY"});
   if(!token || !supabaseUrl || !supabaseKey) return res.status(401).json({error:"Inicia sesión para continuar"});
 

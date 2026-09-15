@@ -168,19 +168,46 @@ el mismo problema.
 
 La tercera tarjeta se ve siempre, con candado si el plan no la incluye —
 esconderla dejaría a una docente Free sin saber que existe. Pero **el candado
-es sólo lo que se ve**. Quien impide subir es la política de `storage.objects`:
+es sólo lo que se ve**. Quien impide subir son las políticas de la base.
+
+**La 012 lo dejó a medias y la auditoría lo encontró.** Su política de subida
+comprobaba el plan *sólo si el nombre acababa en `.docx`*:
 
 ```sql
-with check (bucket_id = 'export-templates'
-            and (storage.foldername(name))[1] = auth.uid()::text
-            and (name not like '%.docx' or public.puede_plantilla_propia()))
+and (name not like '%.docx' or public.puede_plantilla_propia())
 ```
 
-Forzar el navegador no sirve: el objeto no llega a insertarse. Y la capacidad se
-lee de `plans.features → docx_custom_template`, sin `'pro'` escrito a fuego.
+La extensión la elige quien sube. Un docente Free que subiera
+`<uid>/plantilla.doc` o `<uid>/p.bin` pasaba sin que se mirara su plan. Y las
+políticas de `export_branding` sólo comprobaban `user_id = auth.uid()`, sin gate
+ninguno, así que ese mismo docente podía escribir `modo = 'plantilla'`
+apuntando a ese fichero. No exponía datos de nadie —el documento se arma en su
+propio navegador— pero la frase «el gate vive en la base» era más fuerte de lo
+que el código sostenía.
 
-Leer y borrar sólo exigen propiedad: si alguien deja de ser Pro conserva y puede
-borrar su fichero, pero no puede subir otro.
+**La 015 invierte la regla.** Todo lo que entra en `export-templates` exige
+plan, EXCEPTO el logo, que tiene ruta fija y conocida:
+
+```sql
+and (public.es_ruta_de_logo(name) or public.puede_plantilla_propia())
+```
+
+`es_ruta_de_logo()` compara la ruta COMPLETA contra
+`^<uid>/logo\.(png|jpg|jpeg|webp)$`: `logo.png` vale, `logo.png.docx` no,
+`otracosa.png` tampoco. Y la comprobación va en las dos mitades de la política
+de UPDATE —`using` y `with check`—, porque sin el `using` se podría renombrar un
+logo existente hasta convertirlo en plantilla sin subir nada nuevo.
+
+La tabla también: `modo = 'plantilla'` exige plan en INSERT y en UPDATE.
+`estandar` y `colegio` siguen libres, que el logo y los colores no cuestan nada.
+
+Leer y borrar **no** llevan gate: quien dejó de ser Pro conserva su fichero y
+puede borrarlo. Lo que no puede es subir otro. Quitarle el acceso a lo suyo
+sería castigarle por caducar.
+
+Y `almacen.js` revalida al leer: si lo que hay en `plantilla_path` no empieza
+por `PK`, no es un .docx y se cae a modo colegio en vez de intentar
+parchearlo.
 
 ### El contrato de marcadores
 

@@ -29,26 +29,35 @@ async function unpack(doc) {
 const tablas = xml => xml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/g) || [];
 const documento = () => buildDocument("lab_guide", { form: formLab, resource: labGuide, profile: { ie: "IE Demostración" } });
 
-/** Ejecuta el endpoint real y devuelve el prompt que recibió Gemini. */
-async function promptDeGemini(cuerpo) {
+/**
+ * Ejecuta el endpoint real y devuelve el prompt que recibió Gemini.
+ *
+ * `rpcs` registra CADA llamada a la base, en orden: es la única forma de
+ * comprobar que un cuerpo inválido no llega a cobrar ni a reservar.
+ */
+async function promptDeGemini(cuerpo, opciones = {}) {
   let prompt = "", config = null;
+  const rpcs = [];
   vi.stubGlobal("fetch", vi.fn(async (url, options = {}) => {
     const json = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
     if (String(url).includes("/auth/v1/user")) return json({ id: "docente-lab" });
-    if (String(url).includes("/rest/v1/rpc/")) return json({ ok: true, consumption_id: "c1", remaining: 9, status: "started" });
+    if (String(url).includes("/rest/v1/rpc/")) {
+      rpcs.push(String(url).split("/rpc/")[1].split("?")[0]);
+      return json({ ok: true, consumption_id: "c1", remaining: 9, status: "started" });
+    }
     if (String(url).includes("generativelanguage.googleapis.com")) {
       const enviado = JSON.parse(options.body);
       config = enviado.generationConfig;
       prompt = enviado.contents.map(c => c.parts.map(p => p.text).join("\n")).join("\n");
-      return json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(labGuide) }] } }],
+      return json({ candidates: [{ finishReason: "STOP", content: { parts: [{ text: JSON.stringify(opciones.respuesta || labGuide) }] } }],
         usageMetadata: { candidatesTokenCount: 1801 } });
     }
     throw new Error(`Red inesperada: ${url}`);
   }));
   const res = { setHeader() {}, status(n) { this.statusCode = n; return this; }, json(d) { this.body = d; return this; } };
   await handler({ method: "POST", body: cuerpo,
-    headers: { authorization: "Bearer jwt", "idempotency-key": "laboratorio-test-0001" } }, res);
-  return { prompt, config, respuesta: res.body };
+    headers: { authorization: "Bearer jwt", "idempotency-key": `lab-${Math.random()}` } }, res);
+  return { prompt, config, respuesta: res.body, res, rpcs };
 }
 
 beforeEach(() => {
@@ -451,5 +460,114 @@ describe("Laboratorio · Kantu sugiere el título", () => {
     const endpoint = fs.readFileSync("api/generate-session-resource.js", "utf8");
     expect(endpoint).toContain("tituloPedido: form.titulo");
     expect(endpoint).toContain("copiado sin cambiarlo");
+  });
+});
+
+/* ============================================================================
+   LO QUE CERRÓ LA AUDITORÍA
+
+   Tres huecos en los que el camino normal estaba protegido y el atajo no. Se
+   fijan aquí para que no vuelvan a abrirse.
+   ========================================================================== */
+describe("Laboratorio · el propósito se valida también en el servidor", () => {
+  it("«DEMOSTRAR» enviado al endpoint se rechaza SIN gastar crédito", async () => {
+    // Medido en la auditoría antes del arreglo: HTTP 200 y consume_ai_credit ×1.
+    const { res, rpcs } = await promptDeGemini({ type: "lab_guide",
+      form: { ...formLab, proposito: "DEMOSTRAR" } }, { conRpcs: true });
+    expect(res.statusCode).toBe(400);
+    expect(rpcs).not.toContain("consume_ai_credit");
+    // Ni siquiera llega a reservar la operación: no quema la clave.
+    expect(rpcs).not.toContain("begin_ai_operation");
+  });
+
+  it("y el mensaje es el MISMO que ve la docente en el formulario", async () => {
+    const { res } = await promptDeGemini({ type: "lab_guide",
+      form: { ...formLab, proposito: "DEMOSTRAR" } }, { conRpcs: true });
+    expect(res.body.error).toBe(revisarProposito("DEMOSTRAR"));
+    expect(res.body.error).toMatch(/una oración/i);
+  });
+
+  it("un propósito válido sigue pasando", async () => {
+    const { res, rpcs } = await promptDeGemini({ type: "lab_guide", form: formLab }, { conRpcs: true });
+    expect(res.statusCode ?? 200).toBe(200);
+    expect(rpcs).toContain("consume_ai_credit");
+  });
+
+  it("el listón es compartido, no una copia con otros números", () => {
+    const endpoint = fs.readFileSync("api/generate-session-resource.js", "utf8");
+    // Importa la misma función que el formulario. Si alguien la duplicara con
+    // otros valores, cliente y servidor discreparían como pasó con `tieneTema`.
+    expect(endpoint).toContain('from "../lib/ui/validaciones.js"');
+    expect(endpoint).not.toMatch(/palabras:\s*\d/);
+    // Y la comprobación va antes de cobrar.
+    // Se busca la LLAMADA, no la palabra: el comentario que la explica también
+    // la menciona, unas líneas más arriba.
+    expect(endpoint.indexOf("revisarProposito("))
+      .toBeLessThan(endpoint.indexOf('rpc("consume_ai_credit"'));
+  });
+
+  it("y sólo afecta a lab_guide: el resto de tipos no cambia", async () => {
+    // En los demás el propósito llega heredado de la sesión; exigirle forma
+    // rompería herramientas que hoy funcionan.
+    const { res } = await promptDeGemini({ type: "rubric",
+      form: { ...formLab, proposito: "X" }, options: { numeroCriterios: 4 } },
+      { conRpcs: true, respuesta: { titulo: "R", competencia: "C", evidencia: "E", criterios: [] } });
+    expect(res.statusCode ?? 200).toBe(200);
+  });
+});
+
+describe("Laboratorio · un recurso vacío no deja encabezados huérfanos", () => {
+  const vacio = { titulo: "Práctica mínima", proposito: "", preguntaIndagatoria: "",
+    normasSeguridad: [], materialesKit: [], materialesCaseros: [], procedimiento: [],
+    columnasRegistro: [], preguntasAnalisis: [], preguntasMetacognicion: [], guiaDocente: {} };
+
+  it("los diez bloques de contenido desaparecen enteros", () => {
+    const b = laboratorioBloques({ form: formLab, resource: vacio, profile: {} });
+    const desaparecen = ["ficha_proposito", "ficha_seguridad", "ficha_materiales",
+      "docente_indagacion", "docente_preparacion", "docente_gestion",
+      "docente_orientaciones", "docente_solucionario", "docente_dua", "docente_rubrica"];
+    for (const clave of desaparecen) expect(b[clave], clave).toEqual([]);
+  });
+
+  it("y en el DOCX sólo quedan los encabezados que NO dependen del modelo", async () => {
+    const xml = await unpack(buildDocument("lab_guide", { form: formLab, resource: vacio, profile: {} }));
+    const texto = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]);
+    // Sin regex con escapes: la lista literal de numerales, que es lo que hay.
+    const NUMERALES = ["I.", "II.", "III.", "IV.", "V.", "VI.", "VII.", "VIII.", "IX."];
+    const romanos = texto.map((t) => t.replace(/^[^A-Z]+/, ""))
+      .filter((t) => NUMERALES.some((n) => t.startsWith(n + " ")));
+
+    // Los que quedan se llenan del FORMULARIO, o son la hoja que rellena el
+    // estudiante: vaciarlos sería perder lo que la docente ya escribió.
+    expect(romanos.sort()).toEqual([
+      "I. DATOS GENERALES",
+      "I. ENCABEZADO Y DATOS GENERALES",
+      "II. VÍNCULO CURRICULAR",
+      "V. PASOS PARA LA INDAGACIÓN (EL RETO CIENTÍFICO)",
+    ]);
+
+    // Y ni uno solo de los que sí dependen de lo que devuelve el modelo.
+    for (const huerfano of ["II. PROPÓSITO DE LA PRÁCTICA", "III. MIS COMPROMISOS",
+      "IV. MATERIALES Y REACTIVOS", "III. PROPÓSITO Y PREGUNTA", "IV. PREPARACIÓN PREVIA",
+      "V. GESTIÓN DEL TIEMPO", "VI. ORIENTACIONES", "VII. SOLUCIONARIO",
+      "VIII. ORIENTACIONES DUA", "IX. INSTRUMENTO"]) {
+      expect(romanos.some((r) => r.startsWith(huerfano)), huerfano).toBe(false);
+    }
+  });
+
+  it("pero los datos del FORMULARIO siguen saliendo: no vienen del modelo", () => {
+    // La tabla de datos generales se llena de la IE, el grado y la fecha, que
+    // la docente ya escribió. Vaciarla sería perder lo suyo, no lo del modelo.
+    const b = laboratorioBloques({ form: formLab, resource: vacio, profile: { ie: "IE Demo" } });
+    expect(b.ficha_datos.length).toBeGreaterThan(0);
+    expect(b.docente_datos.length).toBeGreaterThan(0);
+    expect(b.ficha_cabecera.length).toBe(3);
+  });
+
+  it("y con datos reales no desaparece nada", () => {
+    const b = laboratorioBloques({ form: formLab, resource: labGuide, profile: {} });
+    for (const clave of [...BLOQUES_FICHA, ...BLOQUES_DOCENTE]) {
+      expect(b[clave].length, clave).toBeGreaterThan(0);
+    }
   });
 });

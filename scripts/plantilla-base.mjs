@@ -112,8 +112,8 @@ const instrucciones = [
   seccion("LAS DOS REGLAS QUE IMPORTAN"),
   texto("1. Una marca de BLOQUE va sola en su párrafo.", { run: { bold: true, color: COLOR_SCIVERSE.navy } }),
   texto("Las marcas de bloque traen tablas y varios párrafos, así que ocupan toda la línea donde están. Si escribes texto a su lado, ese texto se perderá al rellenar el documento. Déjalas solas, en su propia línea o en su propia celda."),
-  texto("2. Escribe las marcas a mano.", { run: { bold: true, color: COLOR_SCIVERSE.navy, } }),
-  texto("Si las copias con formato, Word puede partirlas en trozos y dejan de reconocerse. Al subir la plantilla te avisaremos si eso ha pasado."),
+  texto("2. Las marcas van en el cuerpo del documento.", { run: { bold: true, color: COLOR_SCIVERSE.navy } }),
+  texto("Puedes darles el formato que quieras —tipo de letra, tamaño, color— y puedes copiarlas y pegarlas sin problema. Lo que no funciona es escribirlas dentro de un cuadro de texto, una nota al pie o un objeto incrustado: ahí no podemos colocar el contenido. Al subir la plantilla comprobamos cada marca y te decimos si alguna quedó en un sitio que no alcanzamos."),
 
   seccion("QUÉ TRAE CADA MARCA"),
   texto("De línea — se sustituyen por un texto corto y pueden ir dentro de una frase o de una celda:", { run: { bold: true } }),

@@ -427,15 +427,20 @@ describe("bloqueo del tipo de material", () => {
     const migraciones = fs.readdirSync(path.join(raiz, "supabase", "migrations"))
       .filter((f) => f.endsWith(".sql")).sort();
     const ultima = migraciones[migraciones.length - 1];
-    expect(ultima).toBe("014_rename_modo_estandar.sql");
+    expect(ultima).toBe("015_cerrar_gate_plantilla.sql");
     // La 013 declara la lista COMPLETA de tipos, por eso no depende del orden.
     const trece = leer("supabase/migrations/013_lab_guide_material.sql");
     expect(trece).toContain("'wordsearch'");
     expect(trece).toContain("'lab_guide'");
     // La 014 renombra el modo por defecto. Va ANTES del deploy: el código
     // nuevo escribe `estandar` y el CHECK viejo lo rechazaría con 23514.
-    const catorce = leer(`supabase/migrations/${ultima}`);
+    const catorce = leer("supabase/migrations/014_rename_modo_estandar.sql");
     expect(catorce).toContain("ESTA MIGRACIÓN VA ANTES DEL DEPLOY");
+    // La 015 cierra el gate de la plantilla por todas las vías: el filtro deja
+    // de mirar la extensión y pasa a mirar si es la ruta del logo.
+    const quince = leer(`supabase/migrations/${ultima}`);
+    expect(quince).toContain("es_ruta_de_logo");
+    expect(quince).not.toMatch(/name not like '%\.docx%'/);
   });
 });
 
