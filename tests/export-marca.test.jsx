@@ -15,7 +15,8 @@ import {
   rellenarPlantilla, validarPlantilla,
 } from "../lib/export/plantilla.js";
 import { buildDocument, configurarMarca } from "../lib/docx/exporters.js";
-import { COLOR, COLOR_NITIA, aplicarMarca, restablecerMarca } from "../lib/docx/tema.js";
+import { COLOR, COLOR_NITIA, TINTA_SOBRE_RUBRICA, aplicarMarca, restablecerMarca } from "../lib/docx/tema.js";
+import { THEME } from "../lib/docx/core.js";
 import { sessionBloques, sessionChildren } from "../lib/docx/plantillas/sesion.js";
 import { form, instrument, session } from "./fixtures/word.js";
 
@@ -549,9 +550,15 @@ describe("Plantilla propia · el alcance por tipo de documento", () => {
     // El fallo que esto ataja: `coloresDe` devolvía null en modo plantilla, así
     // que un STEAM de un colegio con plantilla salía sin marca NINGUNA — ni
     // plantilla, ni logo, ni colores. Peor que no haber configurado nada.
-    expect(coloresDe(conPlantilla, vigente)).toBeNull();
     expect(coloresDe(conPlantilla, { ...vigente, tipo: "project_steam" }))
       .toEqual({ primario: "7A1F2B", acento: "C9A227" });
+  });
+
+  it("y lo que SÍ va a la plantilla se construye sin identidad ninguna", () => {
+    // Dentro del .docx del colegio no entra ni el navy de Nitia ni el granate
+    // del propio colegio: el diseño ya lo trae el documento anfitrión.
+    expect(coloresDe(conPlantilla, { ...vigente, tipo: "session" })).toEqual({ neutra: true });
+    expect(coloresDe(conPlantilla, vigente)).toEqual({ neutra: true });
   });
 
   it("sin nada del colegio que aplicar, cae hasta Nitia y no a medias", () => {
@@ -643,8 +650,146 @@ describe("Plantilla propia · la pantalla lo dice antes de que se note", () => {
     expect(pie).toContain("Nunca te quedas sin poder exportar");
   });
 
+  it("y dice que el contenido va neutro, que es lo que se ve al abrirlo", () => {
+    const fuente = pantalla();
+    expect(fuente).toContain("en negro y sin colores propios");
+    expect(fuente).toMatch(/tablas de borde simple y sin\s+fondos de color/);
+    expect(fuente).toContain("No lleva los colores de Nitia ni los que hayas elegido");
+  });
+
   it("el estilo del alcance existe: si no, el párrafo se lee como descripción", () => {
     const css = fs.readFileSync("components/account/account.css", "utf8");
     expect(css).toContain(".export-card__alcance");
+  });
+});
+
+/* ============================================================================
+   DENTRO DE LA PLANTILLA DEL COLEGIO NO ENTRA NUESTRA IDENTIDAD
+
+   El .docx es del colegio y nosotros sólo ponemos el contenido dentro. Ese
+   contenido no puede traer colores propios: insertar tablas con el navy de
+   SciVerse en el membrete de otra institución es justo lo que el docente quiso
+   evitar al subir el suyo. Tampoco valen los colores del colegio —ya los trae
+   su plantilla, y deducirlos daría un segundo azul parecido pero distinto—.
+
+   Se mide sobre un anfitrión SIN un solo color, para que todo hexadecimal que
+   aparezca en la salida lo hayamos puesto nosotros. La plantilla base de
+   SciVerse no sirve para esto: su propio esqueleto está maquetado en Nitia.
+   ========================================================================== */
+describe("Plantilla propia · el contenido insertado va neutro", () => {
+  const marca = normalizarMarca({ modo: "plantilla", plantilla_path: "u1/p.docx",
+    logo_path: "u1/logo.png", color_primario: "7A1F2B", color_acento: "C9A227" });
+
+  /** Todos los hexadecimales de la paleta de Nitia, aplanados. */
+  const HEX_NITIA = [...new Set(Object.values(COLOR_NITIA)
+    .flatMap((v) => (typeof v === "object" && v ? Object.values(v) : [v]))
+    .filter((v) => typeof v === "string" && /^[0-9A-F]{6}$/.test(v)))];
+
+  const lineas = { titulo: session.titulo, docente: "Docente", ie: "IE", nivel: form.nivel,
+    grado: form.grado, area: form.area, fecha: form.fecha, duracion: form.duracion, region: form.region };
+
+  /** Un anfitrión sin color: sólo los diecisiete marcadores. */
+  async function anfitrionEnBlanco() {
+    return Packer.toBuffer(new Document({ sections: [{ children:
+      MARCADORES.map((m) => new Paragraph({ children: [new TextRun(`{{${m.clave}}}`)] })) }] }));
+  }
+
+  async function rellenarCon(paleta) {
+    aplicarMarca(paleta);
+    let patches;
+    try {
+      patches = construirPatches({ lineas,
+        bloques: sessionBloques({ form, resource: session, profile: { ie: "IE" }, rubrica: instrument }),
+      }, TextRun, Paragraph);
+    } finally {
+      restablecerMarca();
+    }
+    const salida = await rellenarPlantilla({ data: await anfitrionEnBlanco(), patches, outputType: "nodebuffer" });
+    return (await JSZip.loadAsync(salida)).file("word/document.xml").async("string");
+  }
+
+  it("la paleta neutra no deja NI UN hexadecimal de Nitia", async () => {
+    const xml = await rellenarCon(coloresDe(marca, { puedePlantilla: true, tipo: "complete" }));
+    for (const hex of HEX_NITIA) {
+      expect(new RegExp(hex, "i").test(xml), `queda ${hex}`).toBe(false);
+    }
+  });
+
+  it("ni los colores del propio colegio: los pone su plantilla, no nosotros", async () => {
+    const xml = await rellenarCon(coloresDe(marca, { puedePlantilla: true, tipo: "session" }));
+    expect(xml).not.toMatch(/7A1F2B/i);
+    expect(xml).not.toMatch(/C9A227/i);
+  });
+
+  it("el único color que queda es el negro del texto", async () => {
+    const xml = await rellenarCon({ neutra: true });
+    const hex = [...new Set((xml.match(/w:(?:fill|color)="([0-9A-Fa-f]{6})"/g) || [])
+      .map((m) => m.match(/"([0-9A-Fa-f]{6})"/)[1].toUpperCase()))];
+    expect(hex).toEqual(["000000"]);
+  });
+
+  it("ningún relleno: ni cabeceras, ni celdas, ni recuadros", async () => {
+    const xml = await rellenarCon({ neutra: true });
+    // Un `w:shd` con fill vacío NO es lo mismo que no tener `w:shd`: se omite
+    // el nodo entero, o Word pinta un fondo sobre el diseño del colegio.
+    expect(xml).not.toContain("<w:shd ");
+  });
+
+  it("y los bordes son los automáticos de Word, no los azules de Nitia", async () => {
+    const xml = await rellenarCon({ neutra: true });
+    expect((xml.match(/w:color="auto"/g) || []).length).toBeGreaterThan(0);
+  });
+
+  it("pero la maqueta de siempre NO se vuelve gris: Nitia sigue siendo Nitia", async () => {
+    const xml = await rellenarCon(null);
+    expect(xml).toContain(COLOR_NITIA.navy);
+    expect(xml).toContain(COLOR_NITIA.azul);
+    expect(xml).toContain("<w:shd ");
+    // Y el modo colegio sigue pintando los suyos.
+    const delColegio = await rellenarCon({ primario: "7A1F2B", acento: "C9A227" });
+    expect(delColegio).toMatch(/7A1F2B/i);
+    expect(delColegio).toMatch(/C9A227/i);
+  });
+
+  it("la ruta de plantilla aplica la paleta ELLA MISMA, no la hereda", () => {
+    // `rellenarConPlantilla` no pasa por `buildDocument`. Sin su propio
+    // `aplicarMarca` los bloques salían con el navy de Nitia y se incrustaban
+    // tal cual en el membrete del colegio: el bug que esto cierra.
+    const exportador = fs.readFileSync("lib/docx/exporters.js", "utf8");
+    const relleno = exportador.slice(exportador.indexOf("async function rellenarConPlantilla"),
+      exportador.indexOf("/** Descarga un blob ya construido"));
+    expect(relleno).toContain("aplicarMarca(coloresDe(marca");
+    expect(relleno).toContain('tipo: type');
+    // Con su `finally`: los colores no se quedan pegados al siguiente.
+    expect(relleno).toContain("restablecerMarca()");
+  });
+
+  it("los alias en inglés de THEME leen la paleta viva, no una foto", () => {
+    // Eran un objeto literal evaluado al importar, así que `THEME.border`
+    // seguía siendo el azul de Nitia aunque el documento fuera de un colegio.
+    aplicarMarca({ neutra: true });
+    try {
+      expect(THEME.border).toBe("auto");
+      expect(THEME.ink).toBe("000000");
+      expect(THEME.fill).toBeNull();
+    } finally {
+      restablecerMarca();
+    }
+    expect(THEME.border).toBe(COLOR_NITIA.borde);
+    expect(THEME.ink).toBe(COLOR_NITIA.texto);
+  });
+
+  it("y la tinta de la rúbrica no se queda en blanco sobre nada", () => {
+    // Sin relleno, el blanco de «Logro destacado» sería texto invisible.
+    aplicarMarca({ neutra: true });
+    try {
+      for (const nivel of ["ad", "a", "b", "c"]) {
+        expect(TINTA_SOBRE_RUBRICA[nivel], nivel).toBe("000000");
+      }
+    } finally {
+      restablecerMarca();
+    }
+    expect(TINTA_SOBRE_RUBRICA.ad).toBe(COLOR_NITIA.blanco);
+    expect(TINTA_SOBRE_RUBRICA.c).toBe(COLOR_NITIA.texto);
   });
 });

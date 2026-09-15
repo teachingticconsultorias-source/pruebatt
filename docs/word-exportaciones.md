@@ -296,6 +296,67 @@ logo, ni colores—, peor que si no hubiera configurado nada. Compárense
 `docs/qa/word/16-steam-colegio.pdf` (granate y dorado del colegio, documento
 completo).
 
+### Dentro de la plantilla del colegio no entra nuestra identidad
+
+Acotar el modo no bastaba. Lo que `patchDocument` insertaba —tablas, encabezados
+de sección, barras de momento— seguía saliendo con el **navy y el azul de
+SciVerse**, porque `coloresDe` devolvía `null` en modo plantilla y `null`
+significa «la paleta de Nitia». El resultado: cabeceras azul marino y barras de
+momento de otro producto incrustadas en el membrete de la institución. Es
+exactamente lo que el docente quiso evitar al subir su documento.
+
+Ahora `coloresDe` devuelve `{ neutra: true }` y `tema.js` tiene una tercera
+paleta:
+
+| rol | Nitia | colegio | **neutra** |
+| --- | --- | --- | --- |
+| texto, titulares | `1A1A1A` / `0B2E4F` | ídem / primario | `000000` |
+| acento, reglas | `1C74BC` | acento | `000000` |
+| apoyos | `6B7C8C` | `6B7C8C` | `444444` |
+| borde de tabla | `BBDBF0` | `BBDBF0` | `auto` |
+| relleno de cabecera, celda, fondo, rúbrica, aviso | varios | varios | **`null`** |
+
+Los `null` no son huecos por rellenar: son la instrucción de **no pintar
+fondo**. `core.js` omite el nodo `w:shd` entero cuando los ve, porque un `w:shd`
+con `fill` vacío no es lo mismo que no tener `w:shd`. Y `borde: "auto"` es el
+automático de Word, que respeta el tema del documento anfitrión.
+
+Tampoco se usan los colores del colegio ahí: ya los trae su plantilla, y
+deducirlos de dos campos de configuración daría un segundo azul parecido pero
+distinto, que canta más que el neutro.
+
+Medido sobre un anfitrión sin un solo color, para que todo hexadecimal de la
+salida sea nuestro:
+
+```
+A · paleta de Nitia     0B2E4F, 1C74BC, EAF4FB, 1A1A1A, FFFFFF, BBDBF0, 6BB3E0
+B · colores del colegio 7A1F2B, C9A227 + los no sobreescritos
+C · modo plantilla      NINGUNO   ·   0 nodos <w:shd>   ·   54 bordes «auto»
+```
+
+En C el único hexadecimal que queda en todo el contenido es `000000`. El
+resultado sobre una plantilla de colegio realista está en
+`docs/qa/word/20-clase-completa-en-plantilla.docx`: granate, dorado y Georgia
+son del centro; lo nuestro va en negro.
+
+Tres cosas hubo que separar para que esto fuera posible:
+
+- **`cabecera` y `tintaCabecera`** son ahora roles propios, distintos de `navy`
+  y `blanco`. Con un solo valor para «color del texto» y «relleno detrás» no
+  había forma de decir «mismo texto, sin fondo».
+- **`celda`** (fondo blanco de una celda normal) se separó de `blanco` (tinta).
+  Un blanco explícito dentro de una plantilla con fondo tintado abre agujeros
+  blancos en el diseño del colegio.
+- **`THEME` y `TINTA_SOBRE_RUBRICA` eran objetos literales**, es decir FOTOS de
+  la paleta de Nitia tomadas al importar el módulo. `THEME.border` seguía siendo
+  el azul de Nitia aunque el documento fuera de un colegio con su marca, y el
+  blanco de «Logro destacado» habría sido texto invisible sin relleno. Los dos
+  leen ahora la paleta viva.
+
+La ruta de plantilla aplica la paleta **ella misma**: no pasa por
+`buildDocument`, así que sin su propio `aplicarMarca` los bloques se construían
+en Nitia por mucho que el modo dijera otra cosa.
+
 Dos huecos más que se cerraron por el camino:
 
 - **La clase completa no recogía la marca.** `buildCompleteClass` ignoraba
@@ -354,6 +415,10 @@ El primer comando genera doce archivos en `docs/qa/word/`: de `01-sesion.docx` a
   `colegio`, con el granate y el dorado del centro.
 - `17-clase-completa-colegio.docx` — la clase completa recogiendo la marca, que
   antes ignoraba.
+- `19-plantilla-colegio-ejemplo.docx` — una plantilla de colegio ficticia, con
+  identidad bien distinta de la nuestra: granate, dorado y Georgia.
+- `20-clase-completa-en-plantilla.docx` — la misma, ya rellena. Sirve para ver
+  de un vistazo qué pone el colegio y qué ponemos nosotros.
 
 La carpeta ya está ignorada por Git. Todos los datos son ficticios y reproducen
 la FORMA REAL que entrega la generación —`componerSesion()`, `PROJECT_SCHEMA` y

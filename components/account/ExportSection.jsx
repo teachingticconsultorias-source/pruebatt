@@ -27,7 +27,7 @@ const TARJETAS = [
   { modo: "colegio", icono: Palette, titulo: "Formato de mi colegio",
     desc: "El mismo diseño con el logo y los colores de tu institución." },
   { modo: "plantilla", icono: Upload, titulo: "Mi plantilla .docx",
-    desc: "Tu propio documento de Word. SciVerse coloca el contenido dentro.",
+    desc: "Tu propio documento de Word. SciVerse coloca el contenido dentro, en negro y sin colores propios: el diseño lo pone tu plantilla.",
     // Es lo primero que hay que saber de esta tarjeta, no una letra pequeña:
     // quien la elige espera que se aplique a todo, y no es así.
     alcance: "Se aplica a Sesión de aprendizaje y Clase completa. El resto de documentos se descargan con el formato de tu colegio." },
@@ -233,6 +233,11 @@ export default function ExportSection() {
         Tu plantilla recibe la sesión y la clase completa, que son los documentos cuyo contenido
         encaja en sus marcas. Un proyecto STEAM o una rúbrica tienen otra estructura: se descargan
         con el logo y los colores de tu colegio sobre el formato de Nitia.
+      </p>
+      <p className="export-branding__nota">
+        Dentro de tu plantilla, el contenido va en texto negro con tablas de borde simple y sin
+        fondos de color. No lleva los colores de Nitia ni los que hayas elegido más arriba: toda la
+        identidad visual la pone tu documento, que para eso es tuyo.
       </p>
       <p className="export-branding__nota">
         Y si tu plantilla deja de estar disponible, tus documentos se seguirán descargando con el
