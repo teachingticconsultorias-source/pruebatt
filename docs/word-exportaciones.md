@@ -178,6 +178,95 @@ No hay vista previa del `.docx`: exigiría una dependencia pesada y con
 plantillas de colegio sería poco fiel. Se enseña el nombre, el peso y la lista
 de marcas reconocidas, que es lo que de verdad decide si funcionará.
 
+### La plantilla de partida son dos documentos, no uno
+
+La primera versión era un **manual con marcadores intercalados**: cada marca
+llevaba encima su párrafo explicativo. Subida sin modificar, `patchDocument`
+sustituía los párrafos con marca y dejaba intactos todos los demás —que eran
+las instrucciones—. Salía medio documento de ayuda y media sesión.
+
+Ahora hay un salto de página en medio:
+
+| | |
+| --- | --- |
+| **Página 1** | Las instrucciones, con el aviso de borrarlas. **Cero marcas.** |
+| **Página 2+** | El esqueleto limpio, utilizable tal cual, sin una palabra de ayuda. |
+
+Escribir `{{secuencia}}` dentro de una frase de la página de ayuda la
+convertiría en una marca real, y al rellenar se comería la explicación. Pasó al
+generar la primera versión de la página 1; por eso las marcas se listan ahí sin
+llaves y hay una prueba que lo vigila.
+
+### Por qué una marca de bloque va sola en su párrafo
+
+Medido sobre `docx@9.7.1`: `PatchType.DOCUMENT` reemplaza el **párrafo entero**
+donde vive la marca. Si hay texto al lado, **no falla: se lo come**. Una marca
+de bloque compartiendo párrafo es pérdida silenciosa de lo que escribió la
+docente, y por eso se rechaza al subir — por pérdida de contenido, no por
+fallo de la librería.
+
+Las de línea sí pueden vivir dentro de una frase o de una celda con rótulo:
+usan `PatchType.PARAGRAPH`, que sustituye sólo la marca.
+
+Al subir se comprueban tres cosas, **antes** de que el fichero llegue a Storage:
+
+1. que estén las marcas mínimas (`titulo`, `secuencia`);
+2. que cada marca detectada se pueda parchear de verdad — un parcheo de prueba
+   con una sonda, porque Word parte las marcas copiadas con formato en varios
+   `<w:r>` y entonces `patchDetector` las ve pero `patchDocument` no las
+   sustituye;
+3. que ninguna marca de bloque comparta `<w:p>` con otro texto u otra marca,
+   inspeccionando el XML.
+
+Un fichero que falle cualquiera de las tres se rechaza con el motivo concreto
+(«la marca `{{secuencia}}` debe estar SOLA en su párrafo…»), no con «plantilla
+inválida».
+
+### El contenido lo declara la maqueta; aquí no se deduce nada
+
+`sessionBloques()` en `lib/docx/plantillas/sesion.js` devuelve los ocho cubos ya
+construidos, y `sessionChildren()` **se compone de ellos**: la maqueta de Nitia y
+el modo plantilla comparten exactamente los mismos párrafos y tablas, así que no
+pueden divergir.
+
+La primera versión hacía lo contrario —trocear el resultado leyendo el texto de
+los párrafos ya construidos— y fallaba en silencio: los objetos de `docx` no
+exponen su texto así, los ocho cubos salían vacíos y las ocho marcas de bloque
+llegaban literales al documento. La prueba de entonces pasaba porque le daba los
+hijos a mano, saltándose justo la parte rota.
+
+Y **toda marca declarada recibe parche, aunque no traiga contenido**: una que no
+se pase a `patchDocument` se queda literal en el documento final. Sin anexos, un
+`{{anexos}}` visible; en un proyecto STEAM, siete marcas visibles.
+
+### El contrato es de SESIÓN, y sólo dos tipos lo llenan
+
+Medido sobre los ejemplares de `tests/fixtures/word.js` (número de hijos por
+cubo):
+
+| tipo | datos_g. | propósitos | desemp. | criterios | enfoques | secuencia | dua | anexos |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `session` | 1 | 1 | 1 | 1 | 1 | 52 | 8 | 23 |
+| `complete` | 1 | 1 | 1 | 1 | 1 | 52 | 8 | 27 |
+| `project_steam` | 0 | 0 | 0 | 0 | 0 | 42 | 0 | 0 |
+| `rubric` y demás | 0 | 0 | 0 | 0 | 0 | 8 | 0 | 0 |
+
+Sesión y clase completa llenan las diecisiete. El resto vuelca su cuerpo entero
+en `{{secuencia}}` y deja las otras siete en blanco, con un efecto visible en
+`docs/qa/word/15-steam-plantilla.pdf`: los encabezados del colegio
+—PROPÓSITOS, DESEMPEÑOS, CRITERIOS, ENFOQUES— **sobreviven vacíos**, y debajo
+el proyecto repite su propio título y su propia tabla de datos informativos.
+
+No es un fallo del troceado: un proyecto STEAM no tiene desempeños precisados ni
+orientaciones DUA, y en cambio tiene integración STEAM, ruta por semanas y
+sesiones, que en este contrato no tienen dónde caer. Son estructuras distintas,
+no la misma con secciones ausentes.
+
+**Pendiente de decisión** (ver `docs/pendientes.md`): acotar el modo `plantilla`
+a sesión y clase completa, y que el resto de tipos caiga a modo `colegio` —misma
+maqueta de Nitia con el logo y los colores del centro—. Un contrato por tipo
+obligaría a cada docente a mantener varias plantillas.
+
 ### Cómo llega la marca al exportador
 
 `lib/docx/` **no importa Supabase** — lo usan las pruebas de OOXML, que corren

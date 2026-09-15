@@ -71,9 +71,40 @@ está listo para ella.
 
 ---
 
+### 6 · El modo `plantilla` sólo cubre sesión y clase completa
+
+El contrato de diecisiete marcas de `lib/export/plantilla.js` tiene forma de
+**sesión de aprendizaje**. Medido sobre los ejemplares de
+`tests/fixtures/word.js`, sesión y clase completa llenan las ocho marcas de
+bloque; el proyecto STEAM y todos los demás tipos llenan **una**, `{{secuencia}}`,
+y dejan las otras siete vacías.
+
+El resultado se ve en `docs/qa/word/15-steam-plantilla.pdf`: los encabezados de
+la plantilla del colegio —PROPÓSITOS, DESEMPEÑOS, CRITERIOS, ENFOQUES—
+sobreviven sin nada debajo, y a continuación el proyecto repite su propio título
+y su propia tabla de datos informativos, que ya estaban arriba.
+
+No se arregla troceando mejor: un proyecto STEAM no tiene desempeños precisados
+ni orientaciones DUA, y sí tiene integración STEAM, ruta por semanas y sesiones,
+que en este contrato no tienen dónde caer. Son estructuras distintas.
+
+Las tres salidas posibles, de menos a más trabajo:
+
+1. **Acotar el modo** — `plantilla` se aplica sólo a sesión y clase completa; el
+   resto cae a modo `colegio` (la maqueta de Nitia con el logo y los colores del
+   centro). Una condición en `downloadResource` y una nota en la pantalla.
+   Es lo recomendado: el colegio conserva su identidad en todas las descargas y
+   nadie recibe un documento con secciones huecas.
+2. **Marcas opcionales con sección** — que una marca de bloque vacía se lleve por
+   delante el encabezado que tiene encima. Exige que la plantilla diga qué
+   encabezado pertenece a qué marca; hoy no hay forma de saberlo.
+3. **Un contrato por tipo** — obligaría a cada docente a mantener y subir varias
+   plantillas. Sólo tiene sentido si un colegio pide su formato propio de
+   proyecto STEAM, que hoy nadie ha pedido.
+
 ## Aceptado como está
 
-### 6 · `docx_remove_watermark` inerte en `plans.features`
+### 7 · `docx_remove_watermark` inerte en `plans.features`
 
 Se sembró en la migración 009 y nunca se usó: el exportador no pinta ninguna
 marca de agua y `permiteQuitarMarca()` no se llamaba desde ningún endpoint. La
@@ -84,7 +115,7 @@ La migración 012 trae el `update` para limpiarla, **comentado**. Se dejó así
 para no alterar datos de producción en la misma migración que crea la tabla y
 el bucket. Descomentar y ejecutar cuando se quiera.
 
-### 7 · Ficheros huérfanos en `export-templates`
+### 8 · Ficheros huérfanos en `export-templates`
 
 Borrar un docente elimina su fila de `export_branding` por `on delete cascade`,
 pero **no** su logo ni su plantilla: Storage vive en otro esquema y el cascade
@@ -94,21 +125,21 @@ El inspector `supabase/inspect/012_verify_export_branding.sql` los cuenta
 (consulta 5). Si algún día pesan, se resuelve con una tarea programada o un
 botón en el panel de administración. Hoy: 0.
 
-### 8 · Sin vista previa del `.docx` subido
+### 9 · Sin vista previa del `.docx` subido
 
 Renderizar un `.docx` en el navegador exige una dependencia pesada
 (`docx-preview`, `mammoth`) y con plantillas de colegio daría una aproximación
 poco fiel. En su lugar se enseña nombre, peso y la lista de marcas `{{...}}`
 reconocidas, que es lo que de verdad decide si la plantilla va a funcionar.
 
-### 9 · La cuadrícula del gráfico se parte entre páginas
+### 10 · La cuadrícula del gráfico se parte entre páginas
 
 En la Ficha del Estudiante de laboratorio, el papel milimetrado de 16×8 se
 reparte entre dos páginas. Forzar un salto antes crearía media página en blanco
 —el defecto que se corrigió en los anexos de la sesión—. Si se prefiere entera,
 se baja a 6 filas y cabe.
 
-### 10 · Orientación adaptativa de rúbrica: medida y descartada
+### 11 · Orientación adaptativa de rúbrica: medida y descartada
 
 Con descriptores de 450 caracteres caben **2,4 filas por página en vertical y
 2,4 en horizontal**: el ancho extra se compensa con la altura perdida. Cambiar a
@@ -119,19 +150,19 @@ plantearlo.
 
 ## Código muerto o inalcanzable
 
-### 11 · `SessionNextFlow.jsx` y `SessionResourcesPanel.jsx` no están importados
+### 12 · `SessionNextFlow.jsx` y `SessionResourcesPanel.jsx` no están importados
 
 Ningún componente los renderiza. Con ellos quedan inalcanzables desde la
 interfaz la **Guía de observación** y el **Cuestionario**, que sí existen en el
 exportador, en el endpoint y en los tipos de la biblioteca. O se enrutan o se
 retiran; mantenerlos a medias confunde al siguiente que los lea.
 
-### 12 · `SteamGenerator` acepta cuatro `documentType` y sólo uno se usa
+### 13 · `SteamGenerator` acepta cuatro `documentType` y sólo uno se usa
 
 El componente contempla `session`, `project`, `rubric` y `checklist`, pero el
 único enrutado es `session`. Las otras tres ramas no son alcanzables.
 
-### 13 · Cinco generadores legacy sin ruta
+### 14 · Cinco generadores legacy sin ruta
 
 `CrosswordGenerator`, `LearningUnitGenerator`, `WorksheetGenerator`,
 `ReadingGenerator` y `EvaluationSheetGenerator` están definidos en `App.jsx` y
@@ -142,7 +173,7 @@ Markdown (`downloadText`).
 
 ## Infraestructura
 
-### 14 · No hay tabla de control de migraciones
+### 15 · No hay tabla de control de migraciones
 
 Este proyecto no registra en ninguna parte qué migraciones se han aplicado, y
 las aplica a mano desde el editor SQL de Supabase. Eso hizo imposible saber
@@ -153,7 +184,7 @@ Las migraciones **009, 010, 011 y 013 no tienen inspector**. La 012 sí
 (`supabase/inspect/012_verify_export_branding.sql`). Escribir los que faltan, o
 adoptar una tabla de control, evitaría repetir esa situación.
 
-### 15 · Cobertura de plantillas por nivel
+### 16 · Cobertura de plantillas por nivel
 
 - **Primaria:** falta plantilla oficial de Educación para el Trabajo, que sí
   está en el catálogo de la aplicación.
@@ -162,7 +193,7 @@ adoptar una tabla de control, evitaría repetir esa situación.
   en ese nivel. El material sugiere un catálogo de Primaria más amplio que el
   actual (6 áreas).
 
-### 16 · Borrador local del formulario y aviso al salir
+### 17 · Borrador local del formulario y aviso al salir
 
 Evaluados en el bloque de endurecimiento de UX y no implementados: el estado ya
 sobrevive al fallo dentro de la pantalla, y ambos tocan el ciclo de vida del
