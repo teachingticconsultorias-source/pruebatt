@@ -3076,10 +3076,14 @@ function SessionResourceGenerator({ tipo, initialGrade = "primaria", profile = {
             </label>
             <div className="wide ai-field">
               <label htmlFor={`${tipo}-libre`}>{meta.rotulo}</label>
+              {/* Lo único que Kantu necesita es el tema: si falta, el botón lo
+                  dice en vez de dejar que se pulse en falso. */}
               <button type="button" onClick={() => { setError(""); kantu.pedir(meta.campo, form); }}
-                disabled={Boolean(kantu.campoActivo)}>
+                disabled={!form.tema.trim() || Boolean(kantu.campoActivo)}
+                title={!form.tema.trim() ? "Escribe primero el tema" : undefined}>
                 {kantu.campoActivo ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-                {" "}{kantu.campoActivo ? kantu.espera : "Sugerir con Kantu"}
+                {" "}{kantu.campoActivo ? kantu.espera
+                  : !form.tema.trim() ? "Escribe primero el tema" : "Sugerir con Kantu"}
               </button>
               <textarea id={`${tipo}-libre`} value={form[meta.campo]}
                 onChange={(e) => update(meta.campo, e.target.value)} placeholder={meta.ayuda} />

@@ -221,10 +221,22 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
   const g = resource?.guiaDocente || {};
 
   /** El botón de sugerir, idéntico al del resto de generadores. */
+  /**
+   * El botón de sugerir, con su motivo si no se puede pulsar.
+   *
+   * Ni el título necesita el propósito ni al revés: lo único que Kantu
+   * necesita es el TEMA, que es lo que ancla la respuesta. Antes el botón se
+   * veía activo, se pulsaba y saltaba un aviso; ahora se ve apagado y dice por
+   * qué, que es lo mismo pero sin el clic en falso.
+   */
+  const faltaTema = !form.tema.trim();
   const botonKantu = (campo, etiqueta) => (
-    <button type="button" onClick={() => sugerir(campo)} disabled={Boolean(kantu.campoActivo)}>
+    <button type="button" onClick={() => sugerir(campo)}
+      disabled={faltaTema || Boolean(kantu.campoActivo)}
+      title={faltaTema ? "Escribe primero el tema de la práctica" : undefined}>
       {kantu.campoActivo === campo ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
-      {" "}{kantu.campoActivo === campo ? kantu.espera : etiqueta}
+      {" "}{kantu.campoActivo === campo ? kantu.espera
+        : faltaTema ? "Escribe primero el tema de la práctica" : etiqueta}
     </button>
   );
 
