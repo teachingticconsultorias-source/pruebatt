@@ -440,6 +440,19 @@ describe("bloqueo del tipo de material", () => {
     // de mirar la extensión y pasa a mirar si es la ruta del logo.
     const quince = leer(`supabase/migrations/${ultima}`);
     expect(quince).toContain("es_ruta_de_logo");
+    // Las políticas viejas se BORRAN antes de crear las nuevas. En Postgres las
+    // RLS son permisivas y se combinan con OR: dejar viva la de la 012 al lado
+    // de la nueva no cerraría nada, bastaría con que una dejara pasar.
+    for (const vieja of ['"Mi marca de export · subir"', '"Mi marca de export · cambiar"',
+      '"Mi configuración de export · crear"', '"Mi configuración de export · cambiar"']) {
+      const drop = quince.indexOf(`drop policy if exists ${vieja}`);
+      const crea = quince.indexOf(`create policy ${vieja}`);
+      expect(drop, `sin drop de ${vieja}`).toBeGreaterThan(-1);
+      expect(drop, `el drop de ${vieja} va después del create`).toBeLessThan(crea);
+    }
+    // Y si el create fallara, la migración ABORTA en vez de terminar «bien»
+    // con la política vieja todavía puesta.
+    expect(quince).toContain("ABORTA: la política de SUBIR");
     expect(quince).not.toMatch(/name not like '%\.docx%'/);
   });
 });

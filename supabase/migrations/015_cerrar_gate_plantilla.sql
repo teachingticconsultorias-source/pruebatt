@@ -109,7 +109,52 @@ begin
                 and (storage.foldername(name))[1] = auth.uid()::text
                 and (public.es_ruta_de_logo(name) or public.puede_plantilla_propia()));
 exception when others then
-  raise warning '[sciverse] No se pudieron recrear las políticas de export-templates (%). Revísalas a mano en Storage → export-templates → Policies.', sqlerrm;
+  -- Se atrapa para poder dar una instrucción útil, pero NO se deja pasar: el
+  -- bloque 2b de abajo aborta la migración entera si el gate no quedó puesto.
+  raise warning '[sciverse] No se pudieron recrear las políticas de export-templates (%). Créalas a mano en Storage → export-templates → Policies.', sqlerrm;
+end $$;
+
+
+-- ----------------------------------------------------------------------------
+-- 2b · NO DAR POR BUENO LO QUE NO SE COMPROBÓ
+--
+--     El bloque de arriba traga la excepción —lo heredó de la 012, donde tenía
+--     sentido porque crear un bucket puede fallar por permisos y no es grave—.
+--     Aquí sí es grave: si el `create policy` falla, la política VIEJA de la
+--     012 sigue viva, la migración termina «bien» y el agujero sigue abierto
+--     sin que nadie se entere.
+--
+--     Así que se vuelve a leer lo que quedó en el catálogo y se aborta si no
+--     es lo esperado. Un fallo ruidoso es infinitamente mejor que un gate que
+--     se cree cerrado.
+-- ----------------------------------------------------------------------------
+do $$
+declare
+  subir_check   text;
+  cambiar_using text;
+  cambiar_check text;
+begin
+  select pg_get_expr(p.polwithcheck, p.polrelid) into subir_check
+    from pg_policy p join pg_class c on c.oid = p.polrelid
+   where c.relname = 'objects' and p.polname = 'Mi marca de export · subir';
+
+  select pg_get_expr(p.polqual, p.polrelid), pg_get_expr(p.polwithcheck, p.polrelid)
+    into cambiar_using, cambiar_check
+    from pg_policy p join pg_class c on c.oid = p.polrelid
+   where c.relname = 'objects' and p.polname = 'Mi marca de export · cambiar';
+
+  if subir_check is null or subir_check not like '%es_ruta_de_logo%' then
+    raise exception 'ABORTA: la política de SUBIR no quedó con el gate nuevo (%). El agujero sigue abierto.', coalesce(subir_check, 'no existe');
+  end if;
+  if subir_check like '%.docx%' then
+    raise exception 'ABORTA: la política de SUBIR sigue filtrando por extensión .docx. Quedó la de la 012.';
+  end if;
+  if cambiar_using is null or cambiar_using not like '%es_ruta_de_logo%'
+     or cambiar_check is null or cambiar_check not like '%es_ruta_de_logo%' then
+    raise exception 'ABORTA: la política de CAMBIAR no comprueba el plan en sus dos mitades.';
+  end if;
+
+  raise notice '[sciverse] gate del bucket verificado en el catálogo: subir y cambiar exigen plan.';
 end $$;
 
 
@@ -152,6 +197,9 @@ do $$
 declare
   saneadas integer;
 begin
+  -- Ojo al leer el resultado: en el editor SQL esto corre como dueño de la
+  -- tabla, así que RLS no se aplica y el update ve todas las filas. Si algún
+  -- día se ejecutara con una sesión de docente, vería sólo la suya.
   update public.export_branding b
      set modo = 'colegio'
    where b.modo = 'plantilla'
