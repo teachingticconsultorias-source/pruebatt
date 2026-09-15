@@ -231,3 +231,99 @@
   color: var(--text-secondary);
 }
 .plansec__nota svg { flex: none; margin-top: 2px; color: var(--teal-700); }
+
+/* ==========================================================================
+   PERSONALIZAR EXPORT
+
+   Tres tarjetas en columna: de menos a más específica, para que se lean como
+   escalones y no como opciones sueltas. En pantalla ancha caben en fila.
+   ========================================================================== */
+.export-branding__intro { margin: 0 0 var(--space-2); color: var(--text-secondary); font-size: var(--text-sm); line-height: var(--leading-normal); }
+.export-branding__estado {
+  margin: 0 0 var(--space-5); padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md); background: var(--bg-brand-soft);
+  color: var(--teal-800); font-size: var(--text-sm); font-weight: var(--weight-semibold);
+}
+.export-branding__nota { margin: var(--space-5) 0 0; color: var(--text-tertiary); font-size: var(--text-label); line-height: var(--leading-normal); }
+
+.export-branding__cards { display: grid; gap: var(--space-4); }
+@media (min-width: 900px) { .export-branding__cards { grid-template-columns: repeat(3, minmax(0, 1fr)); align-items: start; } }
+
+.export-card {
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-5); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg); background: var(--bg-surface);
+  transition: border-color var(--dur-base) var(--ease-out), box-shadow var(--dur-base) var(--ease-out);
+}
+.export-card.is-active { border-color: var(--border-brand); box-shadow: var(--elev-2); }
+.export-card.is-locked { background: var(--bg-sunken); }
+
+.export-card > header { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.export-card__icon {
+  display: grid; place-items: center; width: 38px; height: 38px;
+  border-radius: var(--radius-md); background: var(--bg-brand-soft); color: var(--teal-700);
+}
+.export-card.is-locked .export-card__icon { background: var(--neutral-100); color: var(--text-tertiary); }
+.export-card h4 { margin: 0 0 2px; font: var(--weight-bold) var(--text-body-lg)/var(--leading-snug) var(--font-display); color: var(--text-primary); }
+.export-card > header p { margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-secondary); }
+.export-card__badge {
+  grid-column: 1 / -1; justify-self: start;
+  display: inline-flex; align-items: center; gap: var(--space-1);
+  padding: 2px var(--space-2); border-radius: var(--radius-full);
+  background: var(--success-50); color: var(--success-700);
+  font-size: var(--text-label); font-weight: var(--weight-bold);
+}
+.export-card__lock, .export-card__ayuda { margin: 0; font-size: var(--text-sm); line-height: var(--leading-normal); color: var(--text-tertiary); }
+.export-card__ayuda code { padding: 1px 4px; border-radius: var(--radius-sm); background: var(--bg-sunken); font-size: var(--text-label); }
+
+.export-card__body { display: flex; flex-direction: column; gap: var(--space-4); padding-top: var(--space-3); border-top: 1px solid var(--border-subtle); }
+.export-field { display: flex; flex-direction: column; gap: var(--space-2); }
+.export-field__label { font-size: var(--text-label); font-weight: var(--weight-bold); color: var(--text-secondary); }
+.export-field--colores { flex-direction: row; gap: var(--space-4); }
+.export-field--colores label { display: flex; flex-direction: column; gap: var(--space-2); }
+.export-field--colores input[type="color"] { width: 64px; height: 34px; padding: 0; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: none; cursor: pointer; }
+
+/* El input de fichero real se oculta pero sigue siendo el que recibe el foco
+   y el clic: la etiqueta es su envoltorio, no un botón falso. */
+.export-upload {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3) var(--space-4); border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md); color: var(--teal-700); background: var(--bg-surface);
+  font-size: var(--text-sm); font-weight: var(--weight-semibold); cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
+}
+.export-upload:hover { border-color: var(--border-brand); background: var(--teal-50); }
+.export-upload:focus-within { outline: 2px solid var(--teal-600); outline-offset: 2px; }
+.export-upload input[type="file"] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.export-file {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: var(--space-2);
+  align-items: center; padding: var(--space-3); border-radius: var(--radius-md);
+  background: var(--bg-sunken); font-size: var(--text-sm); color: var(--text-secondary);
+}
+.export-file > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.export-file button {
+  display: grid; place-items: center; width: 30px; height: 30px;
+  border: 0; border-radius: var(--radius-md); background: transparent;
+  color: var(--danger-700); cursor: pointer;
+}
+.export-file button:hover:not(:disabled) { background: var(--danger-50); }
+.export-file button:disabled { opacity: .5; cursor: not-allowed; }
+
+.export-choices { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.export-choices button {
+  padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default);
+  border-radius: var(--radius-md); background: var(--bg-surface);
+  color: var(--text-secondary); font-size: var(--text-sm); cursor: pointer;
+}
+.export-choices button.is-active { border-color: var(--border-brand); background: var(--bg-brand-soft); color: var(--teal-800); font-weight: var(--weight-semibold); }
+
+/* No hay vista previa de un .docx sin una dependencia pesada. Lo que se
+   enseña es lo que de verdad decide si la plantilla funcionará: sus marcas. */
+.export-marcadores summary { font-size: var(--text-sm); font-weight: var(--weight-semibold); color: var(--teal-700); cursor: pointer; }
+.export-marcadores ul { list-style: none; margin: var(--space-3) 0 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.export-marcadores li { display: grid; grid-template-columns: 14px auto minmax(0, 1fr); gap: var(--space-2); align-items: center; font-size: var(--text-label); color: var(--text-tertiary); }
+.export-marcadores li.is-ok { color: var(--success-700); }
+.export-marcadores code { font-size: var(--text-label); color: var(--text-secondary); }
+
+.acc__loading { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-6); color: var(--text-secondary); font-size: var(--text-sm); }

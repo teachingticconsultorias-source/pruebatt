@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import {
   User, School, CreditCard, GraduationCap, ShieldCheck, Link2,
-  Video, BadgeCheck, BookOpen, Palette, HardDrive, Pencil, Check,
+  Video, BadgeCheck, BookOpen, Palette, HardDrive, Pencil, Check, FileDown,
 } from "lucide-react";
 
 import Modal from "../ui/Modal.jsx";
@@ -10,6 +10,7 @@ import { Badge, Alert, EmptyState } from "../ui/Feedback.jsx";
 import { useUI } from "../ui/UIProvider.jsx";
 import CreditsIndicator from "../CreditsIndicator.jsx";
 import PlanSection from "./PlanSection.jsx";
+import ExportSection from "./ExportSection.jsx";
 import { whatsappLink } from "../../config/plans.js";
 import { nombreDePlan } from "../useMyPlan.js";
 
@@ -36,6 +37,7 @@ const TABS = [
   { id: "plan", label: "Plan y uso", icon: CreditCard },
   { id: "capacitacion", label: "Capacitación", icon: GraduationCap },
   { id: "seguridad", label: "Seguridad", icon: ShieldCheck },
+  { id: "exportacion", label: "Personalizar export", icon: FileDown },
   { id: "integraciones", label: "Integraciones", icon: Link2 },
 ];
 
@@ -178,6 +180,9 @@ export default function Account({
               la base, no de config/plans.js: cambiar un precio no debe exigir
               un despliegue, y el importe nunca lo decide el navegador. */}
           {tab === "plan" && <PlanSection />}
+
+          {/* ============================================ PERSONALIZAR EXPORT */}
+          {tab === "exportacion" && <ExportSection />}
 
           {/* =============================================== CAPACITACIÓN */}
           {tab === "capacitacion" && (

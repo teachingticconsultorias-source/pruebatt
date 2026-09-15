@@ -105,6 +105,104 @@ tabla encaja aunque cambie el margen o la orientación.
 - **Área articuladora del STEAM.** Se reutiliza el área curricular principal que
   el formulario ya envía; si no llega, la fila se omite.
 
+## Personalizar export · la marca del colegio
+
+Tres modos por docente, de menos a más específico. Se eligen en
+**Mi cuenta → Personalizar export** y se aplican a TODAS sus descargas.
+
+| Modo | Qué hace | Plan |
+| --- | --- | --- |
+| `nitia` | La maqueta de siempre. Valor por defecto y respaldo de todo | Todos |
+| `colegio` | La misma maqueta con el logo y los colores de la institución | Todos |
+| `plantilla` | El `.docx` del propio colegio, relleno por marcadores | Pro |
+
+```
+lib/export/marca.js            modelo puro: normalización, modo efectivo, respaldos
+lib/export/plantilla.js        validación del .docx y contrato de marcadores
+lib/export/almacen.js          Supabase: fila, bucket privado y caché de sesión
+lib/export/useMarcaExport.js   el hook de la pantalla
+components/account/ExportSection.jsx   las tres tarjetas
+scripts/plantilla-base.mjs     genera la plantilla de partida descargable
+```
+
+### El modo guardado no es el que manda
+
+Lo guardado es una intención, no una garantía: un plan puede caducar y un
+fichero puede borrarse desde el panel de Storage. `modoEfectivo()` resuelve la
+caída en un solo sitio, y siempre hacia abajo:
+
+```
+plantilla  →  sin plan o sin fichero  →  colegio  →  sin logo ni colores  →  nitia
+```
+
+Una docente nunca se queda sin poder exportar. Si eligió plantilla y la pierde,
+conserva sus colores: perderlos además del `.docx` sería castigar dos veces por
+el mismo problema.
+
+### El gate de Pro está en la base, no en la interfaz
+
+La tercera tarjeta se ve siempre, con candado si el plan no la incluye —
+esconderla dejaría a una docente Free sin saber que existe. Pero **el candado
+es sólo lo que se ve**. Quien impide subir es la política de `storage.objects`:
+
+```sql
+with check (bucket_id = 'export-templates'
+            and (storage.foldername(name))[1] = auth.uid()::text
+            and (name not like '%.docx' or public.puede_plantilla_propia()))
+```
+
+Forzar el navegador no sirve: el objeto no llega a insertarse. Y la capacidad se
+lee de `plans.features → docx_custom_template`, sin `'pro'` escrito a fuego.
+
+Leer y borrar sólo exigen propiedad: si alguien deja de ser Pro conserva y puede
+borrar su fichero, pero no puede subir otro.
+
+### El contrato de marcadores
+
+`patchDocument()` sustituye marcas `{{nombre}}` dentro de un `.docx` existente.
+No hay forma de «insertar el contenido respetando la estructura» de un documento
+arbitrario: si la plantilla del colegio no dice dónde va el propósito, el sistema
+no puede adivinarlo.
+
+De ahí la plantilla de partida (`public/plantillas/plantilla-base-sciverse.docx`),
+que se **genera** desde el mismo contrato con `node scripts/plantilla-base.mjs`.
+Si fuera un binario hecho a mano, añadir un marcador al código lo dejaría atrás
+en silencio.
+
+Al subir una plantilla se detectan sus marcas con `patchDetector()` y se rechaza
+si le faltan las mínimas (`titulo`, `secuencia`), diciendo cuáles — mucho más
+útil que «plantilla inválida». La validación mira extensión, tamaño y los cuatro
+bytes `PK\x03\x04`: renombrar un `.exe` a `.docx` es trivial.
+
+No hay vista previa del `.docx`: exigiría una dependencia pesada y con
+plantillas de colegio sería poco fiel. Se enseña el nombre, el peso y la lista
+de marcas reconocidas, que es lo que de verdad decide si funcionará.
+
+### Cómo llega la marca al exportador
+
+`lib/docx/` **no importa Supabase** — lo usan las pruebas de OOXML, que corren
+en node sin sesión. Y enhebrar la marca por los doce puntos de descarga
+significaría que el que se olvidara exportaría sin ella.
+
+En su lugar, `main.jsx` registra el resolvedor una vez
+(`configurarMarca(marcaVigente)`). Sin registrar, todo sale en formato de Nitia,
+que es exactamente lo que deben hacer las pruebas.
+
+Los colores se aplican con una **paleta activa** en `tema.js`: `COLOR` es una
+vista sobre ella, así que las trescientas líneas de maqueta que ya escribían
+`COLOR.navy` recogen el color correcto sin tocarlas. Se aplica antes de
+construir y se deshace en un `finally`: un documento que falle a medias no
+puede dejar los colores de un colegio pegados al siguiente.
+
+### Límite conocido: ficheros huérfanos
+
+Borrar un docente elimina su fila de `export_branding` por `on delete cascade`,
+pero **no** su logo ni su plantilla: Storage vive en otro esquema y el cascade
+no lo alcanza. Se acepta a propósito — son como mucho dos ficheros de 5 MB por
+docente eliminado. El inspector `supabase/inspect/012_verify_export_branding.sql`
+los cuenta (consulta 5); si algún día pesan, se resuelve con una tarea
+programada o un botón en el panel de administración, no con complejidad ahora.
+
 ## QA reproducible
 
 ```sh

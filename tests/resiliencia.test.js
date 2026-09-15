@@ -5,7 +5,7 @@ import { generateJson, esperaDeReintento } from "../api/_lib/gemini.js";
 import { withCredit } from "../api/_lib/credits.js";
 import {
   CAPACIDADES_POR_DEFECTO, cantidadPermitida, capacidadesDe, mensajeDeLimite,
-  permiteQuitarMarca, planEfectivo,
+  planEfectivo,
 } from "../api/_lib/entitlements.js";
 import { cerrarOperacion, claveDeOperacion } from "../api/_lib/idempotency.js";
 
@@ -254,12 +254,12 @@ describe("entitlements · una sola fuente de capacidades", () => {
     expect(CAPACIDADES_POR_DEFECTO.free).toMatchObject({
       weekly_ai_credits: 5, worksheet_max_questions: 10, reading_max_questions: 10,
       rubric_max_criteria: 5, checklist_max_criteria: 8, rating_scale_max_criteria: 8,
-      steam_max_weeks: 2, docx_remove_watermark: false,
+      steam_max_weeks: 2, docx_custom_template: false,
     });
     expect(CAPACIDADES_POR_DEFECTO.pro).toMatchObject({
       weekly_ai_credits: 100, worksheet_max_questions: 20, reading_max_questions: 20,
       rubric_max_criteria: 10, checklist_max_criteria: 15, rating_scale_max_criteria: 15,
-      steam_max_weeks: 4, docx_remove_watermark: true,
+      steam_max_weeks: 4, docx_custom_template: true,
     });
   });
 
@@ -277,7 +277,7 @@ describe("entitlements · una sola fuente de capacidades", () => {
 
   it("un plan desconocido cae en Free, nunca en Pro", () => {
     expect(capacidadesDe("inventado").worksheet_max_questions).toBe(10);
-    expect(capacidadesDe(undefined).docx_remove_watermark).toBe(false);
+    expect(capacidadesDe(undefined).docx_custom_template).toBe(false);
   });
 
   it("no hay if(plan==='pro') repartido por los endpoints", () => {
@@ -334,7 +334,7 @@ describe("entitlements · el servidor es la autoridad", () => {
     const e = await planEfectivo({ token: "t", url: "https://p.supabase.co", key: "k" });
     expect(e.plan).toBe("free");
     expect(e.capacidades.worksheet_max_questions).toBe(10);
-    expect(e.capacidades.docx_remove_watermark).toBe(false);
+    expect(e.capacidades.docx_custom_template).toBe(false);
 
     // Y los endpoints nunca leen el plan del cuerpo.
     for (const f of ["api/generate-linked-worksheet.js", "api/generate-session-resource.js",
@@ -349,17 +349,30 @@ describe("entitlements · el servidor es la autoridad", () => {
     global.fetch = vi.fn(async () => { throw new Error("red caída"); });
     const e = await planEfectivo({ token: "t", url: "https://p.supabase.co", key: "k" });
     expect(e.plan).toBe("free");
-    expect(e.capacidades.docx_remove_watermark).toBe(false);
+    expect(e.capacidades.docx_custom_template).toBe(false);
   });
 
-  it("L · Pro puede quitar la marca de agua", () => {
-    expect(permiteQuitarMarca(CAPACIDADES_POR_DEFECTO.pro, true)).toBe(true);
-    expect(permiteQuitarMarca(CAPACIDADES_POR_DEFECTO.pro, false)).toBe(false);
+  it("L · Pro declara la plantilla .docx propia y Free no", () => {
+    expect(CAPACIDADES_POR_DEFECTO.pro.docx_custom_template).toBe(true);
+    expect(CAPACIDADES_POR_DEFECTO.free.docx_custom_template).toBe(false);
   });
 
-  it("M · Free no puede, ni marcando la casilla", () => {
-    expect(permiteQuitarMarca(CAPACIDADES_POR_DEFECTO.free, true)).toBe(false);
-    expect(permiteQuitarMarca(undefined, true)).toBe(false);
+  it("M · esa capacidad la hace cumplir la BASE, no este módulo", () => {
+    // A diferencia del resto de límites, éste no se comprueba en JavaScript:
+    // lo aplica la política de subida del bucket `export-templates` llamando a
+    // `public.puede_plantilla_propia()` (migración 012). Forzar el navegador
+    // no sirve porque el objeto no llega a insertarse.
+    const migracion = fs.readFileSync("supabase/migrations/012_export_branding.sql", "utf8");
+    expect(migracion).toContain("public.puede_plantilla_propia()");
+    expect(migracion).toContain("docx_custom_template");
+    const politica = migracion.slice(migracion.indexOf("Mi marca de export · subir"));
+    expect(politica).toContain("puede_plantilla_propia()");
+    // Y la función muerta ya no se exporta (la nota que explica su retirada
+    // sí la nombra, y debe seguir haciéndolo).
+    const entitlements = fs.readFileSync("api/_lib/entitlements.js", "utf8");
+    expect(entitlements).not.toContain("export function permiteQuitarMarca");
+    expect(entitlements).not.toContain("docx_remove_watermark:");
+    expect(entitlements).toContain("RETIRADA");
   });
 
   it("el mensaje de límite no habla en jerga técnica", () => {

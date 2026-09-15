@@ -43,7 +43,10 @@ export const CAPACIDADES_POR_DEFECTO = {
     checklist_max_criteria: 8,
     rating_scale_max_criteria: 8,
     steam_max_weeks: 2,
-    docx_remove_watermark: false,
+    // Plantilla .docx propia. La hace cumplir la POLÍTICA DE SUBIDA del bucket
+    // (migración 012), no sólo la interfaz: un Free no puede insertar el
+    // objeto aunque llame al API de Storage a mano.
+    docx_custom_template: false,
     // PREPARADA, SIN USO REAL TODAVÍA.
     //
     // La guía de laboratorio es Free completa por decisión de producto: es la
@@ -64,7 +67,7 @@ export const CAPACIDADES_POR_DEFECTO = {
     checklist_max_criteria: 15,
     rating_scale_max_criteria: 15,
     steam_max_weeks: 4,
-    docx_remove_watermark: true,
+    docx_custom_template: true,
     lab_teacher_guide: true,
   },
 };
@@ -174,16 +177,16 @@ export function cantidadPermitida(pedida, { minimo = 1, limite, porDefecto, tool
   return resultado(pedido, false);
 }
 
-/**
- * ¿Se puede quitar la marca de agua?
- *
- * El navegador manda su preferencia, pero quitarla es un beneficio de Pro:
- * la decisión final la toma el servidor. Un Free que envíe `sinMarca: true`
- * recibe su documento con marca, sin error y sin drama.
- */
-export function permiteQuitarMarca(capacidades, pedido) {
-  return Boolean(capacidades?.docx_remove_watermark) && pedido === true;
-}
+/* --------------------------------------------------------------------------
+   RETIRADA: `docx_remove_watermark` / `permiteQuitarMarca()`
+
+   Se declaró en la 009 y nunca se usó: el exportador no pinta ninguna marca de
+   agua y la función no se llamaba desde ningún endpoint. La sustituye
+   `docx_custom_template`, que sí se hace cumplir —y en la base, no aquí—.
+
+   La clave sigue viva en `plans.features` de producción a propósito; es inerte
+   y la 012 trae el `update` para limpiarla, comentado.
+   -------------------------------------------------------------------------- */
 
 /**
  * ¿Puede este plan recibir la Guía del Docente completa?

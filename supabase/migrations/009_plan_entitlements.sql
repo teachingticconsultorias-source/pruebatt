@@ -1,4 +1,22 @@
 -- ============================================================================
+-- ⚠️  NOTA POSTERIOR · `docx_remove_watermark` FUE RETIRADA (ver 012)
+--
+--     Esta migración sembró `docx_remove_watermark` en `plans.features`, pero
+--     la capacidad NUNCA llegó a usarse: el exportador no pinta ninguna marca
+--     de agua y `permiteQuitarMarca()` no se llamaba desde ningún endpoint.
+--
+--     La 012 (Personalizar export) retira la función del código y la sustituye
+--     por `docx_custom_template`, que sí se hace cumplir —y en la política de
+--     subida del bucket, no sólo en la interfaz—.
+--
+--     La clave sigue en `plans.features` de producción a propósito: es inerte
+--     y no se quiso tocar datos existentes en la misma migración. La 012 trae
+--     el `update` para limpiarla, comentado, por si algún día se decide.
+--
+--     Lo demás de este fichero sigue vigente tal cual.
+-- ============================================================================
+
+-- ============================================================================
 -- 009_plan_entitlements.sql   ·   CAPACIDADES DE CADA PLAN
 --
 --                    ⚠️  DISEÑADA · NO EJECUTADA  ⚠️
@@ -141,6 +159,7 @@ commit;
 --                              - 'reading_max_questions' - 'rubric_max_criteria'
 --                              - 'checklist_max_criteria' - 'rating_scale_max_criteria'
 --                              - 'steam_max_weeks' - 'docx_remove_watermark'
+--   -- (`docx_remove_watermark` quedó retirada del código en la 012)
 --    where code in ('free', 'pro');
 --   commit;
 --

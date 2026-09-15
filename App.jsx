@@ -23,6 +23,7 @@ import "./components/library/library-v2.css";
 import "./components/create/create.css";
 import { TOOLS_BY_ID } from "./config/tools.js";
 import { areaAlCambiarNivel, areasDeNivel, normalizarArea } from "./config/curriculum.js";
+import { olvidarMarca } from "./lib/export/almacen.js";
 import { useAccionUnica } from "./lib/ui/useAccionUnica.js";
 import { useConexion } from "./lib/ui/useConexion.js";
 import { mensajeDeError, mensajeDeRespuesta as mensajeHumano, sinConexion } from "./lib/mensajes.js";
@@ -3715,6 +3716,8 @@ function RegistrationGate({ children }) {
 
   async function handleLogout() {
     if (supabase) {
+      // La marca es de ESTA docente: no puede sobrevivir a su sesión.
+      olvidarMarca();
       await supabase.auth.signOut();
     }
     try {
