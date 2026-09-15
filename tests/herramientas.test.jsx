@@ -216,14 +216,35 @@ describe("contexto de la sugerencia", () => {
     expect(claves).toContain("dificultad");
   });
 
+  /**
+   * Dónde vive el formulario de cada herramienta.
+   *
+   * Casi todas siguen en App.jsx; el laboratorio salió a su propio fichero al
+   * escribirse. Sin este mapa la comprobación miraba App.jsx para todas y daba
+   * por inventados los campos de un formulario que existe y funciona.
+   */
+  const FORMULARIO_DE = { laboratorio: "components/LabGuideGenerator.jsx" };
+
   it("no se inventan campos que el formulario no tiene", () => {
-    // Cada clave declarada tiene que existir en algún `useState` de App.jsx.
-    const app = leer("App.jsx");
+    // Cada clave declarada tiene que existir en algún `useState` del
+    // componente que de verdad la usa.
     for (const [herramienta, campos] of Object.entries(CAMPOS_POR_HERRAMIENTA)) {
+      const fuente = leer(FORMULARIO_DE[herramienta] || "App.jsx");
       for (const [clave] of campos) {
-        expect(app, `${herramienta}.${clave}`).toMatch(new RegExp(`\\b${clave}\\s*[:,]`));
+        expect(fuente, `${herramienta}.${clave}`).toMatch(new RegExp(`\\b${clave}\\s*[:,]`));
       }
     }
+  });
+
+  it("y la herramienta nueva no se queda sin comprobar", () => {
+    // Si alguien declara un contexto y olvida apuntar su fichero, la prueba
+    // de arriba mira App.jsx y no comprueba nada útil.
+    for (const herramienta of Object.keys(CAMPOS_POR_HERRAMIENTA)) {
+      const fuente = leer(FORMULARIO_DE[herramienta] || "App.jsx");
+      expect(fuente.length, herramienta).toBeGreaterThan(0);
+    }
+    expect(Object.keys(CAMPOS_POR_HERRAMIENTA)).toContain("laboratorio");
+    expect(FORMULARIO_DE.laboratorio).toBe("components/LabGuideGenerator.jsx");
   });
 
   it("sin tema se sabe, para poder avisar antes de gastar la llamada", () => {

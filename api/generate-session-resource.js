@@ -308,6 +308,9 @@ function context(body){
     // Propios de la guía de laboratorio. No los tiene ninguna otra
     // herramienta, así que se leen sólo si vienen.
     duracion: form.duracion || "",
+    // El título que escribió la docente. Si lo dejó vacío, lo propone el
+    // modelo; si lo escribió, se respeta tal cual y no se «mejora».
+    tituloPedido: form.titulo || "",
     materialesDisponibles: form.materialesDisponibles || form.materiales || "",
     tipoExperimento: form.tipoExperimento || "",
     medidasSeguridad: form.medidasSeguridad || "",
@@ -389,6 +392,9 @@ PROHIBIDO — si incumples esto la ficha se descarta y hay que regenerarla:
 
   if(type==="lab_guide") return `${base}
 Duración de la sesión: ${c.duracion || "90"} minutos.
+${c.tituloPedido
+  ? `Título EXACTO que debes devolver en "titulo", copiado sin cambiarlo: ${c.tituloPedido}`
+  : `La docente no escribió título: propón uno en "titulo", de entre cinco y doce palabras.`}
 Materiales que la docente declara disponibles: ${c.materialesDisponibles || "no especificados"}.
 Tipo de experimento o actividad: ${c.tipoExperimento || "indagación experimental"}.
 Medidas de seguridad que la docente quiere considerar: ${c.medidasSeguridad || "las habituales del laboratorio escolar"}.

@@ -82,6 +82,7 @@ const CAMPOS_SUGERIBLES = new Set([
   "enfoque",         // ficha de trabajo
   "enfoqueLectura",  // ficha de lectura
   "dinamica",        // reto grupal
+  "tituloPractica",  // guía de laboratorio
 ]);
 
 const CHALLENGE_SCHEMA = {
@@ -359,6 +360,8 @@ export default async function handler(req, res) {
         "Propón el enfoque de la ficha de trabajo: en dos o tres oraciones, qué debería trabajar, con qué tipo de preguntas y qué indicaciones conviene dar al estudiante. NO redactes la ficha ni las preguntas: sólo el enfoque, para que la docente decida antes de generar.",
       enfoqueLectura:
         "Propón el enfoque de la ficha de lectura: en dos o tres oraciones, de qué podría tratar el texto, qué objetivo de lectura tiene sentido para el grado y qué tipo de comprensión conviene evaluar. NO escribas el texto ni las preguntas.",
+      tituloPractica:
+        "Propón el título de la guía de laboratorio: una sola línea de entre cinco y doce palabras, en español, que nombre lo que se va a observar o medir y despierte curiosidad. Parte del tema, del tipo de experimento y del grado indicados. Sin comillas, sin dos puntos, sin numeración y sin la palabra «práctica» ni «laboratorio» al principio.",
       dinamica:
         "Propón el enfoque del reto grupal: en dos o tres oraciones, qué dinámica de trabajo en equipo encaja con el tema y el grado, qué producto observable podrían construir y cómo se reparte el trabajo. Debe ser seguro, con materiales sencillos y exigir colaboración real. NO redactes los pasos ni los roles.",
     };

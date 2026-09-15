@@ -102,6 +102,22 @@ tabla encaja aunque cambie el margen o la orientación.
   página. La hipótesis y las variables de la ficha se dejan EN BLANCO: las
   escribe el estudiante, y ése es el ejercicio. La hipótesis modelo va en la
   guía del docente, con su aviso de que no se entrega.
+
+  Las dos mitades se declaran en `laboratorioBloques()` —seis bloques la ficha,
+  diez la guía— y las tres composiciones (`fichaEstudianteChildren`,
+  `guiaDocenteChildren`, `labGuideChildren`) se arman **tomando** de ahí, en el
+  orden que fijan `BLOQUES_FICHA` y `BLOQUES_DOCENTE`. Una prueba comprueba que
+  `hijos === suma de los bloques + 1` (el salto de página) y que cada rótulo
+  —«Ficha del Estudiante», «Guía del Docente»— aparece EXACTAMENTE una vez, en
+  ese orden. Es la misma disciplina que `sessionBloques()`: nada se deduce
+  releyendo párrafos ya construidos, porque los objetos de `docx` no exponen su
+  texto y ese troceado falla en silencio.
+
+  Los dos rótulos van en caja de título, no en mayúsculas, porque así los traen
+  las dos plantillas del pack; el que va en mayúsculas es «GUÍA DE LABORATORIO»,
+  común a las dos mitades, más el encabezado de página que Word repite en cada
+  hoja. Buscar «GUÍA DEL DOCENTE» en mayúsculas no encuentra nada, y contar
+  sobre el PDF cuenta también los encabezados: seis páginas, seis encabezados.
 - **Área articuladora del STEAM.** Se reutiliza el área curricular principal que
   el formulario ya envía; si no llega, la fila se omite.
 

@@ -1,6 +1,12 @@
 import React, { useState } from "react";
 import { Download, FlaskConical, Loader2, Pencil, Printer, Sparkles } from "lucide-react";
 
+import SuggestionModal from "./ui/SuggestionModal.jsx";
+import { useUI } from "./ui/UIProvider.jsx";
+import { DESTINO_POR_CAMPO, INTRO_POR_CAMPO } from "../lib/kantu/contexto.js";
+import { useSugerenciaKantu } from "../lib/kantu/useSugerencia.js";
+import { revisarProposito } from "../lib/ui/validaciones.js";
+
 import { supabase } from "../supabaseClient.js";
 import { cabecerasDeGeneracion, useClaveDeOperacion } from "../lib/idempotencia.js";
 import { mensajeDeError, mensajeDeRespuesta, sinConexion } from "../lib/mensajes.js";
@@ -56,6 +62,16 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
   const [unaVez] = useAccionUnica();
   const claveOp = useClaveDeOperacion("laboratorio");
   const enLinea = useConexion();
+  const { toast } = useUI();
+  const kantu = useSugerenciaKantu({
+    herramienta: "laboratorio",
+    endpoint: "/api/generate-session",
+    obtenerToken: async () => {
+      const { data } = await supabase.auth.getSession();
+      return data.session?.access_token || "";
+    },
+    avisar: toast,
+  });
 
   const nivelInicial = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
   const [step, setStep] = useState(1);
@@ -65,6 +81,8 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
     seccion: "",
     area: "Ciencia y Tecnología",
     tema: "",
+    // Opcional: si se deja vacío, el documento usa el tema. Kantu lo propone.
+    titulo: "",
     fecha: new Date().toISOString().slice(0, 10),
     duracion: "90",
     proposito: "",
@@ -112,19 +130,49 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
         : [...prev.medidasSeguridad, norma] }));
   }
 
+  /**
+   * Le pide una sugerencia a Kantu para un campo.
+   *
+   * El nombre que viaja describe LO QUE SE PIDE («tituloPractica») y el
+   * destino es el campo del formulario («titulo»): el mismo acuerdo que usa la
+   * ficha de trabajo con «enfoque» → «contexto». Ver DESTINO_POR_CAMPO.
+   */
+  function sugerir(campo) {
+    setError("");
+    if (!enLinea || sinConexion()) return setError(mensajeDeError("SIN_CONEXION"));
+    kantu.pedir(campo, form, { destino: DESTINO_POR_CAMPO[campo] || campo });
+  }
+
+  /** Dónde escribe «Usar»: casi siempre el mismo campo que se pidió. */
+  function usarSugerencia() {
+    // Los dos campos de este formulario devuelven texto, nunca lista: las
+    // listas son cosa de palabras, criterios e indicadores (CAMPOS_DE_LISTA).
+    const { campo, sugerencia } = kantu.propuesta;
+    update(DESTINO_POR_CAMPO[campo] || campo, sugerencia);
+    kantu.cerrar();
+  }
+
   function siguiente() {
     setError("");
     if (step === 1 && (!form.nivel || !form.grado || !form.area || !form.duracion)) {
       return setError("Completa nivel, grado, área y duración.");
     }
-    if (step === 2 && (!form.tema.trim() || !form.proposito.trim())) {
-      return setError("Escribe el tema de la práctica y su propósito de aprendizaje.");
+    if (step === 2) {
+      if (!form.tema.trim()) return setError("Escribe el tema de la práctica.");
+      // Un propósito de una palabra pasaba el `!trim()` de siempre, gastaba una
+      // generación de la semana y devolvía una guía genérica. Ver
+      // lib/ui/validaciones.js.
+      const problema = revisarProposito(form.proposito);
+      if (problema) return setError(problema);
     }
     setStep((s) => Math.min(3, s + 1));
   }
 
   async function generar() {
     if (!form.tema.trim()) return setError("Escribe el tema de la práctica.");
+    // También aquí: al paso 3 se puede llegar desde el indicador de pasos.
+    const problema = revisarProposito(form.proposito);
+    if (problema) return setError(problema);
     if (!enLinea || sinConexion()) return setError(mensajeDeError("SIN_CONEXION"));
     setLoading(true); setError(""); setResource(null);
     try {
@@ -152,7 +200,7 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
       // El guardado lo inyecta App.jsx: si la migración 013 todavía no está
       // aplicada, el CHECK rechaza el tipo y `describeSaveError` lo cuenta sin
       // perder la guía, que sigue en pantalla y se puede descargar.
-      await onGuardar?.({ tipo: "lab_guide", titulo: datos.resource.titulo || form.tema,
+      await onGuardar?.({ tipo: "lab_guide", titulo: form.titulo.trim() || datos.resource.titulo || form.tema,
         form, contenido: datos.resource });
     } catch (fallo) {
       setError(mensajeDeError(fallo, "No se pudo generar la guía de laboratorio."));
@@ -172,8 +220,27 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
 
   const g = resource?.guiaDocente || {};
 
+  /** El botón de sugerir, idéntico al del resto de generadores. */
+  const botonKantu = (campo, etiqueta) => (
+    <button type="button" onClick={() => sugerir(campo)} disabled={Boolean(kantu.campoActivo)}>
+      {kantu.campoActivo === campo ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+      {" "}{kantu.campoActivo === campo ? kantu.espera : etiqueta}
+    </button>
+  );
+
   return (
     <div className="session-wizard">
+      <SuggestionModal
+        open={Boolean(kantu.propuesta)}
+        titulo="Kantu propone esto"
+        introduccion={INTRO_POR_CAMPO[kantu.propuesta?.campo] || "Revisa la propuesta antes de usarla."}
+        sugerencia={kantu.propuesta?.sugerencia}
+        cargando={Boolean(kantu.campoActivo)}
+        reemplaza={kantu.propuesta?.reemplaza}
+        onUsar={usarSugerencia}
+        onReintentar={kantu.reintentar}
+        onCerrar={kantu.cerrar}
+      />
       <div className="wizard-progress">
         {[{ n: 1, t: "Datos de la clase" }, { n: 2, t: "La práctica" }, { n: 3, t: "Revisión" }].map((item) => (
           <React.Fragment key={item.n}>
@@ -253,10 +320,20 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
               <input value={form.tema} onChange={(e) => update("tema", e.target.value)}
                 placeholder="Ej.: La densidad de los líquidos" />
             </label>
-            <label className="wide">Propósito de aprendizaje *
-              <textarea value={form.proposito} onChange={(e) => update("proposito", e.target.value)}
+            <div className="wide ai-field">
+              <label htmlFor="lab-titulo">Título de la guía</label>
+              {botonKantu("tituloPractica", "Sugerir con Kantu")}
+              <input id="lab-titulo" value={form.titulo} onChange={(e) => update("titulo", e.target.value)}
+                placeholder="Ej.: Descubriendo la densidad de los líquidos" />
+              <small className="field-help">Si lo dejas vacío usaremos el tema de la práctica.</small>
+            </div>
+            <div className="wide ai-field">
+              <label htmlFor="lab-proposito">Propósito de aprendizaje *</label>
+              {botonKantu("proposito", "Sugerir con Kantu")}
+              <textarea id="lab-proposito" value={form.proposito} onChange={(e) => update("proposito", e.target.value)}
                 placeholder="Qué deben lograr explicar o demostrar al terminar la práctica." />
-            </label>
+              <small className="field-help">Una oración: qué harán, con qué y para qué. Una sola palabra no basta.</small>
+            </div>
             <label className="wide">Tipo de experimento o actividad *
               <select value={form.tipoExperimento} onChange={(e) => update("tipoExperimento", e.target.value)}>
                 {TIPOS_DE_EXPERIMENTO.map((t) => <option key={t}>{t}</option>)}
@@ -292,6 +369,7 @@ export default function LabGuideGenerator({ initialGrade = "secundaria", profile
             <div><small>Duración y equipos</small><strong>{form.duracion} min · {form.integrantes} por equipo</strong></div>
             <div><small>Tipo de actividad</small><strong>{form.tipoExperimento}</strong></div>
             <div className="wide"><small>Tema</small><strong>{form.tema}</strong></div>
+            <div className="wide"><small>Título</small><strong>{form.titulo.trim() || `${form.tema} (se usará el tema)`}</strong></div>
             <div className="wide"><small>Propósito</small><p>{form.proposito}</p></div>
             <div className="wide"><small>Materiales</small><p>{form.materialesDisponibles || "Kantu los propondrá"}</p></div>
             <div className="wide"><small>Seguridad</small><p>{form.medidasSeguridad.join(" · ") || "Las habituales del laboratorio escolar"}</p></div>
