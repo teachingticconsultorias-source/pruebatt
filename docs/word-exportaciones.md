@@ -118,6 +118,15 @@ tabla encaja aunque cambie el margen o la orientación.
   común a las dos mitades, más el encabezado de página que Word repite en cada
   hoja. Buscar «GUÍA DEL DOCENTE» en mayúsculas no encuentra nada, y contar
   sobre el PDF cuenta también los encabezados: seis páginas, seis encabezados.
+- **El cuestionario comparte la maqueta de la ficha de trabajo**, que es lo
+  correcto —datos del estudiante, instrucciones y preguntas numeradas— pero no
+  su título: se descargaba encabezado «FICHA DE TRABAJO». `worksheetSections`
+  recibe ahora el `type` y rotula según corresponda.
+
+  En verdadero/falso las casillas SON las opciones. Listarlas además como
+  «A. Verdadero / B. Falso» las imprimía dos veces; no se veía en la ficha de
+  trabajo, donde esas preguntas llegan sin `opciones`, pero el esquema del
+  cuestionario las exige siempre.
 - **Área articuladora del STEAM.** Se reutiliza el área curricular principal que
   el formulario ya envía; si no llega, la fila se omite.
 
@@ -415,6 +424,8 @@ El primer comando genera doce archivos en `docs/qa/word/`: de `01-sesion.docx` a
   `colegio`, con el granate y el dorado del centro.
 - `17-clase-completa-colegio.docx` — la clase completa recogiendo la marca, que
   antes ignoraba.
+- `21-guia-observacion.docx` y `22-cuestionario.docx` — los dos tipos que el
+  servidor sabía generar y ninguna pantalla ofrecía, ya enrutados.
 - `19-plantilla-colegio-ejemplo.docx` — una plantilla de colegio ficticia, con
   identidad bien distinta de la nuestra: granate, dorado y Georgia.
 - `20-clase-completa-en-plantilla.docx` — la misma, ya rellena. Sirve para ver

@@ -174,9 +174,9 @@ describe("una sola fuente de verdad", () => {
     expect(app).not.toContain("GENERATOR_AREAS.map");
   });
 
-  it("los cinco selectores de área usan el catálogo por nivel", () => {
+  it("los seis selectores de área usan el catálogo por nivel", () => {
     const selectores = app.match(/areasDeNivel\(form\.nivel\)\.map/g) || [];
-    expect(selectores).toHaveLength(5);
+    expect(selectores).toHaveLength(6);
   });
 
   it("cada área de Secundaria tiene competencias CNEB", () => {

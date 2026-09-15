@@ -102,12 +102,16 @@ describe("identificadores en su ámbito", () => {
    1 · LAS SEIS TIENEN BOTÓN, HOOK Y MODAL
    ========================================================================== */
 describe("cobertura de Kantu", () => {
-  it("las diez herramientas activas pasan por el hook compartido", () => {
-    // Siete componentes: sesión, instrumento, STEAM, sopa, escala, fichas y
-    // reto. Diez herramientas, porque rúbrica/cotejo y trabajo/lectura
-    // comparten componente.
+  it("las doce herramientas activas pasan por el hook compartido", () => {
+    // Ocho componentes en App.jsx: sesión, instrumento, STEAM, sopa, escala,
+    // fichas, reto y el de guía de observación / cuestionario. Doce
+    // herramientas, porque rúbrica/cotejo, trabajo/lectura y
+    // observación/cuestionario comparten componente cada par.
     const usos = (app.match(/useSugerenciaKantu\(\{/g) || []).length;
-    expect(usos).toBe(7);
+    expect(usos).toBe(8);
+    // El laboratorio tiene el suyo, en su propio fichero.
+    const lab = fs.readFileSync("components/LabGuideGenerator.jsx", "utf8");
+    expect((lab.match(/useSugerenciaKantu\(\{/g) || []).length).toBe(1);
   });
 
   for (const { nombre, componente, herramienta, campo } of NUEVAS) {
@@ -224,9 +228,9 @@ describe("aceptar y cancelar", () => {
 
   it("cancelar sólo cierra", () => {
     expect(hook).toMatch(/const cerrar = useCallback\(\(\) => setPropuesta\(null\), \[\]\);/);
-    // Y en los siete montajes, `onCerrar` es exactamente eso.
+    // Y en los ocho montajes, `onCerrar` es exactamente eso.
     const cierres = (app.match(/onCerrar=\{kantu\.cerrar\}/g) || []).length;
-    expect(cierres).toBe(7);
+    expect(cierres).toBe(8);
   });
 
   it("aceptar escribe en el campo que corresponde, no siempre en el pedido", () => {

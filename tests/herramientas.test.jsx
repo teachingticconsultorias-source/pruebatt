@@ -525,23 +525,24 @@ describe("estado de la petición", () => {
 });
 
 /* ============================================================================
-   7 · LAS ONCE HERRAMIENTAS ACTIVAS
+   7 · LAS TRECE HERRAMIENTAS ACTIVAS
    ========================================================================== */
 describe("inventario de herramientas", () => {
   const todas = TOOL_GROUPS.flatMap((g) => g.tools);
   const activas = todas.filter((t) => t.status === "available");
   const app = leer("App.jsx");
 
-  it("hay once activas y una marcada como próximamente", () => {
-    expect(activas.length).toBe(11);
+  it("hay trece activas y una marcada como próximamente", () => {
+    expect(activas.length).toBe(13);
     expect(todas.filter((t) => t.status === "soon").map((t) => t.name)).toEqual(["Unidad de aprendizaje"]);
   });
 
   it("son exactamente las del inventario", () => {
     expect(activas.map((t) => t.name).sort()).toEqual([
-      "Clase completa", "Escala de valoración", "Ficha de lectura", "Ficha de trabajo",
-      "Guía de laboratorio", "Lista de cotejo", "Proyecto STEAM", "Reto grupal",
-      "Rúbrica de evaluación", "Sesión de aprendizaje", "Sopa de letras",
+      "Clase completa", "Cuestionario", "Escala de valoración", "Ficha de lectura",
+      "Ficha de trabajo", "Guía de laboratorio", "Guía de observación", "Lista de cotejo",
+      "Proyecto STEAM", "Reto grupal", "Rúbrica de evaluación", "Sesión de aprendizaje",
+      "Sopa de letras",
     ]);
   });
 

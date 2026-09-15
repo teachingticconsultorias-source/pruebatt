@@ -1,6 +1,6 @@
 import {
   BookOpen, ClipboardList, CheckCircle2, ListChecks, FileText, Cog,
-  Search, Users, Sparkles, CalendarDays, FlaskConical } from "lucide-react";
+  Search, Users, Sparkles, CalendarDays, FlaskConical, Eye, HelpCircle } from "lucide-react";
 
 /* ==========================================================================
    CATÁLOGO ÚNICO DE HERRAMIENTAS
@@ -92,6 +92,14 @@ export const TOOL_GROUPS = [
         action: "create",
         status: "available",
       },
+      {
+        id: "observation-guide",
+        name: "Guía de observación",
+        desc: "Indicadores para observar actuaciones y desempeños durante la clase.",
+        icon: Eye,
+        action: "create",
+        status: "available",
+      },
     ],
   },
   {
@@ -112,6 +120,14 @@ export const TOOL_GROUPS = [
         name: "Ficha de lectura",
         desc: "Texto original con preguntas literal, inferencial y crítica.",
         icon: BookOpen,
+        action: "create",
+        status: "available",
+      },
+      {
+        id: "questionnaire",
+        name: "Cuestionario",
+        desc: "Preguntas para resolver en clase o como trabajo autónomo, con respuesta esperada.",
+        icon: HelpCircle,
         action: "create",
         status: "available",
       },

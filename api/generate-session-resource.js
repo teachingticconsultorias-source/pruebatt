@@ -18,6 +18,50 @@ const TOOL_IDEMPOTENCIA = "recurso";
 
 const GEMINI_MODEL = getGeminiModel();
 
+/* ==========================================================================
+   PRESUPUESTO DE SALIDA POR TIPO
+
+   Todos corrían con 4500 y el razonamiento en `medium` —el valor por defecto
+   del modelo—, que es la combinación exacta que truncó el módulo `sequence` en
+   producción: `medium` gastó 2901 tokens pensando y a la salida le quedaron
+   1599.
+
+   Medido con el mismo método que `sequence` y `lab_guide`: caracteres del JSON
+   que emite el modelo ÷ 4,33 car/token (la razón de los logs), sobre un
+   ejemplar en el peor caso que cada prompt admite, más un 10 % por la
+   desviación del método (reproduce `lab_guide` con un 6 % de error).
+
+     tipo                n máx   salida   + medium   tope
+     rubric                  8     1653      4554     6000
+     checklist               8      536      3437     5000
+     observation_guide       8      594      3495     5000
+     rating_scale            8      560      3461     5000
+     questionnaire          15     2632      5533     7000
+
+   Tres se pasaban de 4500: la rúbrica de 8 criterios (alcanzable hoy en Pro),
+   y el cuestionario tanto a 10 como a 15 preguntas.
+
+   POR QUÉ SE SUBE EL TECHO Y NO SE BAJA EL RAZONAMIENTO
+   ----------------------------------------------------
+   Al revés que en `lab_guide`, donde la estructura la dicta el prompt y `low`
+   fue lo correcto. En un instrumento, derivar una progresión observable AD→C a
+   partir de una competencia ES el trabajo de razonamiento: bajarlo ahorraría
+   1305 tokens a costa de lo único que el documento contiene. Y
+   `maxOutputTokens` es un techo, no una reserva —se factura lo emitido—, así
+   que subirlo no cuesta nada mientras la salida no crezca.
+   ========================================================================== */
+const TOPE_POR_TIPO = {
+  rubric: 6000,
+  checklist: 5000,
+  observation_guide: 5000,
+  rating_scale: 5000,
+  questionnaire: 7000,
+  // Medidos en sus propios bloques, sin cambios aquí.
+  lab_guide: 6000,
+  worksheet: 9000,
+  reading: 6000,
+};
+
 const SCHEMAS = {
   rubric: {
     type: "object",
@@ -593,17 +637,7 @@ El intento anterior dejó secciones vacías o menos preguntas de las pedidas. Es
         prompt: texto,
         systemInstruction: "Eres especialista peruano en CNEB. Entrega JSON válido y pedagógicamente aplicable.",
         responseSchema: SCHEMAS[type],
-        // La ficha por secciones necesita más margen: con 6000 el modelo
-        // llegaba justo y recortaba actividades.
-        //
-        // La guía de laboratorio va aparte porque son DOS documentos en una
-        // respuesta. Medido sobre un ejemplar completo: 7796 caracteres, que
-        // a la razón de 4,33 car/token de los logs son 1801 tokens de salida.
-        // Con el razonamiento en `medium` —2901 tokens, según el incidente de
-        // `sequence`— sumaría 4702 y se pasaría de 4500. Con `low` quedan 3397
-        // y 6000 deja un 43 % de margen. La estructura viene dictada por el
-        // prompt, así que aquí el razonamiento aporta poco.
-        maxOutputTokens: type==="lab_guide"?6000:(type==="worksheet"?9000:(type==="reading"?6000:4500)),
+        maxOutputTokens: TOPE_POR_TIPO[type] || 4500,
         thinkingLevel: type==="lab_guide" ? "low" : undefined,
         tool: `recurso:${type}${reforzar ? ":refuerzo" : ""}`,
       });

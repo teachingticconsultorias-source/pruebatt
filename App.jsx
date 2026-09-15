@@ -26,6 +26,7 @@ import { areaAlCambiarNivel, areasDeNivel, normalizarArea } from "./config/curri
 import { olvidarMarca } from "./lib/export/almacen.js";
 import { useAccionUnica } from "./lib/ui/useAccionUnica.js";
 import { useConexion } from "./lib/ui/useConexion.js";
+import { revisarCampoLibre } from "./lib/ui/validaciones.js";
 import { mensajeDeError, mensajeDeRespuesta as mensajeHumano, sinConexion } from "./lib/mensajes.js";
 import Button from "./components/ui/Button.jsx";
 import { Badge } from "./components/ui/Feedback.jsx";
@@ -2884,6 +2885,273 @@ ${Array.from({length:25},(_,i)=>`${i+1}. | ______________________________ | ___ 
 }
 
 
+/* ==========================================================================
+   GUÍA DE OBSERVACIÓN Y CUESTIONARIO
+
+   Dos tipos que el servidor sabía generar desde siempre —su esquema, su
+   prompt, su exportación a Word y su fila en `materiales_docente` estaban
+   hechos— y a los que ninguna pantalla daba acceso. Los dos componentes que
+   debían hacerlo, `SessionNextFlow` y `SessionResourcesPanel`, ni siquiera
+   compilaban; se retiraron en el commit anterior.
+
+   UN SOLO COMPONENTE PARA LOS DOS
+   -------------------------------
+   Sus formularios piden exactamente lo mismo —lo que lee `context(req.body)`
+   en el endpoint— y sólo cambian en tres cosas: el rótulo, cuál es el campo
+   obligatorio y qué cantidad se elige. Duplicar noventa líneas para eso daría
+   dos ficheros que se van separando con cada arreglo. Es el mismo criterio con
+   el que `EvaluationInstrumentGenerator` sirve a rúbrica y cotejo.
+
+   EL MOLDE ES `ValuationScaleGenerator`
+   -------------------------------------
+   Es el único generador suelto que ya llamaba a `generate-session-resource`
+   con un tipo de instrumento, así que trae la pila correcta: guarda de doble
+   clic, clave de idempotencia, Kantu, guardado en biblioteca con reintento y
+   descarga por `downloadResource`, que es quien aplica la marca del colegio.
+
+   `EvaluationInstrumentGenerator` NO servía de molde aunque lo parezca:
+   rúbrica y cotejo salen de `/api/generate-session` con `mode:"instrument"`,
+   que es otro endpoint.
+   ========================================================================== */
+
+/** Lo único que distingue a un tipo del otro. */
+const RECURSO_SUELTO = {
+  observation_guide: {
+    etiqueta: "Guía de observación",
+    icono: Eye,
+    resumen: "Indicadores para observar actuaciones y desempeños durante la clase.",
+    herramienta: "observacion",
+    // La conducta a observar decide los indicadores que saldrán: es el campo
+    // donde una sugerencia cambia el resultado, igual que en la escala.
+    campo: "evidencia",
+    rotulo: "Actuación o desempeño que vas a observar *",
+    ayuda: "Qué hacen los estudiantes durante la clase y en qué se nota que lo hacen bien.",
+    // Instrumento: pide región como su gemela la escala de valoración.
+    exigeRegion: true,
+    // El prompt recorta a [3,8] pase lo que pase. `observation_guide` no pasa
+    // por `cantidadPermitida`, así que el plan no lo limita: se deja como
+    // estaba, sin añadir un gate que el código no tenía.
+    cantidad: { clave: "numeroCriterios", rotulo: "Número de indicadores", opciones: [3, 4, 5, 6, 7, 8], porDefecto: 5 },
+    boton: "Generar guía de observación",
+  },
+  questionnaire: {
+    etiqueta: "Cuestionario",
+    icono: HelpCircle,
+    resumen: "Preguntas para resolver en clase o como trabajo autónomo.",
+    herramienta: "cuestionario",
+    campo: "proposito",
+    rotulo: "Qué deben demostrar que aprendieron *",
+    ayuda: "Lo que se trabajó en la sesión y quieres comprobar con las preguntas.",
+    // Material, como la ficha de trabajo: la región no se exige.
+    exigeRegion: false,
+    // El servidor recorta por plan (`reading_max_questions`: 10 en Free, 20 en
+    // Pro) y luego el prompt a [5,15]. Se ofrece el rango completo y el
+    // recorte queda registrado en el log de `cantidadPermitida`.
+    cantidad: { clave: "questionCount", rotulo: "Número de preguntas", opciones: [5, 6, 8, 10, 12, 15], porDefecto: 8 },
+    boton: "Generar cuestionario",
+  },
+};
+
+function SessionResourceGenerator({ tipo, initialGrade = "primaria", profile = {} }) {
+  const meta = RECURSO_SUELTO[tipo];
+  // Guarda sincrona de doble clic: ver lib/ui/useAccionUnica.js.
+  const [unaVez] = useAccionUnica();
+  // Clave estable del intento: dos clics comparten la misma.
+  const claveOp = useClaveDeOperacion(tipo === "questionnaire" ? "cuestionario" : "observacion");
+  const enLinea = useConexion();
+  const { toast } = useUI();
+  const initialLevel = initialGrade === "secundaria" ? "Secundaria" : "Primaria";
+  const [form, setForm] = useState({
+    nivel: initialLevel, grado: initialLevel === "Primaria" ? "4.º" : "2.º",
+    area: "Ciencia y Tecnología", tema: "", region: "",
+    competencia: CNEB.indaga, capacidades: GENERATOR_CAPACITIES[CNEB.indaga],
+    proposito: "", evidencia: "",
+  });
+  const [cantidad, setCantidad] = useState(meta.cantidad.porDefecto);
+  const [resource, setResource] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const recursoSave = useMaterialSave();
+
+  const kantu = useSugerenciaKantu({
+    herramienta: meta.herramienta,
+    endpoint: "/api/generate-session",
+    obtenerToken: async () => (await supabase.auth.getSession()).data.session?.access_token,
+    avisar: toast,
+  });
+
+  const grades = form.nivel === "Primaria"
+    ? ["1.º", "2.º", "3.º", "4.º", "5.º", "6.º"]
+    : ["1.º", "2.º", "3.º", "4.º", "5.º"];
+  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+  function changeArea(area) {
+    const competencia = competenciasDeArea(area)[0];
+    setForm((prev) => ({ ...prev, area, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] }));
+  }
+  function changeCompetence(competencia) {
+    setForm((prev) => ({ ...prev, competencia, capacidades: GENERATOR_CAPACITIES[competencia] || [] }));
+  }
+
+  async function generate() {
+    if (!form.tema.trim()) return setError("Escribe el tema.");
+    if (meta.exigeRegion && !form.region) return setError("Elige la región.");
+    // El campo libre es el que decide el contenido: una palabra suelta no
+    // basta, y la generación cuesta un crédito de la semana.
+    const problema = revisarCampoLibre(form[meta.campo], meta.rotulo);
+    if (problema) return setError(problema);
+    if (!enLinea || sinConexion()) return setError(mensajeDeError("SIN_CONEXION"));
+
+    setLoading(true); setError(""); setResource(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch("/api/generate-session-resource", {
+        method: "POST",
+        headers: cabecerasDeGeneracion(session?.access_token || "", claveOp.obtener()),
+        body: JSON.stringify({ type: tipo, form, options: { [meta.cantidad.clave]: cantidad } }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(mensajeHumano(data, `No se pudo generar ${meta.etiqueta.toLowerCase()}.`));
+      if (!data.resource) throw new Error("AI_INCOMPLETE");
+      // El intento terminó: la próxima generación será otra operación.
+      claveOp.renovar();
+      setResource(data.resource);
+      await recursoSave.save({ tipo, titulo: data.resource.titulo || form.tema, form, contenido: data.resource });
+    } catch (fallo) {
+      setError(mensajeDeError(fallo, `No se pudo generar ${meta.etiqueta.toLowerCase()}.`));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const Icono = meta.icono;
+  return (
+    <div>
+      <SuggestionModal
+        open={Boolean(kantu.propuesta)}
+        titulo="Kantu propone esto"
+        introduccion={INTRO_POR_CAMPO[kantu.propuesta?.campo] || "Revisa la propuesta antes de usarla."}
+        sugerencia={kantu.propuesta?.sugerencia}
+        cargando={Boolean(kantu.campoActivo)}
+        reemplaza={kantu.propuesta?.reemplaza}
+        onUsar={() => { update(kantu.propuesta.campo, kantu.propuesta.sugerencia); kantu.cerrar(); }}
+        onReintentar={kantu.reintentar}
+        onCerrar={kantu.cerrar}
+      />
+      {!resource ? (
+        <div className="wizard-card">
+          <div className="wizard-card__title">
+            <span><Icono size={18} /></span>
+            <div><h4>{meta.etiqueta}</h4><p>{meta.resumen}</p></div>
+          </div>
+          <div className="wizard-fields">
+            <label>Nivel
+              <select value={form.nivel} onChange={(e) => setForm((p) => ({ ...p, nivel: e.target.value, grado: "1.º" }))}>
+                <option>Primaria</option><option>Secundaria</option>
+              </select>
+            </label>
+            <label>Grado
+              <select value={form.grado} onChange={(e) => update("grado", e.target.value)}>
+                {grades.map((g) => <option key={g}>{g}</option>)}
+              </select>
+            </label>
+            <label className="wide">Área
+              <select value={form.area} onChange={(e) => changeArea(e.target.value)}>
+                {areasDeNivel(form.nivel).map((a) => <option key={a}>{a}</option>)}
+              </select>
+            </label>
+            <label className="wide">Región{meta.exigeRegion ? " *" : ""}
+              <select value={form.region} onChange={(e) => update("region", e.target.value)}>
+                <option value="">Selecciona una región</option>
+                {PERU_REGIONS.map((r) => <option key={r}>{r}</option>)}
+              </select>
+            </label>
+            <label className="wide">Tema *
+              <input value={form.tema} onChange={(e) => update("tema", e.target.value)}
+                placeholder="Ej.: El ciclo del agua" />
+            </label>
+            <label className="wide">Competencia
+              <select value={form.competencia} onChange={(e) => changeCompetence(e.target.value)}>
+                {competenciasDeArea(form.area).map((c) => <option key={c}>{c}</option>)}
+              </select>
+            </label>
+            <div className="wide ai-field">
+              <label htmlFor={`${tipo}-libre`}>{meta.rotulo}</label>
+              <button type="button" onClick={() => { setError(""); kantu.pedir(meta.campo, form); }}
+                disabled={Boolean(kantu.campoActivo)}>
+                {kantu.campoActivo ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                {" "}{kantu.campoActivo ? kantu.espera : "Sugerir con Kantu"}
+              </button>
+              <textarea id={`${tipo}-libre`} value={form[meta.campo]}
+                onChange={(e) => update(meta.campo, e.target.value)} placeholder={meta.ayuda} />
+            </div>
+            <label>{meta.cantidad.rotulo}
+              <select value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))}>
+                {meta.cantidad.opciones.map((n) => <option key={n}>{n}</option>)}
+              </select>
+            </label>
+          </div>
+          {error && <p className="wizard-error" role="alert">{error}</p>}
+          <div className="wizard-actions">
+            <button className="wizard-next" onClick={() => unaVez(generate)} disabled={loading}>
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />} {meta.boton}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="instrument-result">
+          <div className="instrument-result__actions">
+            <div><small>{meta.etiqueta.toUpperCase()}</small><h3>{resource.titulo}</h3></div>
+            <div>
+              <button onClick={() => { setResource(null); setError(""); }}>← Crear otra</button>
+              <button className="primary" onClick={() => downloadResource(tipo, resource, form, profile)}>
+                <Download size={14} /> Word
+              </button>
+            </div>
+          </div>
+          <SaveStatus state={recursoSave.state} onRetry={recursoSave.retry} />
+          {error && <p className="wizard-error" role="alert">{error}</p>}
+          <pre className="resource-document-preview">{vistaPreviaRecurso(tipo, resource, form, profile)}</pre>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** La vista previa en texto, con la misma forma que tendrá el Word. */
+function vistaPreviaRecurso(tipo, r, form, profile) {
+  const cabecera = [
+    `Institución educativa / Docente: ${profile.ie || ""} / ${getTeacherFullName(profile)}`,
+    `Grado y sección: ${form.grado}`,
+    `Área: ${form.area}`,
+    `Competencia: ${r.competencia || form.competencia}`,
+  ].join("\n");
+
+  if (tipo === "observation_guide") {
+    return `GUÍA DE OBSERVACIÓN
+
+${cabecera}
+Evidencia: ${r.evidencia || ""}
+
+SITUACIÓN DE OBSERVACIÓN
+${r.situacionObservacion || ""}
+
+INDICADORES
+${(r.indicadores || []).map((i, n) => `${n + 1}. [${i.aspecto}] ${i.indicador}`).join("\n")}`;
+  }
+
+  return `CUESTIONARIO
+
+${cabecera}
+
+INSTRUCCIONES
+${r.instrucciones || ""}
+
+${(r.preguntas || []).map((q, n) => {
+    const opciones = (q.opciones || []).map((o, i) => `   ${String.fromCharCode(65 + i)}) ${o}`).join("\n");
+    return `${q.numero || n + 1}. ${q.pregunta}${opciones ? `\n${opciones}` : ""}`;
+  }).join("\n\n")}`;
+}
+
 function FlowChoiceCard({icon:Icon,title,description,onClick,accent="teal"}){
   return <button type="button" className={`flow-choice-card ${accent}`} onClick={onClick}>
     <span><Icon size={28}/></span><div><h3>{title}</h3><p>{description}</p><b>Continuar <ArrowRight size={15}/></b></div>
@@ -3077,6 +3345,8 @@ function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreati
       :creation==="worksheet-v2"?<ResourceFromAI kind="worksheet" initialGrade={preferredGrade} profile={profile}/>
       :creation==="reading-v2"?<ResourceFromAI kind="reading" initialGrade={preferredGrade} profile={profile}/>
       :creation==="rating-scale"?<ValuationScaleGenerator initialGrade={preferredGrade} profile={profile}/>
+      :creation==="observation-guide"?<SessionResourceGenerator tipo="observation_guide" initialGrade={preferredGrade} profile={profile}/>
+      :creation==="questionnaire"?<SessionResourceGenerator tipo="questionnaire" initialGrade={preferredGrade} profile={profile}/>
       :(creation==="rubric"||creation==="checklist")?<EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={creation}/>
       :creation==="wordsearch"?<WordSearchGenerator initialGrade={preferredGrade} profile={profile}/>
       :creation==="lab-guide"?<LabGuideGenerator
@@ -4323,6 +4593,17 @@ function MaterialViewerModal({item,typeLabel,onClose,onDownload,onDuplicate,onDe
 /* ---------------------------------------------------------------------- */
 /* MAIN APP                                                                 */
 /* ---------------------------------------------------------------------- */
+
+/**
+ * Sólo para pruebas.
+ *
+ * Este proyecto no tiene entorno DOM ni librería de render en pruebas, así que
+ * los componentes se montan desde node con `renderToStaticMarkup`. Sin una
+ * puerta como ésta no habría forma de comprobar que un generador MONTA, que es
+ * exactamente el fallo que tenía `SessionNextFlow`: usaba tres funciones sin
+ * importarlas y reventaba en el primer render.
+ */
+export const __test__ = { SessionResourceGenerator };
 
 export default function SciVerseDocentes() {
   return <AuthGate LandingComponent={Landing}>{(profile, onLogout) => <SciVerseApp profile={profile} onLogout={onLogout} />}</AuthGate>;
