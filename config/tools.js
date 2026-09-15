@@ -1,7 +1,6 @@
 import {
   BookOpen, ClipboardList, CheckCircle2, ListChecks, FileText, Cog,
-  Search, Users, Sparkles, CalendarDays,
-} from "lucide-react";
+  Search, Users, Sparkles, CalendarDays, FlaskConical } from "lucide-react";
 
 /* ==========================================================================
    CATÁLOGO ÚNICO DE HERRAMIENTAS
@@ -113,6 +112,14 @@ export const TOOL_GROUPS = [
         name: "Ficha de lectura",
         desc: "Texto original con preguntas literal, inferencial y crítica.",
         icon: BookOpen,
+        action: "create",
+        status: "available",
+      },
+      {
+        id: "lab-guide",
+        name: "Guía de laboratorio",
+        desc: "Ficha del estudiante y guía del docente para una práctica, en un solo documento.",
+        icon: FlaskConical,
         action: "create",
         status: "available",
       },

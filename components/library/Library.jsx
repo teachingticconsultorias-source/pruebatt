@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import {
   Search, Plus, Eye, Download, Copy, Trash2, FileText, BookOpen,
-  ClipboardList, CheckCircle2, ListChecks, Cog, Users, Star, X,
+  ClipboardList, CheckCircle2, ListChecks, Cog, Users, Star, X, FlaskConical,
 } from "lucide-react";
 
 import Button from "../ui/Button.jsx";
@@ -31,6 +31,7 @@ export const MATERIAL_TYPES = {
   questionnaire:     { label: "Cuestionario",          short: "Cuestionarios", icon: FileText,    tone: "amber" },
   challenge:         { label: "Reto grupal",           short: "Retos",       icon: Users,         tone: "accent" },
   wordsearch:        { label: "Sopa de letras",         short: "Sopas",       icon: Search,        tone: "accent" },
+  lab_guide:         { label: "Guía de laboratorio",    short: "Laboratorio", icon: FlaskConical,  tone: "amber" },
 };
 
 export function labelForType(tipo) {

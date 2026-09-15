@@ -152,6 +152,81 @@ export const sessionDPCC = { ...session,
         preguntasMediacion: ["¿Qué razon sostiene mejor la postura?"],
         acompanamiento: "Devolver la pregunta al equipo.", evaluacionFormativa: "Verificar que la postura tenga dos razones." }] } };
 
+/* ==========================================================================
+   GUÍA DE LABORATORIO · las dos partes de una misma práctica
+   ========================================================================== */
+export const formLab = { docente: "Docente de prueba", institucion: "IE Demostración",
+  nivel: "Secundaria", grado: "3.º", seccion: "B", area: "Ciencia y Tecnología",
+  fecha: "2026-09-20", duracion: "90", integrantes: "4",
+  tema: "Descubriendo la densidad de los líquidos",
+  competencia: "Indaga mediante métodos científicos para construir conocimientos",
+  capacidades: ["Problematiza situaciones para hacer indagación", "Genera y registra datos e información"],
+  proposito: "Comparar la densidad de tres líquidos caseros y explicar por qué unos flotan sobre otros.",
+  tipoExperimento: "Experimento comparativo (con variables)",
+  materialesDisponibles: "probetas, balanza digital, aceite, agua, miel, colorante",
+  medidasSeguridad: "Uso de mandil y lentes de protección; Prohibido probar u oler sustancias" };
+
+export const labGuide = {
+  titulo: "Descubriendo la densidad de los líquidos",
+  proposito: "Comparar la densidad de tres líquidos caseros y explicar por qué unos flotan sobre otros usando evidencias de su propia medición.",
+  normasSeguridad: ["Usar mandil y lentes de protección durante toda la práctica.",
+    "No probar ni oler ninguna sustancia del experimento.",
+    "Avisar de inmediato al docente si se derrama un líquido.",
+    "Lavarse las manos al terminar y dejar el mesón despejado."],
+  materialesKit: ["Probeta graduada de 100 ml", "Balanza digital", "Pipeta", "Vaso de precipitados"],
+  materialesCaseros: ["Aceite de cocina", "Agua", "Miel", "Colorante vegetal", "Vaso transparente"],
+  preguntaIndagatoria: "¿Qué ocurre cuando vertemos aceite, agua y miel en el mismo recipiente y por qué se ordenan de esa manera?",
+  procedimiento: ["Midan 30 ml de cada líquido con la probeta y registren su masa en la balanza.",
+    "Viertan la miel en el vaso transparente, luego el agua con colorante y al final el aceite.",
+    "Observen durante dos minutos sin mover el vaso y dibujen lo que ven.",
+    "Registren en la tabla la masa, el volumen y el orden en que quedó cada líquido."],
+  columnasRegistro: ["Líquido", "Masa (g)", "Volumen (ml)", "Posición en el vaso"],
+  preguntasAnalisis: ["¿Qué diferencia encontraron entre la masa de los tres líquidos con el mismo volumen?",
+    "¿Nuestra hipótesis sobre el orden de los líquidos fue verdadera o falsa? ¿Por qué?",
+    "¿Qué relación observan entre la masa medida y la posición que ocupó cada líquido?"],
+  preguntasMetacognicion: ["¿Qué dificultades tuvimos como equipo al medir? ¿Cómo lo solucionamos?",
+    "¿Cómo podemos aplicar lo aprendido sobre densidad en nuestra vida diaria?"],
+  guiaDocente: {
+    desempenoPrecisado: "Explica, a partir de sus mediciones de masa y volumen, por qué los líquidos de distinta densidad se ordenan en capas dentro de un mismo recipiente.",
+    evidencia: "Tabla de datos completa con la conclusión escrita que relaciona densidad y posición de cada líquido.",
+    criterios: ["Mide la masa y el volumen de cada líquido registrando las unidades correctas.",
+      "Relaciona la densidad calculada con la posición que ocupa el líquido en el vaso.",
+      "Formula una conclusión que responde directamente a la pregunta de indagación.",
+      "Respeta las normas de seguridad durante toda la manipulación de materiales."],
+    enfoquesTransversales: ["Enfoque ambiental: reutiliza materiales caseros y gestiona los residuos de la práctica.",
+      "Búsqueda de la excelencia: repite la medición para mejorar la precisión de sus datos."],
+    hipotesisModelo: "Si el aceite tiene menos masa que el agua para el mismo volumen, entonces el aceite quedará por encima del agua al verterlos en el mismo recipiente.",
+    preparacion: ["Preparar seis juegos de materiales, uno por equipo de cuatro integrantes, con 100 ml de cada líquido.",
+      "Tiempo estimado de armado antes de la clase: 20 minutos, incluida la calibración de las balanzas.",
+      "La miel y el colorante vegetal se consiguen en cualquier bodega; las probetas salen del kit del laboratorio."],
+    seguridadDocente: "El aceite derramado vuelve el piso resbaladizo: tener papel absorbente a mano y limpiar de inmediato.",
+    gestionTiempo: [
+      { momento: "Presentación del propósito y entrega de la ficha", tiempo: "10 min", observacion: "Verificar que cada equipo tenga su ficha y su juego de materiales." },
+      { momento: "1. Problematizamos (pregunta e hipótesis)", tiempo: "15 min", observacion: "Circular entre equipos para revisar la redacción de la hipótesis." },
+      { momento: "2. Diseñamos la estrategia y armamos el montaje", tiempo: "15 min", observacion: "Confirmar que miden el mismo volumen para los tres líquidos." },
+      { momento: "3. Registramos datos", tiempo: "20 min", observacion: "Insistir en anotar unidades en cada casilla de la tabla." },
+      { momento: "4. Analizamos y concluimos", tiempo: "20 min", observacion: "Pedir que vuelvan a su tabla antes de escribir la conclusión." },
+      { momento: "5. Evaluamos y comunicamos / cierre", tiempo: "10 min", observacion: "Dar la palabra a dos equipos con resultados distintos." }],
+    orientaciones: [
+      { momento: "1. Problematizamos", queObservar: "Si la hipótesis relaciona con claridad la variable independiente con la dependiente.", errorFrecuente: "Confunden causa y efecto, o formulan una pregunta que se responde con sí o no.", comoIntervenir: "Devolver la pregunta: qué van a cambiar ustedes y qué esperan que cambie por eso." },
+      { momento: "2. Diseñamos la estrategia", queObservar: "Si el procedimiento que proponen es replicable y controla el volumen.", errorFrecuente: "No mantienen el mismo volumen en los tres líquidos.", comoIntervenir: "Preguntar qué pasaría si compararan 30 ml con 80 ml." },
+      { momento: "3. Registramos datos", queObservar: "Precisión en las mediciones y orden en el registro de la tabla.", errorFrecuente: "Registran una sola medición en vez de repetirla.", comoIntervenir: "Sugerir una segunda medición y comparar ambas." },
+      { momento: "4. Analizamos y concluimos", queObservar: "Si la conclusión responde a la hipótesis planteada al inicio.", errorFrecuente: "Concluyen con una opinión general sin referirse a sus datos.", comoIntervenir: "Pedir que señalen en su tabla la fila que sostiene su afirmación." },
+      { momento: "5. Evaluamos y comunicamos", queObservar: "Calidad de la autoevaluación y disposición para compartir lo que no salió.", errorFrecuente: "Solo comparten el resultado final y omiten las dificultades.", comoIntervenir: "Cerrar destacando un error que un equipo corrigió." }],
+    solucionario: {
+      resultadoEsperado: "La miel queda abajo (1,4 g/ml), el agua en medio (1,0 g/ml) y el aceite arriba (0,9 g/ml), con una variación de 0,1 g/ml.",
+      conclusionModelo: "El aceite flota sobre el agua y la miel se hunde porque, para un mismo volumen, cada líquido tiene una masa distinta." },
+    dua: ["Múltiples medios de representación: ofrecer el procedimiento también en pictogramas.",
+      "Múltiples medios de expresión: permitir registrar los datos en dibujo o dictarlos.",
+      "Múltiples medios de compromiso: rotar los roles dentro del equipo."],
+    rubrica: [
+      { criterio: "Medición", logroDestacado: "Mide masa y volumen con unidades correctas, repite la medición y justifica el dato elegido.", logroEsperado: "Mide masa y volumen con unidades correctas en los tres líquidos.", enProceso: "Mide con apoyo del docente y olvida alguna unidad.", inicio: "Registra datos incompletos o sin unidades." },
+      { criterio: "Explicación", logroDestacado: "Explica la relación entre densidad y posición y la aplica a un caso nuevo.", logroEsperado: "Explica la relación entre densidad y posición usando sus datos.", enProceso: "Describe lo observado sin relacionarlo con la densidad.", inicio: "Menciona lo que vio sin explicar por qué ocurre." },
+      { criterio: "Conclusión", logroDestacado: "Concluye respondiendo a la hipótesis y señala qué mejoraría.", logroEsperado: "Concluye respondiendo directamente a la hipótesis planteada.", enProceso: "Concluye de forma general sin citar sus datos.", inicio: "No formula una conclusión relacionada con la práctica." },
+      { criterio: "Seguridad y trabajo en equipo", logroDestacado: "Cumple las normas y ayuda a que su equipo las cumpla.", logroEsperado: "Cumple las normas de seguridad durante toda la práctica.", enProceso: "Necesita recordatorios para cumplir alguna norma.", inicio: "No cumple las normas sin acompañamiento constante." }],
+  },
+};
+
 const grid = Array.from({ length: 20 }, (_, y) => Array.from({ length: 20 }, (_, x) => "ABCDEFGHIJKLMNOPQRSTUVWXYZ"[(x + y) % 26]));
 for (const [i, c] of [..."AGUA"].entries()) grid[0][i] = c;
 export const wordsearch = { titulo: "El agua", palabras: ["AGUA"], gridData: { grid, gridSize: 20,
@@ -189,4 +264,7 @@ export const fixtures = [
   ["09-reto-grupal.docx", "challenge", challenge], ["10-sopa-letras.docx", "wordsearch", wordsearch],
 ];
 /** El caso DPCC se revisa aparte porque lleva su propio formulario. */
-export const fixturasConFormulario = [["11-sesion-dpcc.docx", "session", sessionDPCC, formDPCC]];
+export const fixturasConFormulario = [
+  ["11-sesion-dpcc.docx", "session", sessionDPCC, formDPCC],
+  ["12-laboratorio.docx", "lab_guide", labGuide, formLab],
+];

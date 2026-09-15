@@ -8,6 +8,7 @@ lib/docx/tema.js              paleta, tipografía, geometría y proporciones
 lib/docx/core.js              primitivas: sección, barra, tablas, celdas, header, footer
 lib/docx/plantillas/sesion.js maqueta de la sesión de aprendizaje (14 secciones)
 lib/docx/plantillas/steam.js  maqueta del proyecto STEAM (9 secciones romanas)
+lib/docx/plantillas/laboratorio.js  ficha del estudiante (5) + guia del docente (9)
 lib/docx/exporters.js         el resto de documentos y el enrutado por tipo
 ```
 
@@ -21,6 +22,7 @@ lib/docx/exporters.js         el resto de documentos y el enrutado por tipo
 | Escala de valoración | `downloadResource("rating_scale", ...)` | Datos y criterios verticales; registro horizontal |
 | Ficha de trabajo / lectura vinculada o independiente | `downloadResource` | Vertical; una tabla de más de cuatro columnas usa sección horizontal |
 | Reto y actividades de catálogo | `downloadResource("challenge", ...)` / `downloadActivityWord` | Vertical |
+| Guía de laboratorio | `downloadResource("lab_guide", ...)` | Vertical · ficha del estudiante + guía del docente en un solo DOCX, separadas por salto de página |
 | Sopa de letras | `downloadWordSearch` | Vertical hasta 17 filas; horizontal desde 18; solucionario separado |
 | Biblioteca | `downloadMaterial` | El mismo constructor según el tipo guardado |
 | Recursos de sesión de ambas versiones | `SessionNextFlow`, `SessionResourcesPanel` | Los mismos constructores; adapta ambos esquemas de datos |
@@ -94,6 +96,12 @@ tabla encaja aunque cambie el margen o la orientación.
   para una rúbrica analítica. Si el instrumento del paso 2 ES una rúbrica se
   coloca ahí y no se repite como parte independiente; con cotejo o escala la
   parte se conserva entera.
+- **Laboratorio: dos documentos, un archivo.** La ficha del estudiante y la
+  guía del docente son la MISMA práctica —comparten pregunta, materiales y los
+  cinco momentos— así que van en un solo DOCX separadas por un salto de
+  página. La hipótesis y las variables de la ficha se dejan EN BLANCO: las
+  escribe el estudiante, y ése es el ejercicio. La hipótesis modelo va en la
+  guía del docente, con su aviso de que no se entrega.
 - **Área articuladora del STEAM.** Se reutiliza el área curricular principal que
   el formulario ya envía; si no llega, la fila se omite.
 
@@ -104,12 +112,16 @@ node scripts/word-qa.mjs
 npx vitest run tests/word.test.js
 ```
 
-El primer comando genera once archivos en `docs/qa/word/`: `01-sesion.docx` a
-`10-sopa-letras.docx` mas `11-sesion-dpcc.docx`, el caso real de Secundaria 3.º
-con el area de nombre mas largo del catalogo (DPCC), una IE de 78 caracteres y
-un titulo de 111. La carpeta ya está ignorada por Git. Todos los datos son
-ficticios y reproducen la FORMA REAL que entrega la generación
-—`componerSesion()` y `PROJECT_SCHEMA`—, no una versión reducida.
+El primer comando genera doce archivos en `docs/qa/word/`: de `01-sesion.docx` a
+`10-sopa-letras.docx`, más dos casos reales:
+
+- `11-sesion-dpcc.docx` — Secundaria 3.º con el área de nombre más largo del
+  catálogo (DPCC), una IE de 78 caracteres y un título de 111.
+- `12-laboratorio.docx` — la guía de laboratorio con sus dos partes.
+
+La carpeta ya está ignorada por Git. Todos los datos son ficticios y reproducen
+la FORMA REAL que entrega la generación —`componerSesion()`, `PROJECT_SCHEMA` y
+el esquema `lab_guide`—, no una versión reducida.
 
 Para revisarlos con Microsoft Word instalado, la conversión a PDF sólo funciona
 con un proceso que cierre los modales en paralelo: Word rechaza las llamadas COM

@@ -7,6 +7,7 @@ import Landing from "./components/landing/Landing.jsx";
 import AppShell from "./components/layout/AppShell.jsx";
 import Dashboard from "./components/dashboard/Dashboard.jsx";
 import GenerationProgress from "./components/ui/GenerationProgress.jsx";
+import LabGuideGenerator from "./components/LabGuideGenerator.jsx";
 import ToolGrid from "./components/create/ToolGrid.jsx";
 import Library, { MATERIAL_TYPES } from "./components/library/Library.jsx";
 // Carga diferida: Three.js y los 32 MB de geometría no se piden hasta que
@@ -3026,6 +3027,9 @@ function CompleteClassIntro({onStart}){
 
 function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreation = null, onInitialCreationConsumed = ()=>{}, onNavigate = ()=>{} }) {
   const [creation,setCreation]=useState(initialCreation);
+  // La guía de laboratorio vive en su propio componente y no puede importar
+  // este hook sin crear un ciclo con App.jsx: se le inyecta desde aquí.
+  const laboratorioSave = useMaterialSave();
 
   useEffect(()=>{
     if(initialCreation){setCreation(initialCreation);onInitialCreationConsumed();}
@@ -3074,6 +3078,14 @@ function CreateStudio({ preferredGrade = "primaria", profile = {}, initialCreati
       :creation==="rating-scale"?<ValuationScaleGenerator initialGrade={preferredGrade} profile={profile}/>
       :(creation==="rubric"||creation==="checklist")?<EvaluationInstrumentGenerator profile={profile} initialGrade={preferredGrade} instrumentType={creation}/>
       :creation==="wordsearch"?<WordSearchGenerator initialGrade={preferredGrade} profile={profile}/>
+      :creation==="lab-guide"?<LabGuideGenerator
+          initialGrade={preferredGrade}
+          profile={profile}
+          competencias={GENERATOR_COMPETENCIES}
+          capacidades={GENERATOR_CAPACITIES}
+          onGuardar={laboratorioSave.save}
+          estadoGuardado={<SaveStatus state={laboratorioSave.state} onRetry={laboratorioSave.retry} />}
+        />
       :null}
     </div>
   );

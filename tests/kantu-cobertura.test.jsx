@@ -386,8 +386,12 @@ describe("bloqueo del tipo de material", () => {
     expect(check).not.toContain("'wordsearch'");
   });
 
-  it("011 lo añade, y dice claramente que no se ha ejecutado", () => {
-    expect(migracion).toContain("NO SE HA EJECUTADO CONTRA PRODUCCIÓN");
+  it("011 lo añadió, y hoy avisa de que está superada", () => {
+    // Se confirmó aplicada el 14/09/2026 leyendo el CHECK en producción. Como
+    // su lista NO incluye los tipos posteriores, volver a correrla los
+    // borraría: por eso la cabecera dice que no se ejecute.
+    expect(migracion).toContain("SUPERSEDIDA POR 013");
+    expect(migracion).toContain("APLICADA en producción");
     expect(migracion).toContain("'wordsearch'");
     expect(migracion).toContain("materiales_docente_tipo_check");
   });
@@ -412,9 +416,15 @@ describe("bloqueo del tipo de material", () => {
   });
 
   it("y no se ha ejecutado ninguna migración desde aquí", () => {
-    // Sólo se han añadido ficheros versionados. 011 es el último.
+    // Sólo se añaden ficheros versionados; aplicarlos es tarea del equipo
+    // desde el editor SQL. La última es la 013, que declara la lista completa
+    // y por eso no depende del orden en que se corran.
     const migraciones = fs.readdirSync(path.join(raiz, "supabase", "migrations"))
       .filter((f) => f.endsWith(".sql")).sort();
-    expect(migraciones[migraciones.length - 1]).toBe("011_wordsearch_material.sql");
+    const ultima = migraciones[migraciones.length - 1];
+    expect(ultima).toBe("013_lab_guide_material.sql");
+    const trece = leer(`supabase/migrations/${ultima}`);
+    expect(trece).toContain("'wordsearch'");
+    expect(trece).toContain("'lab_guide'");
   });
 });

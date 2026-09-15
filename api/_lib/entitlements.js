@@ -44,6 +44,17 @@ export const CAPACIDADES_POR_DEFECTO = {
     rating_scale_max_criteria: 8,
     steam_max_weeks: 2,
     docx_remove_watermark: false,
+    // PREPARADA, SIN USO REAL TODAVÍA.
+    //
+    // La guía de laboratorio es Free completa por decisión de producto: es la
+    // herramienta del área por defecto de la aplicación y ponerla tras el muro
+    // dejaría Ciencia y Tecnología peor servida que Comunicación.
+    //
+    // Esta capacidad existe para que mover a Pro el solucionario y la rúbrica
+    // de la Guía del Docente —lo que de verdad tiene valor profesional— sea
+    // encender un interruptor y no volver a tocar el esquema. Mientras nadie
+    // llame a `permiteGuiaDocente()`, no cambia nada.
+    lab_teacher_guide: false,
   },
   pro: {
     weekly_ai_credits: 100,
@@ -54,6 +65,7 @@ export const CAPACIDADES_POR_DEFECTO = {
     rating_scale_max_criteria: 15,
     steam_max_weeks: 4,
     docx_remove_watermark: true,
+    lab_teacher_guide: true,
   },
 };
 
@@ -171,6 +183,18 @@ export function cantidadPermitida(pedida, { minimo = 1, limite, porDefecto, tool
  */
 export function permiteQuitarMarca(capacidades, pedido) {
   return Boolean(capacidades?.docx_remove_watermark) && pedido === true;
+}
+
+/**
+ * ¿Puede este plan recibir la Guía del Docente completa?
+ *
+ * Declarada y probada, pero NO conectada: hoy la guía de laboratorio es Free
+ * entera. El día que se decida mover el solucionario y la rúbrica a Pro, se
+ * llama desde el endpoint y se recorta la respuesta ahí; el navegador no
+ * decide nada.
+ */
+export function permiteGuiaDocente(capacidades) {
+  return Boolean(capacidades?.lab_teacher_guide);
 }
 
 /**

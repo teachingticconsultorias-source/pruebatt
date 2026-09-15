@@ -1,8 +1,16 @@
 -- ============================================================================
 -- 011 · La sopa de letras entra en la biblioteca
 --
--- ⚠️  ESTA MIGRACIÓN NO SE HA EJECUTADO CONTRA PRODUCCIÓN.
---     Está versionada para que se aplique cuando el equipo decida.
+-- ⚠️  SUPERSEDIDA POR 013 · NO EJECUTAR
+--
+--     APLICADA en producción (confirmado el 14/09/2026 leyendo el CHECK: ya
+--     contiene 'wordsearch'). Se conserva como historial.
+--
+--     NO volver a ejecutarla. Este CHECK no se parchea: se borra y se recrea
+--     entero, y la lista de abajo NO incluye 'lab_guide'. Correrla después de
+--     la 013 lo borraría del CHECK, y las guías de laboratorio dejarían de
+--     guardarse en la biblioteca sin que nadie viera el fallo hasta que una
+--     docente lo intentara. Para cualquier cambio de tipos, parte de la 013.
 --
 -- POR QUÉ HACE FALTA
 -- ------------------

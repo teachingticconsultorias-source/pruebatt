@@ -191,6 +191,98 @@ const SCHEMAS = {
       }
     },
     required: ["titulo","instrucciones","preguntas"]
+  },
+  // ---------------------------------------------------------------- LABORATORIO
+  //
+  // Un solo recurso con DOS documentos dentro: la ficha que se entrega al
+  // estudiante y la guía que se queda el docente. Salen de una sola llamada
+  // porque son la misma práctica y comparten pregunta, materiales y momentos:
+  // generarlos por separado daría dos prácticas que no encajan.
+  //
+  // Lo que NO se genera, a propósito: la hipótesis y las variables de la ficha
+  // del estudiante se dejan en blanco porque las escribe él. La hipótesis
+  // modelo va en la guía del docente, que es donde la plantilla la pone y con
+  // la nota de que no se entrega.
+  lab_guide: {
+    type: "object",
+    properties: {
+      titulo: { type: "string" },
+      proposito: { type: "string" },
+      normasSeguridad: { type: "array", items: { type: "string" } },
+      materialesKit: { type: "array", items: { type: "string" } },
+      materialesCaseros: { type: "array", items: { type: "string" } },
+      preguntaIndagatoria: { type: "string" },
+      procedimiento: { type: "array", items: { type: "string" } },
+      columnasRegistro: { type: "array", items: { type: "string" } },
+      preguntasAnalisis: { type: "array", items: { type: "string" } },
+      preguntasMetacognicion: { type: "array", items: { type: "string" } },
+      guiaDocente: {
+        type: "object",
+        properties: {
+          desempenoPrecisado: { type: "string" },
+          evidencia: { type: "string" },
+          criterios: { type: "array", items: { type: "string" } },
+          enfoquesTransversales: { type: "array", items: { type: "string" } },
+          hipotesisModelo: { type: "string" },
+          preparacion: { type: "array", items: { type: "string" } },
+          seguridadDocente: { type: "string" },
+          gestionTiempo: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                momento: { type: "string" },
+                tiempo: { type: "string" },
+                observacion: { type: "string" }
+              },
+              required: ["momento", "tiempo", "observacion"]
+            }
+          },
+          orientaciones: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                momento: { type: "string" },
+                queObservar: { type: "string" },
+                errorFrecuente: { type: "string" },
+                comoIntervenir: { type: "string" }
+              },
+              required: ["momento", "queObservar", "errorFrecuente", "comoIntervenir"]
+            }
+          },
+          solucionario: {
+            type: "object",
+            properties: {
+              resultadoEsperado: { type: "string" },
+              conclusionModelo: { type: "string" }
+            },
+            required: ["resultadoEsperado", "conclusionModelo"]
+          },
+          dua: { type: "array", items: { type: "string" } },
+          rubrica: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                criterio: { type: "string" },
+                logroDestacado: { type: "string" },
+                logroEsperado: { type: "string" },
+                enProceso: { type: "string" },
+                inicio: { type: "string" }
+              },
+              required: ["criterio", "logroDestacado", "logroEsperado", "enProceso", "inicio"]
+            }
+          }
+        },
+        required: ["desempenoPrecisado", "evidencia", "criterios", "enfoquesTransversales",
+          "hipotesisModelo", "preparacion", "seguridadDocente", "gestionTiempo",
+          "orientaciones", "solucionario", "dua", "rubrica"]
+      }
+    },
+    required: ["titulo", "proposito", "normasSeguridad", "materialesKit", "materialesCaseros",
+      "preguntaIndagatoria", "procedimiento", "columnasRegistro", "preguntasAnalisis",
+      "preguntasMetacognicion", "guiaDocente"]
   }
 };
 
@@ -212,7 +304,14 @@ function context(body){
     region: form.region || "",
     // Este campo llegaba desde el formulario y se perdía aquí: la docente
     // escribía su contexto y no tenía ningún efecto sobre la generación.
-    contexto: form.contexto || ""
+    contexto: form.contexto || "",
+    // Propios de la guía de laboratorio. No los tiene ninguna otra
+    // herramienta, así que se leen sólo si vienen.
+    duracion: form.duracion || "",
+    materialesDisponibles: form.materialesDisponibles || form.materiales || "",
+    tipoExperimento: form.tipoExperimento || "",
+    medidasSeguridad: form.medidasSeguridad || "",
+    integrantes: form.integrantes || ""
   };
 }
 
@@ -287,6 +386,68 @@ PROHIBIDO — si incumples esto la ficha se descarta y hay que regenerarla:
 - Repetir o parafrasear una actividad ya escrita.
 - Preguntas genéricas que servirían para cualquier tema.
 - Dejar una sección sin actividades.`;
+
+  if(type==="lab_guide") return `${base}
+Duración de la sesión: ${c.duracion || "90"} minutos.
+Materiales que la docente declara disponibles: ${c.materialesDisponibles || "no especificados"}.
+Tipo de experimento o actividad: ${c.tipoExperimento || "indagación experimental"}.
+Medidas de seguridad que la docente quiere considerar: ${c.medidasSeguridad || "las habituales del laboratorio escolar"}.
+Integrantes por equipo: ${c.integrantes || "4"}.
+
+Genera una GUÍA DE LABORATORIO con dos partes de la MISMA práctica:
+la ficha que se entrega al estudiante y la guía que se queda la docente.
+
+FICHA DEL ESTUDIANTE
+- "proposito": una sola frase que responda «¿qué aprenderemos hoy?», en lenguaje del grado.
+- "normasSeguridad": entre 3 y 5 normas concretas de ESTA práctica, en imperativo.
+  Parte de las que declaró la docente y añade las que falten para este experimento.
+- "materialesKit" y "materialesCaseros": reparte los materiales declarados entre
+  los que salen del laboratorio y los que trae el estudiante. Si la docente no
+  declaró ninguno, propón materiales de bodega peruana, baratos y seguros.
+- "preguntaIndagatoria": una pregunta comprobable con los materiales listados.
+  NO puede responderse con sí o no.
+- "procedimiento": 4 a 6 pasos numerados, cada uno empezando por un verbo de
+  acción en plural ("Midan", "Viertan", "Registren"). Deben poder ejecutarse con
+  los materiales listados y en la duración indicada.
+- "columnasRegistro": exactamente 4 encabezados para la tabla de datos, con la
+  unidad entre paréntesis cuando corresponda.
+- "preguntasAnalisis": 2 a 4 preguntas que obliguen a mirar los datos recogidos.
+- "preguntasMetacognicion": 2 preguntas sobre el propio proceso del equipo.
+
+NO generes la hipótesis ni las variables del estudiante: las escribe él en clase.
+
+GUÍA DE LA DOCENTE ("guiaDocente")
+- "desempenoPrecisado" y "evidencia": derivados de la competencia y capacidades
+  indicadas arriba. NO inventes competencias ni capacidades nuevas.
+- "criterios": 3 a 5, observables en la evidencia y verificables durante la práctica.
+- "enfoquesTransversales": 2, con la actitud observable dentro de la misma frase.
+- "hipotesisModelo": redactada como "Si ..., entonces ...". Es referencial para la
+  docente y NO se entrega al estudiante.
+- "preparacion": 3 puntos — materiales a preparar con cantidad por equipo, tiempo
+  de armado antes de la clase, y dónde conseguir lo menos común en Perú.
+- "seguridadDocente": el riesgo específico de ESTA práctica y cómo prevenirlo.
+- "gestionTiempo": exactamente 6 filas, en este orden y con estos momentos:
+  "Presentación del propósito y entrega de la ficha",
+  "1. Problematizamos (pregunta e hipótesis)",
+  "2. Diseñamos la estrategia y armamos el montaje",
+  "3. Registramos datos",
+  "4. Analizamos y concluimos",
+  "5. Evaluamos y comunicamos / cierre".
+  Los tiempos deben sumar los ${c.duracion || "90"} minutos declarados.
+- "orientaciones": exactamente 5, una por momento de la indagación
+  ("1. Problematizamos" … "5. Evaluamos y comunicamos"), cada una con qué observar,
+  el error frecuente y cómo intervenir SIN dar la respuesta.
+- "solucionario": resultado o rango de datos esperado y conclusión modelo.
+- "dua": 3 orientaciones, una de representación, una de expresión y una de compromiso.
+- "rubrica": 3 a 5 criterios con los cuatro niveles completos y progresión real
+  entre ellos. Sin adjetivos vagos.
+
+PROHIBIDO — si incumples esto la guía se descarta:
+- Proponer sustancias peligrosas, fuego sin supervisión, reactivos de laboratorio
+  profesional o materiales que no se consigan en una escuela pública peruana.
+- Texto de relleno: "Material 1", "Paso 1", "Columna 1", "Por definir".
+- Un procedimiento que no se pueda ejecutar con los materiales listados.
+- Repetir el mismo texto en dos niveles de la rúbrica.`;
 
   if(type==="reading") return `${base}
 Genera una LECTURA PEDAGÓGICA original y adecuada al grado, vinculada al propósito.
@@ -428,7 +589,16 @@ El intento anterior dejó secciones vacías o menos preguntas de las pedidas. Es
         responseSchema: SCHEMAS[type],
         // La ficha por secciones necesita más margen: con 6000 el modelo
         // llegaba justo y recortaba actividades.
-        maxOutputTokens: type==="worksheet"?9000:(type==="reading"?6000:4500),
+        //
+        // La guía de laboratorio va aparte porque son DOS documentos en una
+        // respuesta. Medido sobre un ejemplar completo: 7796 caracteres, que
+        // a la razón de 4,33 car/token de los logs son 1801 tokens de salida.
+        // Con el razonamiento en `medium` —2901 tokens, según el incidente de
+        // `sequence`— sumaría 4702 y se pasaría de 4500. Con `low` quedan 3397
+        // y 6000 deja un 43 % de margen. La estructura viene dictada por el
+        // prompt, así que aquí el razonamiento aporta poco.
+        maxOutputTokens: type==="lab_guide"?6000:(type==="worksheet"?9000:(type==="reading"?6000:4500)),
+        thinkingLevel: type==="lab_guide" ? "low" : undefined,
         tool: `recurso:${type}${reforzar ? ":refuerzo" : ""}`,
       });
       return data;
