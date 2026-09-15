@@ -119,19 +119,12 @@ plantearlo.
 
 ## Código muerto o inalcanzable
 
-### 11 · `SessionNextFlow.jsx` y `SessionResourcesPanel.jsx` no están importados
-
-Ningún componente los renderiza. Con ellos quedan inalcanzables desde la
-interfaz la **Guía de observación** y el **Cuestionario**, que sí existen en el
-exportador, en el endpoint y en los tipos de la biblioteca. O se enrutan o se
-retiran; mantenerlos a medias confunde al siguiente que los lea.
-
-### 12 · `SteamGenerator` acepta cuatro `documentType` y sólo uno se usa
+### 11 · `SteamGenerator` acepta cuatro `documentType` y sólo uno se usa
 
 El componente contempla `session`, `project`, `rubric` y `checklist`, pero el
 único enrutado es `session`. Las otras tres ramas no son alcanzables.
 
-### 13 · Cinco generadores legacy sin ruta
+### 12 · Cinco generadores legacy sin ruta
 
 `CrosswordGenerator`, `LearningUnitGenerator`, `WorksheetGenerator`,
 `ReadingGenerator` y `EvaluationSheetGenerator` están definidos en `App.jsx` y
@@ -142,7 +135,7 @@ Markdown (`downloadText`).
 
 ## Infraestructura
 
-### 14 · No hay tabla de control de migraciones
+### 13 · No hay tabla de control de migraciones
 
 Este proyecto no registra en ninguna parte qué migraciones se han aplicado, y
 las aplica a mano desde el editor SQL de Supabase. Eso hizo imposible saber
@@ -153,7 +146,7 @@ Las migraciones **009, 010, 011 y 013 no tienen inspector**. La 012 sí
 (`supabase/inspect/012_verify_export_branding.sql`). Escribir los que faltan, o
 adoptar una tabla de control, evitaría repetir esa situación.
 
-### 15 · Cobertura de plantillas por nivel
+### 14 · Cobertura de plantillas por nivel
 
 - **Primaria:** falta plantilla oficial de Educación para el Trabajo, que sí
   está en el catálogo de la aplicación.
@@ -162,7 +155,7 @@ adoptar una tabla de control, evitaría repetir esa situación.
   en ese nivel. El material sugiere un catálogo de Primaria más amplio que el
   actual (6 áreas).
 
-### 16 · Borrador local del formulario y aviso al salir
+### 15 · Borrador local del formulario y aviso al salir
 
 Evaluados en el bloque de endurecimiento de UX y no implementados: el estado ya
 sobrevive al fallo dentro de la pantalla, y ambos tocan el ciclo de vida del

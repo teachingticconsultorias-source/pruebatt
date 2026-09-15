@@ -133,7 +133,7 @@ describe("Word · documentos reales empaquetados", () => {
     expect(filename("sesion.docx")).not.toContain("docx.docx");
   });
   it("todas las pantallas activas usan los constructores compartidos", () => {
-    for (const file of ["App.jsx", "components/SessionNextFlow.jsx", "components/SessionResourcesPanel.jsx"]) {
+    for (const file of ["App.jsx", "components/LabGuideGenerator.jsx"]) {
       const src = fs.readFileSync(file, "utf8");
       expect(src).toContain("lib/docx/exporters.js");
       expect(src).not.toMatch(/new Document\(|Packer\.toBlob|from "docx"/);

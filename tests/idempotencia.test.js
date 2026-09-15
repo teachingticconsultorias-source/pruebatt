@@ -48,8 +48,7 @@ const COBRO_DIRECTO = [
 
 const PANTALLAS_QUE_GENERAN = [
   "App.jsx",
-  "components/SessionNextFlow.jsx",
-  "components/SessionResourcesPanel.jsx",
+  "components/LabGuideGenerator.jsx",
 ];
 
 const leer = (f) => fs.readFileSync(f, "utf8");
@@ -176,7 +175,7 @@ describe("estructura · ninguna generación sale sin Idempotency-Key", () => {
       }
     }
     // Si un día el patrón dejara de encontrar llamadas, el test pasaría vacío.
-    expect(comprobadas).toBeGreaterThanOrEqual(11);
+    expect(comprobadas).toBeGreaterThanOrEqual(10);
   });
 
   it("las sugerencias de campo no la llevan, porque no cobran", () => {
