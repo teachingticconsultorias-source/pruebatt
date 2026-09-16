@@ -34,12 +34,14 @@ import actions        from "../_handlers/admin/actions.js";
 import paymentActions from "../_handlers/admin/payment-actions.js";
 import commerceActions from "../_handlers/admin/commerce-actions.js";
 import paymentQr      from "../_handlers/admin/payment-qr.js";
+import exportDocentes from "../_handlers/admin/export-docentes.js";
 
 /** URL pública → manejador. El nombre de la ruta es el de siempre. */
 const RUTAS = {
   // lectura
   "summary":          summary,
   "docentes":         docentes,
+  "export-docentes":  exportDocentes,
   "docente":          docente,
   "audit":            audit,
   "payments":         payments,

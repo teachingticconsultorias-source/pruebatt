@@ -40,7 +40,23 @@ del pack. El servidor sí tiene sus procesos de indagación en
 `DIDACTIC_PROCESSES`, así que el documento sale correcto; lo que falta es la
 referencia visual.
 
-### 4 · Tutoría sin herramienta
+### 4 · `docentes` no guarda región ni grado
+
+El export a Excel los pedía y no se pudieron incluir: `public.docentes` tiene
+nombres, apellidos, ie, celular, correo, plan, activo, created_at y **nivel**, y
+nada más. La región es un campo del formulario de CADA generación, no un
+atributo del docente.
+
+Se evaluó derivarla de la última generación y se descartó: daría un dato que
+parece fiable y no lo es —dónde enseñó una vez, no dónde trabaja—, y un dato
+así en una lista comercial es peor que no tenerlo.
+
+**El camino correcto, si comercial las necesita de verdad:** añadir `region` y
+`grado` a `public.docentes` y pedirlas en el registro. Sólo las tendrían quienes
+se registren a partir de entonces; para los anteriores haría falta pedírselas
+en su primera sesión. Es un bloque aparte: toca el alta, que hoy funciona.
+
+### 5 · Tutoría sin herramienta
 
 El pack entrega una plantilla completa de Sesión de Tutoría (14 secciones,
 estructura propia: indicadores actitudinales, «después de la hora de tutoría»,
@@ -51,7 +67,7 @@ está listo para ella.
 
 ## Aceptado como está
 
-### 5 · `docx_remove_watermark` inerte en `plans.features`
+### 6 · `docx_remove_watermark` inerte en `plans.features`
 
 Se sembró en la migración 009 y nunca se usó: el exportador no pinta ninguna
 marca de agua y `permiteQuitarMarca()` no se llamaba desde ningún endpoint. La
@@ -62,7 +78,7 @@ La migración 012 trae el `update` para limpiarla, **comentado**. Se dejó así
 para no alterar datos de producción en la misma migración que crea la tabla y
 el bucket. Descomentar y ejecutar cuando se quiera.
 
-### 6 · Ficheros huérfanos en `export-templates`
+### 7 · Ficheros huérfanos en `export-templates`
 
 Borrar un docente elimina su fila de `export_branding` por `on delete cascade`,
 pero **no** su logo ni su plantilla: Storage vive en otro esquema y el cascade
@@ -72,21 +88,21 @@ El inspector `supabase/inspect/012_verify_export_branding.sql` los cuenta
 (consulta 5). Si algún día pesan, se resuelve con una tarea programada o un
 botón en el panel de administración. Hoy: 0.
 
-### 7 · Sin vista previa del `.docx` subido
+### 8 · Sin vista previa del `.docx` subido
 
 Renderizar un `.docx` en el navegador exige una dependencia pesada
 (`docx-preview`, `mammoth`) y con plantillas de colegio daría una aproximación
 poco fiel. En su lugar se enseña nombre, peso y la lista de marcas `{{...}}`
 reconocidas, que es lo que de verdad decide si la plantilla va a funcionar.
 
-### 8 · La cuadrícula del gráfico se parte entre páginas
+### 9 · La cuadrícula del gráfico se parte entre páginas
 
 En la Ficha del Estudiante de laboratorio, el papel milimetrado de 16×8 se
 reparte entre dos páginas. Forzar un salto antes crearía media página en blanco
 —el defecto que se corrigió en los anexos de la sesión—. Si se prefiere entera,
 se baja a 6 filas y cabe.
 
-### 9 · Orientación adaptativa de rúbrica: medida y descartada
+### 10 · Orientación adaptativa de rúbrica: medida y descartada
 
 Con descriptores de 450 caracteres caben **2,4 filas por página en vertical y
 2,4 en horizontal**: el ancho extra se compensa con la altura perdida. Cambiar a
@@ -97,12 +113,12 @@ plantearlo.
 
 ## Código muerto o inalcanzable
 
-### 10 · `SteamGenerator` acepta cuatro `documentType` y sólo uno se usa
+### 11 · `SteamGenerator` acepta cuatro `documentType` y sólo uno se usa
 
 El componente contempla `session`, `project`, `rubric` y `checklist`, pero el
 único enrutado es `session`. Las otras tres ramas no son alcanzables.
 
-### 11 · Cinco generadores legacy sin ruta
+### 12 · Cinco generadores legacy sin ruta
 
 `CrosswordGenerator`, `LearningUnitGenerator`, `WorksheetGenerator`,
 `ReadingGenerator` y `EvaluationSheetGenerator` están definidos en `App.jsx` y
@@ -113,7 +129,7 @@ Markdown (`downloadText`).
 
 ## Infraestructura
 
-### 12 · No hay tabla de control de migraciones
+### 13 · No hay tabla de control de migraciones
 
 Este proyecto no registra en ninguna parte qué migraciones se han aplicado, y
 las aplica a mano desde el editor SQL de Supabase. Eso hizo imposible saber
@@ -133,7 +149,7 @@ práctica faltan cinco.
 Escribir los que faltan, o adoptar una tabla de control, evitaría repetir esa
 situación.
 
-### 13 · Cobertura de plantillas por nivel
+### 14 · Cobertura de plantillas por nivel
 
 - **Primaria:** falta plantilla oficial de Educación para el Trabajo, que sí
   está en el catálogo de la aplicación.
@@ -142,7 +158,7 @@ situación.
   en ese nivel. El material sugiere un catálogo de Primaria más amplio que el
   actual (6 áreas).
 
-### 14 · `comprobarPatcheables` defiende un caso que no ocurre
+### 15 · `comprobarPatcheables` defiende un caso que no ocurre
 
 El sondeo que se ejecuta al subir una plantilla existe por si Word parte un
 marcador en varios `<w:r>` y deja de reconocerse. Se midió en la auditoría con
@@ -155,7 +171,7 @@ documento que `patchDocument` no recorre. Lo que se corrigió fue el MENSAJE, qu
 prometía una protección que no hacía falta. Queda anotado para que nadie confíe
 en él por el motivo equivocado.
 
-### 15 · `docs/qa/` vive fuera de git
+### 16 · `docs/qa/` vive fuera de git
 
 Los artefactos de QA —hoy más de treinta `.docx` y `.pdf` revisados a ojo— están
 en una carpeta ignorada. Es deliberado: pesan y se regeneran con
@@ -163,7 +179,7 @@ en una carpeta ignorada. Es deliberado: pesan y se regeneran con
 varios informes los citan por su ruta. O se documenta que hay que regenerarlos,
 o se sube una muestra pequeña.
 
-### 16 · Borrador local del formulario y aviso al salir
+### 17 · Borrador local del formulario y aviso al salir
 
 Evaluados en el bloque de endurecimiento de UX y no implementados: el estado ya
 sobrevive al fallo dentro de la pantalla, y ambos tocan el ciclo de vida del

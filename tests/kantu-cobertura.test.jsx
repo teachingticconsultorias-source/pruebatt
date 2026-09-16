@@ -427,7 +427,7 @@ describe("bloqueo del tipo de material", () => {
     const migraciones = fs.readdirSync(path.join(raiz, "supabase", "migrations"))
       .filter((f) => f.endsWith(".sql")).sort();
     const ultima = migraciones[migraciones.length - 1];
-    expect(ultima).toBe("015_cerrar_gate_plantilla.sql");
+    expect(ultima).toBe("016_export_docentes.sql");
     // La 013 declara la lista COMPLETA de tipos, por eso no depende del orden.
     const trece = leer("supabase/migrations/013_lab_guide_material.sql");
     expect(trece).toContain("'wordsearch'");
@@ -438,7 +438,7 @@ describe("bloqueo del tipo de material", () => {
     expect(catorce).toContain("ESTA MIGRACIÓN VA ANTES DEL DEPLOY");
     // La 015 cierra el gate de la plantilla por todas las vías: el filtro deja
     // de mirar la extensión y pasa a mirar si es la ruta del logo.
-    const quince = leer(`supabase/migrations/${ultima}`);
+    const quince = leer("supabase/migrations/015_cerrar_gate_plantilla.sql");
     expect(quince).toContain("es_ruta_de_logo");
     // Las políticas viejas se BORRAN antes de crear las nuevas. En Postgres las
     // RLS son permisivas y se combinan con OR: dejar viva la de la 012 al lado
@@ -453,6 +453,15 @@ describe("bloqueo del tipo de material", () => {
     // Y si el create fallara, la migración ABORTA en vez de terminar «bien»
     // con la política vieja todavía puesta.
     expect(quince).toContain("ABORTA: la política de SUBIR");
+    // La 016 añade el export de docentes. Como la 015, verifica el resultado
+    // en el catálogo en vez de fiarse: si `authenticated` pudiera ejecutar la
+    // función, cualquier docente se llevaría la lista entera.
+    const dieciseis = leer(`supabase/migrations/${ultima}`);
+    expect(dieciseis).toContain("admin_export_docentes");
+    expect(dieciseis).toContain("ABORTA: authenticated puede ejecutar admin_export_docentes");
+    // Y el listado se borra antes de recrearse con la firma nueva.
+    expect(dieciseis.indexOf("drop function if exists public.admin_list_docentes"))
+      .toBeLessThan(dieciseis.indexOf("create or replace function public.admin_list_docentes"));
     expect(quince).not.toMatch(/name not like '%\.docx%'/);
   });
 });

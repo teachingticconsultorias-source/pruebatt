@@ -450,3 +450,36 @@
 .adm__form .adm__check input { min-height: 0; width: 18px; height: 18px; margin-top: 2px; flex: none; }
 .adm__check span { display: grid; gap: 2px; }
 .adm__check small { font-weight: var(--weight-regular); color: var(--text-secondary); }
+
+/* Filtros del listado de docentes, el botón de exportar y las cabeceras que
+   ordenan. Añadidos en el bloque del export a Excel. */
+.adm__filtros-docentes {
+  display: flex; flex-wrap: wrap; align-items: flex-end;
+  gap: var(--space-3); margin: var(--space-4) 0 var(--space-2);
+  padding: var(--space-3); border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md); background: var(--bg-sunken);
+}
+.adm__filtros-docentes label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: var(--text-label); font-weight: var(--weight-bold);
+  color: var(--text-secondary);
+}
+.adm__filtros-docentes select,
+.adm__filtros-docentes input {
+  padding: 5px 8px; border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm); background: var(--bg-surface);
+  font-size: var(--text-sm); color: var(--text-primary);
+}
+.adm__exportar { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-3); }
+.adm__error-inline { margin: 0; font-size: var(--text-sm); color: var(--danger-700, #A02020); }
+.adm__spin { animation: spin 1s linear infinite; }
+
+/* La cabecera entera es el control: se pulsa donde se lee, no en un icono
+   diminuto al lado. */
+.adm__th-orden {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font: inherit; color: inherit; text-align: left;
+}
+.adm__th-orden:hover { text-decoration: underline; }
+.adm__th-orden:focus-visible { outline: 2px solid var(--teal-500, #3EC6C0); outline-offset: 2px; }

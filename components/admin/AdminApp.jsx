@@ -4,7 +4,7 @@ import {
   ShieldCheck, ShieldAlert, LogOut, RefreshCw, Mail, MailCheck, Clock,
   GraduationCap, Sparkles, FolderOpen, AlertCircle, Ban, CheckCircle2,
   CalendarPlus, ArrowRightLeft, History, Receipt, ThumbsUp, ThumbsDown,
-  Tags, Settings,
+  Tags, Settings, Download, Loader2,
 } from "lucide-react";
 
 import { supabase } from "../../supabaseClient.js";
@@ -314,16 +314,142 @@ function Resumen({ token, onRole, onDenegado }) {
 
 /* ======================================================================= */
 
+/* ==========================================================================
+   LOS FILTROS DEL LISTADO, QUE SON TAMBIÉN LOS DEL EXPORT
+
+   Un solo objeto de estado alimenta la tabla y el fichero. El requisito era
+   «lo que ve en pantalla es lo que baja», y la forma de garantizarlo no es
+   acordarse de pasar los mismos parámetros dos veces: es que sean los mismos.
+   ========================================================================== */
+const FILTROS_VACIOS = {
+  search: "", plan: "", desde: "", hasta: "", nivel: "", confirmado: "", activo: "",
+};
+
+/** Los filtros como query string, omitiendo los vacíos. */
+function comoQuery(filtros) {
+  const p = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(filtros)) {
+    if (valor !== "" && valor != null) p.set(clave, String(valor));
+  }
+  return p;
+}
+
+/** ¿Hay alguno puesto? Decide si se enseña el botón de limpiar. */
+const hayFiltros = (f) => Object.values(f).some((v) => v !== "" && v != null);
+
+function PanelDeFiltros({ filtros, onCambiar, onLimpiar }) {
+  const set = (clave) => (e) => onCambiar({ ...filtros, [clave]: e.target.value });
+  return (
+    <div className="adm__filtros-docentes" role="group" aria-label="Filtrar docentes">
+      <label>Plan
+        <select value={filtros.plan} onChange={set("plan")}>
+          <option value="">Todos</option>
+          <option value="free">Solo Free</option>
+          <option value="pro">Solo Pro</option>
+        </select>
+      </label>
+      <label>Nivel
+        <select value={filtros.nivel} onChange={set("nivel")}>
+          <option value="">Todos</option>
+          <option value="primaria">Primaria</option>
+          <option value="secundaria">Secundaria</option>
+        </select>
+      </label>
+      <label>Registro desde
+        <input type="date" value={filtros.desde} onChange={set("desde")} />
+      </label>
+      <label>hasta
+        <input type="date" value={filtros.hasta} onChange={set("hasta")} />
+      </label>
+      <label>Correo
+        <select value={filtros.confirmado} onChange={set("confirmado")}>
+          <option value="">Todos</option>
+          <option value="true">Confirmado</option>
+          <option value="false">Sin confirmar</option>
+        </select>
+      </label>
+      <label>Estado
+        <select value={filtros.activo} onChange={set("activo")}>
+          <option value="">Todos</option>
+          <option value="true">Activos</option>
+          <option value="false">Inactivos</option>
+        </select>
+      </label>
+      {hayFiltros(filtros) && (
+        <Button variant="ghost" size="sm" onClick={onLimpiar}>Limpiar filtros</Button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * El botón de exportar.
+ *
+ * Pide la lista COMPLETA con los filtros vigentes —el endpoint es otro, sin
+ * paginar— y arma el .xlsx en el navegador. ExcelJS entra por `import()`
+ * dinámico dentro de `construirLibro`, así que sus 900 KB sólo se descargan
+ * aquí y ninguna docente los carga nunca.
+ */
+function BotonExportar({ token, filtros, total, rol }) {
+  const [ocupado, setOcupado] = useState(false);
+  const [fallo, setFallo] = useState("");
+
+  async function exportar() {
+    if (ocupado) return;
+    setOcupado(true); setFallo("");
+    try {
+      const respuesta = await fetch(`/api/admin/export-docentes?${comoQuery(filtros).toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const datos = await respuesta.json().catch(() => ({}));
+      if (!respuesta.ok) throw new Error(datos?.error || "No se pudo preparar el archivo.");
+
+      const { construirLibro, nombreDeArchivo } = await import("../../lib/admin/exportar-docentes.js");
+      const blob = await construirLibro(datos.items || [], {
+        filtros,
+        rol: datos.role || rol,
+        // `support` no ve teléfonos: la columna no se dibuja siquiera.
+        incluirCelular: (datos.role || rol) !== "support",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = nombreDeArchivo();
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (e) {
+      setFallo(e?.message || "No se pudo preparar el archivo.");
+    } finally {
+      setOcupado(false);
+    }
+  }
+
+  return (
+    <div className="adm__exportar">
+      <Button variant="secondary" size="sm" onClick={exportar} disabled={ocupado || total === 0}>
+        {ocupado ? <Loader2 size={15} className="adm__spin" /> : <Download size={15} />}
+        {ocupado ? "Preparando…" : `Exportar a Excel${total ? ` (${total})` : ""}`}
+      </Button>
+      {fallo && <p className="adm__error-inline" role="alert">{fallo}</p>}
+    </div>
+  );
+}
+
 function ListaDocentes({ token, onRole, onAbrir, onDenegado }) {
   const [pagina, setPagina] = useState(1);
   const [texto, setTexto] = useState("");
-  const [busqueda, setBusqueda] = useState("");
+  const [filtros, setFiltros] = useState(FILTROS_VACIOS);
+  // El orden se aplica sobre la PÁGINA que hay en pantalla, no sobre la tabla
+  // entera: ordenar en el servidor exigiría otro parámetro y otra migración, y
+  // con 25 filas por página esto es lo que la persona espera.
+  const [orden, setOrden] = useState({ campo: null, asc: true });
 
   const ruta = useMemo(() => {
-    const p = new URLSearchParams({ page: String(pagina), pageSize: String(PAGE_SIZE) });
-    if (busqueda) p.set("search", busqueda);
+    const p = comoQuery(filtros);
+    p.set("page", String(pagina));
+    p.set("pageSize", String(PAGE_SIZE));
     return `/api/admin/docentes?${p.toString()}`;
-  }, [pagina, busqueda]);
+  }, [pagina, filtros]);
 
   const { data, error, cargando, recargar } = useCarga(ruta, token, onDenegado);
 
@@ -332,12 +458,34 @@ function ListaDocentes({ token, onRole, onAbrir, onDenegado }) {
   function buscar(e) {
     e.preventDefault();
     setPagina(1);
-    setBusqueda(texto.trim());
+    setFiltros((f) => ({ ...f, search: texto.trim() }));
   }
 
-  const items = data?.items || [];
+  function cambiarFiltros(nuevos) { setPagina(1); setFiltros(nuevos); }
+  function limpiar() { setPagina(1); setTexto(""); setFiltros(FILTROS_VACIOS); }
+
+  /** Pulsar la misma cabecera dos veces invierte el sentido. */
+  function ordenarPor(campo) {
+    setOrden((o) => ({ campo, asc: o.campo === campo ? !o.asc : true }));
+  }
+
+  const crudos = data?.items || [];
   const total = data?.total ?? 0;
   const paginas = data?.pages ?? 1;
+
+  const items = useMemo(() => {
+    if (!orden.campo) return crudos;
+    const valor = (d) => {
+      if (orden.campo === "docente") return `${d.nombres} ${d.apellidos}`.toLowerCase();
+      const v = d[orden.campo];
+      return typeof v === "string" ? v.toLowerCase() : v ?? "";
+    };
+    return [...crudos].sort((a, b) => {
+      const x = valor(a), y = valor(b);
+      if (x === y) return 0;
+      return (x > y ? 1 : -1) * (orden.asc ? 1 : -1);
+    });
+  }, [crudos, orden]);
 
   return (
     <>
@@ -352,7 +500,7 @@ function ListaDocentes({ token, onRole, onAbrir, onDenegado }) {
             type="search"
             value={texto}
             maxLength={80}
-            placeholder="Nombre, correo o institución"
+            placeholder="Nombre, correo, institución o celular"
             aria-label="Buscar docentes"
             onChange={(e) => setTexto(e.target.value)}
           />
@@ -360,18 +508,21 @@ function ListaDocentes({ token, onRole, onAbrir, onDenegado }) {
         </form>
       </header>
 
+      <PanelDeFiltros filtros={filtros} onCambiar={cambiarFiltros} onLimpiar={limpiar} />
+      <BotonExportar token={token} filtros={filtros} total={total} rol={data?.role} />
+
       {cargando ? (
         <CargandoTabla />
       ) : error ? (
         <ErrorEstado mensaje={error} onReintentar={recargar} />
       ) : items.length === 0 ? (
         <EmptyState
-          title={busqueda ? "Sin resultados" : "Todavía no hay docentes"}
-          description={busqueda
-            ? `No encontramos a nadie que coincida con «${busqueda}».`
+          title={hayFiltros(filtros) ? "Sin resultados" : "Todavía no hay docentes"}
+          description={hayFiltros(filtros)
+            ? "Ningún docente coincide con los filtros activos."
             : "Cuando alguien se registre, aparecerá aquí."}
-          action={busqueda
-            ? <Button variant="outline" onClick={() => { setTexto(""); setBusqueda(""); }}>Ver todos</Button>
+          action={hayFiltros(filtros)
+            ? <Button variant="outline" onClick={limpiar}>Ver todos</Button>
             : null}
         />
       ) : (
@@ -380,8 +531,17 @@ function ListaDocentes({ token, onRole, onAbrir, onDenegado }) {
             <table className="adm__table">
               <thead>
                 <tr>
-                  <th>Docente</th><th>Correo</th><th>Estado</th>
-                  <th>Plan</th><th>Uso IA</th><th>Último acceso</th><th>Registro</th>
+                  {[["docente", "Docente"], ["email", "Correo"], ["activo", "Estado"],
+                    ["plan", "Plan"], ["usadas_semana", "Uso IA"],
+                    ["ultimo_acceso", "Último acceso"], ["created_at", "Registro"]].map(([campo, titulo]) => (
+                    <th key={campo}
+                        aria-sort={orden.campo === campo ? (orden.asc ? "ascending" : "descending") : "none"}>
+                      <button type="button" className="adm__th-orden" onClick={() => ordenarPor(campo)}>
+                        {titulo}
+                        <span aria-hidden="true">{orden.campo === campo ? (orden.asc ? " ▲" : " ▼") : ""}</span>
+                      </button>
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>

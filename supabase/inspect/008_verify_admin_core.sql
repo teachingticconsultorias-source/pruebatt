@@ -1,4 +1,7 @@
 -- ============================================================================
+-- NOTA (016): la firma de admin_list_docentes cambio en la migracion 016,
+-- que le anadio los filtros del export. Actualizada aqui para que no de un
+-- falso fallo; la 005 no se reescribe.
 -- VERIFICACIÓN DE 005_admin_core.sql
 --
 --                    ✅ SOLO LECTURA · NO MODIFICA NADA
@@ -21,7 +24,7 @@ with
 esperadas(nombre, args) as (
   values ('current_admin', ''),
          ('admin_summary', ''),
-         ('admin_list_docentes', 'text, integer, integer'),
+         ('admin_list_docentes', 'text, integer, integer, text, date, date, text, boolean, boolean'),
          ('admin_docente_detail', 'uuid')
 ),
 
@@ -44,20 +47,20 @@ filas as (
   select 2, '00 VEREDICTO', '>>> anon no ejecuta ninguna funcion admin',
          case when not has_function_privilege('anon','public.current_admin()','EXECUTE')
                and not has_function_privilege('anon','public.admin_summary()','EXECUTE')
-               and not has_function_privilege('anon','public.admin_list_docentes(text, integer, integer)','EXECUTE')
+               and not has_function_privilege('anon','public.admin_list_docentes(text, integer, integer, text, date, date, text, boolean, boolean)','EXECUTE')
                and not has_function_privilege('anon','public.admin_docente_detail(uuid)','EXECUTE')
               then 'OK' else 'ERROR' end
   union all
   select 3, '00 VEREDICTO', '>>> authenticated solo puede preguntar si es admin',
          case when has_function_privilege('authenticated','public.current_admin()','EXECUTE')
                and not has_function_privilege('authenticated','public.admin_summary()','EXECUTE')
-               and not has_function_privilege('authenticated','public.admin_list_docentes(text, integer, integer)','EXECUTE')
+               and not has_function_privilege('authenticated','public.admin_list_docentes(text, integer, integer, text, date, date, text, boolean, boolean)','EXECUTE')
                and not has_function_privilege('authenticated','public.admin_docente_detail(uuid)','EXECUTE')
               then 'OK' else 'ERROR — el navegador alcanza datos administrativos' end
   union all
   select 4, '00 VEREDICTO', '>>> service_role si puede leer los datos',
          case when has_function_privilege('service_role','public.admin_summary()','EXECUTE')
-               and has_function_privilege('service_role','public.admin_list_docentes(text, integer, integer)','EXECUTE')
+               and has_function_privilege('service_role','public.admin_list_docentes(text, integer, integer, text, date, date, text, boolean, boolean)','EXECUTE')
                and has_function_privilege('service_role','public.admin_docente_detail(uuid)','EXECUTE')
               then 'OK' else 'ERROR' end
   union all
