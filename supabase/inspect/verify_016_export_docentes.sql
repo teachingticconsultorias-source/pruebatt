@@ -124,3 +124,32 @@ select p.proname,
   from pg_proc p
   join pg_namespace n on n.oid = p.pronamespace
  where n.nspname = 'public' and p.proname = 'admin_list_docentes';
+
+
+-- ----------------------------------------------------------------------------
+-- 8 · ¿HAY DOCENTES SIN `user_id`?
+--
+--     `effective_plan` LANZA `AUTH_REQUIRED` si el usuario es null, y las dos
+--     funciones lo llaman con `cross join lateral`. Una sola fila con
+--     `user_id` null haría fallar el panel entero y también el export.
+--
+--     Debe devolver 0. No es algo que introduzca la 016 —el listado ya era
+--     así— pero conviene saberlo antes de ejecutarla.
+-- ----------------------------------------------------------------------------
+select count(*) as docentes_sin_user_id
+  from public.docentes
+ where user_id is null;
+
+
+-- ----------------------------------------------------------------------------
+-- 9 · PRUEBA DE HUMO MANUAL
+--
+--     La migración ya ejecuta las dos funciones antes del commit (bloques 5 y
+--     6). Esto sólo hace falta si al aplicarla salió el aviso
+--     «No hay administradores activos»: en ese caso el CUERPO del export no se
+--     pudo probar, y hay que hacerlo a mano tras crear el primer admin.
+--
+--     Descomenta y sustituye el uuid. La llamada ESCRIBE una fila de auditoría
+--     de verdad, así que quedará registrada como una exportación real.
+-- ----------------------------------------------------------------------------
+-- select (public.admin_export_docentes('<UUID-DE-UN-ADMIN>'::uuid)) ->> 'filas' as filas;

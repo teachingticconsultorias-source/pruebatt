@@ -56,6 +56,13 @@
 -- Es lo que hacían las migraciones 002 a 011 y se perdió por el camino en las
 -- 012–015; ahí no hacía daño porque ninguna borraba algo que estuviera en uso.
 --
+-- Y SE EJECUTA ANTES DEL COMMIT
+-- ----------------------------
+-- plpgsql no valida el cuerpo de una función al crearla. Los bloques 3 y 4
+-- leen el catálogo; los 5 y 6 EJECUTAN las dos funciones de verdad —con un
+-- admin real, deshaciendo después la fila de auditoría de prueba— para que un
+-- error de columna aborte aquí y no el día que alguien pulse Exportar.
+--
 -- ES REPETIBLE
 -- ------------
 -- `create or replace` y ningún cambio de datos. Correrla dos veces no hace
@@ -78,12 +85,37 @@ begin
   if to_regclass('sciverse_private.admin_audit_log') is null then
     raise exception 'ABORTA: falta sciverse_private.admin_audit_log (migración 005).';
   end if;
+
   if to_regclass('sciverse_private.ai_generations') is null then
     raise exception 'ABORTA: falta sciverse_private.ai_generations (migración 003).';
   end if;
   if to_regprocedure('sciverse_private.effective_plan(uuid)') is null then
     raise exception 'ABORTA: falta sciverse_private.effective_plan (migración 002).';
   end if;
+
+  -- Y que tenga LAS COLUMNAS que el insert usa, con su tipo.
+  --
+  -- plpgsql no valida el cuerpo de una funcion al crearla: un nombre de
+  -- columna equivocado no abortaria nada aqui y reventaria en produccion la
+  -- primera vez que alguien pulsara Exportar. Se comprueba antes.
+  declare
+    v_falta text;
+  begin
+    select string_agg(x.col || ' (' || x.tipo || ')', ', ')
+      into v_falta
+      from (values ('admin_user_id', 'uuid'), ('admin_role', 'text'),
+                   ('action', 'text'), ('entity_type', 'text'), ('metadata', 'jsonb')) as x(col, tipo)
+     where not exists (
+       select 1 from information_schema.columns c
+        where c.table_schema = 'sciverse_private'
+          and c.table_name   = 'admin_audit_log'
+          and c.column_name  = x.col
+          and c.data_type    = x.tipo);
+
+    if v_falta is not null then
+      raise exception 'ABORTA: a admin_audit_log le faltan columnas o cambiaron de tipo: %', v_falta;
+    end if;
+  end;
 end $$;
 
 
@@ -146,7 +178,20 @@ begin
            ) as fila
       from public.docentes d
       left join auth.users u on u.id = d.user_id
-      left join lateral sciverse_private.effective_plan(d.user_id) p on true
+      -- `cross join lateral`, IGUAL que el listado de la seccion 2.
+      --
+      -- `effective_plan` nunca devuelve cero filas para un user_id no nulo: o
+      -- devuelve el plan de la suscripcion vigente, o cae al `free` del
+      -- catalogo. Solo lanza si el usuario es null (AUTH_REQUIRED) o si falta
+      -- el plan free (PLAN_CATALOG_MISSING).
+      --
+      -- Asi que `left join ... on true` y `cross join` se comportan igual hoy.
+      -- Se unifica en `cross join` de todos modos: si algun dia la funcion
+      -- dejara de devolver fila, el `left join` haria aparecer AQUI docentes
+      -- que el panel NO muestra, y eso romperia en silencio el «lo que ves en
+      -- pantalla es lo que baja» que justifica la seccion 2. Mejor que las dos
+      -- fallen igual a que discrepen sin avisar.
+      cross join lateral sciverse_private.effective_plan(d.user_id) p
       left join lateral (
         select count(*)::integer as total, max(x.consumed_at) as ultima
           from sciverse_private.ai_generations x
@@ -424,6 +469,104 @@ begin
 
   raise notice '[sciverse] admin_list_docentes: una sola version, con filtros, sin acceso para authenticated.';
 end $VERIF$;
+
+
+-- ----------------------------------------------------------------------------
+-- 5 · PRUEBA DE HUMO · que la función se EJECUTE antes del commit
+--
+--     Los bloques 3 y 4 leen el catálogo: confirman que la función existe y con
+--     qué permisos, pero no la ejecutan ni una vez. Y plpgsql no valida el
+--     cuerpo al crearla: un nombre de columna mal escrito, un tipo que no
+--     casa o un join roto pasarían la migración enteros y reventarían en
+--     producción la primera vez que alguien pulsara Exportar.
+--
+--     Aquí se ejecuta de verdad, dos veces:
+--
+--       a) con un actor que NO es admin  → debe lanzar ADMIN_REQUIRED.
+--          Prueba el gate, pero NO el cuerpo: `require_admin_role` lanza antes
+--          de llegar a la consulta. Por eso sola no basta.
+--
+--       b) con un admin REAL             → recorre el SELECT entero, el
+--          `jsonb_build_object`, los tres joins y el INSERT de auditoría.
+--          Esto es lo que de verdad caza un error de columna.
+--
+--     La (b) escribiría una fila de auditoría falsa. Para evitarlo se lanza una
+--     excepción propia justo después: el bloque `begin … exception` de plpgsql
+--     es un savepoint implícito, así que al lanzar se deshace el INSERT y no
+--     queda rastro. Si lo que llega es OTRA excepción, se relanza y la
+--     migración aborta, que es exactamente lo que se busca.
+-- ----------------------------------------------------------------------------
+do $HUMO$
+declare
+  v_admin uuid;
+  v_filas text;
+begin
+  -- (a) el gate rechaza a quien no es admin
+  begin
+    perform public.admin_export_docentes('00000000-0000-0000-0000-000000000000'::uuid);
+    raise exception 'ABORTA: la funcion NO rechazo a un actor que no es admin.';
+  exception
+    when others then
+      if sqlerrm not like '%ADMIN_REQUIRED%' then
+        raise exception 'ABORTA: se esperaba ADMIN_REQUIRED y llego otra cosa: %', sqlerrm;
+      end if;
+  end;
+
+  -- (b) el cuerpo se recorre entero con un admin de verdad
+  select a.user_id into v_admin
+    from sciverse_private.admin_users a
+   where a.is_active
+   order by a.created_at
+   limit 1;
+
+  if v_admin is null then
+    raise warning '[sciverse] No hay administradores activos: el CUERPO de admin_export_docentes no se pudo probar. Ejecuta la consulta 8 del inspector despues de crear el primero.';
+  else
+    begin
+      v_filas := (public.admin_export_docentes(v_admin)) ->> 'filas';
+      -- Deshace la fila de auditoria que acaba de escribir la llamada.
+      raise exception 'HUMO_OK:%', coalesce(v_filas, 'sin-filas');
+    exception
+      when others then
+        if sqlerrm like 'HUMO_OK:%' then
+          raise notice '[sciverse] prueba de humo OK: la funcion devolvio % filas y la auditoria de prueba se deshizo.',
+            split_part(sqlerrm, ':', 2);
+        else
+          raise exception 'ABORTA: admin_export_docentes fallo al ejecutarse: %', sqlerrm;
+        end if;
+    end;
+  end if;
+end $HUMO$;
+
+
+-- ----------------------------------------------------------------------------
+-- 6 · Y LO MISMO CON EL LISTADO, QUE ES EL QUE SE ACABA DE REEMPLAZAR
+--
+--     Si el `create` de la seccion 2 tuviera un error de columna, el panel
+--     dejaria de funcionar en cuanto alguien lo abriera. Se ejecuta aqui, con
+--     y sin filtros, para que eso salga ahora y no entonces.
+--
+--     Es `stable`: no escribe nada y no hay que deshacer nada.
+-- ----------------------------------------------------------------------------
+do $HUMO2$
+declare
+  v_res jsonb;
+begin
+  v_res := public.admin_list_docentes(null, 1, 5);
+  if v_res -> 'items' is null or v_res ->> 'total' is null then
+    raise exception 'ABORTA: admin_list_docentes no devolvio la forma esperada: %', v_res;
+  end if;
+
+  -- Y con los filtros nuevos puestos, que es lo que la seccion 2 anade.
+  v_res := public.admin_list_docentes(
+    p_search => 'zzz-no-existe-zzz', p_page => 1, p_page_size => 5,
+    p_plan => 'free', p_nivel => 'primaria', p_confirmado => true, p_activo => true);
+  if v_res ->> 'total' is null then
+    raise exception 'ABORTA: admin_list_docentes fallo con los filtros nuevos: %', v_res;
+  end if;
+
+  raise notice '[sciverse] prueba de humo OK: admin_list_docentes responde con y sin filtros.';
+end $HUMO2$;
 
 
 -- ============================================================================
