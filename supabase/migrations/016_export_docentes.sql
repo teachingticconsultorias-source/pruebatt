@@ -41,11 +41,28 @@
 -- docente, y derivarla de la última generación daría un dato que parece
 -- fiable y no lo es. Ver docs/pendientes.md.
 --
+-- TODO VA EN UNA TRANSACCIÓN
+-- -------------------------
+-- La sección 2 hace `drop function` sobre `admin_list_docentes`, que ES la que
+-- alimenta el panel AHORA MISMO. Sin transacción habría una ventana en la que
+-- esa función no existe, y si el `create` siguiente fallara nos quedaríamos sin
+-- la vieja y sin la nueva: el panel caído hasta arreglarlo a mano.
+--
+-- En Postgres el DDL es transaccional, así que `begin; … commit;` lo vuelve
+-- atómico de verdad: o el panel sigue con la función vieja, o pasa a la nueva.
+-- Nunca sin ninguna. Cualquiera de los `raise exception` de los bloques de
+-- verificación aborta la transacción entera y deshace hasta el `drop`.
+--
+-- Es lo que hacían las migraciones 002 a 011 y se perdió por el camino en las
+-- 012–015; ahí no hacía daño porque ninguna borraba algo que estuviera en uso.
+--
 -- ES REPETIBLE
 -- ------------
 -- `create or replace` y ningún cambio de datos. Correrla dos veces no hace
 -- nada distinto.
 -- ============================================================================
+
+begin;
 
 -- ----------------------------------------------------------------------------
 -- 0 · PRECONDICIONES
@@ -408,3 +425,8 @@ begin
   raise notice '[sciverse] admin_list_docentes: una sola version, con filtros, sin acceso para authenticated.';
 end $VERIF$;
 
+
+-- ============================================================================
+-- FIN · si algo de arriba lanzó, esto no se ejecuta y no queda nada aplicado.
+-- ============================================================================
+commit;
